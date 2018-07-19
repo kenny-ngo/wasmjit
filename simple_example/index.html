@@ -20,17 +20,11 @@ fetch('main.wasm').then(function(response) {
                 env: {
                     memory: memory,
                     __indirect_function_table: new WebAssembly.Table({ initial: 1, maximum: 1, element: 'anyfunc' }),
-                    __play_with_js: function() {
-                        return 42;
-                    },
-                    __console_log: function(str, len) {
-                        console.log(decoder.decode(memory.buffer.slice(str, str + len)));
-                    },
                 },
             };
 
             WebAssembly.instantiate(module, imports).then(function(instance) {
-                console.log(instance.exports.do_something(2));
+                console.log("the sum of 500 and 2 is: " + instance.exports.add(2, 500));
             });
         });
     });
