@@ -178,6 +178,65 @@ DEFINE_INT_READER(uint8_t)
 
 DEFINE_ULEB_READER(uint32_t)
 
+char *read_string(struct ParseState *pstate) {
+	char *toret;
+	int ret;
+	uint32_t string_size;
+
+	ret = read_uleb_uint32_t(pstate, &string_size);
+	if (!ret) return NULL;
+
+	if (pstate->amt_left < string_size) {
+		pstate->eof = 1;
+		return NULL;
+	}
+
+	toret = malloc(string_size + 1);
+	if (!toret) return NULL;
+
+	memcpy(toret, pstate->input, string_size);
+	toret[string_size] = '\0';
+
+	pstate->input += string_size;
+	pstate->amt_left -= string_size;
+
+	return toret;
+}
+
+struct Limits {
+	uint32_t min, max;
+	int has_max;
+};
+
+int read_limits(struct ParseState *pstate, struct Limits *limits) {
+	int ret;
+	uint8_t byt;
+
+	ret = read_uint8_t(pstate, &byt);
+	if (!ret) return ret;
+
+	limits->has_max = byt;
+
+	switch (byt) {
+	case 0x0:
+		ret = read_uleb_uint32_t(pstate, &limits->min);
+		if (!ret) return ret;
+		break;
+	case 0x1:
+		ret = read_uleb_uint32_t(pstate, &limits->min);
+		if (!ret) return ret;
+
+		ret = read_uleb_uint32_t(pstate, &limits->max);
+		if (!ret) return ret;
+
+		break;
+	default:
+		return 0;
+	}
+
+	return 1;
+}
+
 enum {
 	SECTION_ID_CUSTOM,
 	SECTION_ID_TYPE,
@@ -307,11 +366,113 @@ void dump_type_section(struct TypeSection *type_section) {
 	}
 }
 
+enum {
+	IMPORT_DESC_TYPE_FUNC,
+	IMPORT_DESC_TYPE_TABLE,
+	IMPORT_DESC_TYPE_MEM,
+	IMPORT_DESC_TYPE_GLOBAL,
+};
+
+struct ImportSection {
+	uint32_t n_imports;
+	struct ImportSectionImport {
+		char *module;
+		char *name;
+		int desc_type;
+		union {
+			uint32_t typeidx;
+			struct Limits tabletype;
+			struct Limits memtype;
+			struct {
+				int valtype;
+				int mut;
+			} globaltype;
+		} desc;
+	} *imports;
+};
+
+#define TABLE_TYPE_ELEM_TYPE 0x70
+
+int read_import_section(struct ParseState *pstate, struct ImportSection *import_section) {
+	int ret;
+	uint32_t i;
+
+	import_section->imports = NULL;
+
+	ret = read_uleb_uint32_t(pstate, &import_section->n_imports);
+	if (!ret) goto error;
+
+	if (!import_section->n_imports) {
+		return 1;
+	}
+
+	import_section->imports = calloc(import_section->n_imports, sizeof(struct ImportSectionImport));
+
+	for (i = 0; i < import_section->n_imports; ++i) {
+		uint8_t ft;
+		struct ImportSectionImport *import;
+
+		import = &import_section->imports[i];
+
+		import->module = read_string(pstate);
+		if (!import->module) goto error;
+
+		import->name = read_string(pstate);
+		if (!import->name) goto error;
+
+		ret = read_uint8_t(pstate, &ft);
+		if (!ret) goto error;
+		import->desc_type = ft;
+
+		switch (import->desc_type) {
+		case IMPORT_DESC_TYPE_FUNC:
+			ret = read_uleb_uint32_t(pstate, &import->desc.typeidx);
+			if (!ret) goto error;
+			break;
+		case IMPORT_DESC_TYPE_TABLE:
+			ret = read_uint8_t(pstate, &ft);
+			if (!ret) goto error;
+			if (ft != TABLE_TYPE_ELEM_TYPE) goto error;
+
+			ret = read_limits(pstate, &import->desc.tabletype);
+			if (!ret) goto error;
+
+			break;
+		case IMPORT_DESC_TYPE_MEM:
+			ret = read_limits(pstate, &import->desc.memtype);
+			if (!ret) goto error;
+			break;
+		case IMPORT_DESC_TYPE_GLOBAL:
+			{
+				uint8_t valtype;
+				ret = read_uint8_t(pstate, &valtype);
+				if (!ret) goto error;
+				import->desc.globaltype.valtype = valtype;
+			}
+
+			{
+				uint8_t mut;
+				ret = read_uint8_t(pstate, &mut);
+				if (!ret) goto error;
+				import->desc.globaltype.mut = mut;
+			}
+
+			break;
+		default:
+			goto error;
+		}
+	}
+
+ error:
+	return 1;
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
 	struct ParseState pstate;
 	struct TypeSection type_section;
+	struct ImportSection import_section;
 
 	init_pstate(&pstate);
 
@@ -395,6 +556,8 @@ int main(int argc, char *argv[])
 			READ("type section", read_type_section, &type_section);
 			break;
 		case SECTION_ID_IMPORT:
+			READ("import section", read_import_section, &import_section);
+			break;
 		case SECTION_ID_FUNCTION:
 		case SECTION_ID_TABLE:
 		case SECTION_ID_MEMORY:
