@@ -193,10 +193,125 @@ enum {
 	SECTION_ID_DATA,
 };
 
+#define FUNCTION_TYPE_ID 0x60
+
+enum {
+	VALTYPE_I32 = 0x7f,
+	VALTYPE_I64 = 0x7e,
+	VALTYPE_F32 = 0x7d,
+	VALTYPE_F64 = 0x7c,
+};
+
+struct TypeSection {
+	uint32_t n_types;
+	struct TypeSectionType {
+		uint32_t n_inputs, n_outputs;
+		int *input_types, *output_types;
+	} *types;
+};
+
+int read_type_section(struct ParseState *pstate, struct TypeSection *type_section) {
+	int ret;
+	uint32_t i;
+
+	type_section->types = NULL;
+
+	ret = read_uleb_uint32_t(pstate, &type_section->n_types);
+	if (!ret) goto error;
+
+	if (!type_section->n_types) {
+		return 1;
+	}
+
+	type_section->types = calloc(type_section->n_types, sizeof(struct TypeSectionType));
+	if (!type_section->types) goto error;
+
+	for (i = 0; i < type_section->n_types; ++i) {
+		size_t j;
+		uint8_t ft;
+		struct TypeSectionType *type;
+
+		type = &type_section->types[i];
+
+		ret = read_uint8_t(pstate, &ft);
+		if (!ret) goto error;
+
+		if (ft != FUNCTION_TYPE_ID) {
+			errno = EINVAL;
+			goto error;
+		}
+
+		ret = read_uleb_uint32_t(pstate, &type->n_inputs);
+		if (!ret) goto error;
+
+		if (type->n_inputs) {
+			type->input_types = calloc(type->n_inputs, sizeof(int));
+			if (!ret) goto error;
+
+			for (j = 0; j < type->n_inputs; ++j) {
+				uint8_t valtype;
+				ret = read_uint8_t(pstate, &valtype);
+				if (!ret) goto error;
+				type->input_types[j] = valtype;
+			}
+		}
+
+		ret = read_uleb_uint32_t(pstate, &type->n_outputs);
+		if (!ret) goto error;
+
+		if (type->n_outputs) {
+			type->output_types = calloc(type->n_outputs, sizeof(int));
+			if (!ret) goto error;
+
+			for (j = 0; j < type->n_outputs; ++j) {
+				uint8_t valtype;
+				ret = read_uint8_t(pstate, &valtype);
+				if (!ret) goto error;
+				type->output_types[j] = valtype;
+			}
+		}
+	}
+
+	return 1;
+
+ error:
+	if (type_section->types) {
+		for (i = 0; i < type_section->n_types; ++i) {
+			struct TypeSectionType *type = &type_section->types[i];
+			if (type->input_types) {
+				free(type->input_types);
+			}
+			if (type->output_types) {
+				free(type->output_types);
+			}
+		}
+		free(type_section->types);
+	}
+	return 0;
+}
+
+void dump_type_section(struct TypeSection *type_section) {
+	size_t i, j;
+	for (i = 0; i < type_section->n_types; ++i) {
+		struct TypeSectionType *type = &type_section->types[i];
+
+		printf("(");
+		for (j = 0; j < type->n_inputs; ++j) {
+			printf("%d,", type->input_types[j]);
+		}
+		printf(") -> (");
+		for (j = 0; j < type->n_outputs; ++j) {
+			printf("%d,", type->output_types[j]);
+		}
+		printf(")\n");
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
 	struct ParseState pstate;
+	struct TypeSection type_section;
 
 	init_pstate(&pstate);
 
@@ -277,6 +392,8 @@ int main(int argc, char *argv[])
 			READ("custom section", advance_parser, size);
 			break;
 		case SECTION_ID_TYPE:
+			READ("type section", read_type_section, &type_section);
+			break;
 		case SECTION_ID_IMPORT:
 		case SECTION_ID_FUNCTION:
 		case SECTION_ID_TABLE:
