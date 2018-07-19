@@ -97,15 +97,18 @@ struct ParseState {
 	size_t amt_left;
 };
 
-void init_pstate(struct ParseState *pstate) {
+void init_pstate(struct ParseState *pstate)
+{
 	pstate->eof = 0;
 }
 
-int is_eof(struct ParseState *pstate) {
+int is_eof(struct ParseState *pstate)
+{
 	return pstate->eof;
 }
 
-int advance_parser(struct ParseState *pstate, size_t size) {
+int advance_parser(struct ParseState *pstate, size_t size)
+{
 	if (pstate->amt_left < size) {
 		pstate->eof = 1;
 		return 0;
@@ -115,7 +118,8 @@ int advance_parser(struct ParseState *pstate, size_t size) {
 	return 1;
 }
 
-uint32_t uint32_t_swap_bytes(uint32_t data) {
+uint32_t uint32_t_swap_bytes(uint32_t data)
+{
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 	return data;
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
@@ -125,11 +129,12 @@ uint32_t uint32_t_swap_bytes(uint32_t data) {
 	uint32_t _1 = (data >> 0) & 0xFF;
 	return _4 | (_3 << 8) | (_2 << 16) | (_1 << 24);
 #else
-	#error Unsupported Architecture
+#error Unsupported Architecture
 #endif
 }
 
-uint8_t uint8_t_swap_bytes(uint8_t data) {
+uint8_t uint8_t_swap_bytes(uint8_t data)
+{
 	return data;
 }
 
@@ -150,11 +155,12 @@ uint8_t uint8_t_swap_bytes(uint8_t data) {
 		return 1;					\
 	}
 
-DEFINE_INT_READER(uint32_t)
-DEFINE_INT_READER(uint8_t)
+DEFINE_INT_READER(uint32_t);
+DEFINE_INT_READER(uint8_t);
 
 #define DEFINE_ULEB_READER(type)					\
-	int read_uleb_##type(struct ParseState *pstate, type *data) {	\
+	int read_uleb_##type(struct ParseState *pstate, type *data)	\
+	{								\
 		uint8_t byt;						\
 		unsigned int shift;					\
 									\
@@ -176,15 +182,17 @@ DEFINE_INT_READER(uint8_t)
 		return 1;						\
 	}
 
-DEFINE_ULEB_READER(uint32_t)
+DEFINE_ULEB_READER(uint32_t);
 
-char *read_string(struct ParseState *pstate) {
+char *read_string(struct ParseState *pstate)
+{
 	char *toret;
 	int ret;
 	uint32_t string_size;
 
 	ret = read_uleb_uint32_t(pstate, &string_size);
-	if (!ret) return NULL;
+	if (!ret)
+		return NULL;
 
 	if (pstate->amt_left < string_size) {
 		pstate->eof = 1;
@@ -192,7 +200,8 @@ char *read_string(struct ParseState *pstate) {
 	}
 
 	toret = malloc(string_size + 1);
-	if (!toret) return NULL;
+	if (!toret)
+		return NULL;
 
 	memcpy(toret, pstate->input, string_size);
 	toret[string_size] = '\0';
@@ -208,26 +217,31 @@ struct Limits {
 	int has_max;
 };
 
-int read_limits(struct ParseState *pstate, struct Limits *limits) {
+int read_limits(struct ParseState *pstate, struct Limits *limits)
+{
 	int ret;
 	uint8_t byt;
 
 	ret = read_uint8_t(pstate, &byt);
-	if (!ret) return ret;
+	if (!ret)
+		return ret;
 
 	limits->has_max = byt;
 
 	switch (byt) {
 	case 0x0:
 		ret = read_uleb_uint32_t(pstate, &limits->min);
-		if (!ret) return ret;
+		if (!ret)
+			return ret;
 		break;
 	case 0x1:
 		ret = read_uleb_uint32_t(pstate, &limits->min);
-		if (!ret) return ret;
+		if (!ret)
+			return ret;
 
 		ret = read_uleb_uint32_t(pstate, &limits->max);
-		if (!ret) return ret;
+		if (!ret)
+			return ret;
 
 		break;
 	default:
@@ -269,21 +283,26 @@ struct TypeSection {
 	} *types;
 };
 
-int read_type_section(struct ParseState *pstate, struct TypeSection *type_section) {
+int read_type_section(struct ParseState *pstate,
+		      struct TypeSection *type_section)
+{
 	int ret;
 	uint32_t i;
 
 	type_section->types = NULL;
 
 	ret = read_uleb_uint32_t(pstate, &type_section->n_types);
-	if (!ret) goto error;
+	if (!ret)
+		goto error;
 
 	if (!type_section->n_types) {
 		return 1;
 	}
 
-	type_section->types = calloc(type_section->n_types, sizeof(struct TypeSectionType));
-	if (!type_section->types) goto error;
+	type_section->types =
+	    calloc(type_section->n_types, sizeof(struct TypeSectionType));
+	if (!type_section->types)
+		goto error;
 
 	for (i = 0; i < type_section->n_types; ++i) {
 		size_t j;
@@ -293,7 +312,8 @@ int read_type_section(struct ParseState *pstate, struct TypeSection *type_sectio
 		type = &type_section->types[i];
 
 		ret = read_uint8_t(pstate, &ft);
-		if (!ret) goto error;
+		if (!ret)
+			goto error;
 
 		if (ft != FUNCTION_TYPE_ID) {
 			errno = EINVAL;
@@ -301,31 +321,38 @@ int read_type_section(struct ParseState *pstate, struct TypeSection *type_sectio
 		}
 
 		ret = read_uleb_uint32_t(pstate, &type->n_inputs);
-		if (!ret) goto error;
+		if (!ret)
+			goto error;
 
 		if (type->n_inputs) {
 			type->input_types = calloc(type->n_inputs, sizeof(int));
-			if (!ret) goto error;
+			if (!ret)
+				goto error;
 
 			for (j = 0; j < type->n_inputs; ++j) {
 				uint8_t valtype;
 				ret = read_uint8_t(pstate, &valtype);
-				if (!ret) goto error;
+				if (!ret)
+					goto error;
 				type->input_types[j] = valtype;
 			}
 		}
 
 		ret = read_uleb_uint32_t(pstate, &type->n_outputs);
-		if (!ret) goto error;
+		if (!ret)
+			goto error;
 
 		if (type->n_outputs) {
-			type->output_types = calloc(type->n_outputs, sizeof(int));
-			if (!ret) goto error;
+			type->output_types =
+			    calloc(type->n_outputs, sizeof(int));
+			if (!ret)
+				goto error;
 
 			for (j = 0; j < type->n_outputs; ++j) {
 				uint8_t valtype;
 				ret = read_uint8_t(pstate, &valtype);
-				if (!ret) goto error;
+				if (!ret)
+					goto error;
 				type->output_types[j] = valtype;
 			}
 		}
@@ -349,7 +376,8 @@ int read_type_section(struct ParseState *pstate, struct TypeSection *type_sectio
 	return 0;
 }
 
-void dump_type_section(struct TypeSection *type_section) {
+void dump_type_section(struct TypeSection *type_section)
+{
 	size_t i, j;
 	for (i = 0; i < type_section->n_types; ++i) {
 		struct TypeSectionType *type = &type_section->types[i];
@@ -393,20 +421,25 @@ struct ImportSection {
 
 #define TABLE_TYPE_ELEM_TYPE 0x70
 
-int read_import_section(struct ParseState *pstate, struct ImportSection *import_section) {
+int read_import_section(struct ParseState *pstate,
+			struct ImportSection *import_section)
+{
 	int ret;
 	uint32_t i;
 
 	import_section->imports = NULL;
 
 	ret = read_uleb_uint32_t(pstate, &import_section->n_imports);
-	if (!ret) goto error;
+	if (!ret)
+		goto error;
 
 	if (!import_section->n_imports) {
 		return 1;
 	}
 
-	import_section->imports = calloc(import_section->n_imports, sizeof(struct ImportSectionImport));
+	import_section->imports =
+	    calloc(import_section->n_imports,
+		   sizeof(struct ImportSectionImport));
 
 	for (i = 0; i < import_section->n_imports; ++i) {
 		uint8_t ft;
@@ -415,45 +448,55 @@ int read_import_section(struct ParseState *pstate, struct ImportSection *import_
 		import = &import_section->imports[i];
 
 		import->module = read_string(pstate);
-		if (!import->module) goto error;
+		if (!import->module)
+			goto error;
 
 		import->name = read_string(pstate);
-		if (!import->name) goto error;
+		if (!import->name)
+			goto error;
 
 		ret = read_uint8_t(pstate, &ft);
-		if (!ret) goto error;
+		if (!ret)
+			goto error;
 		import->desc_type = ft;
 
 		switch (import->desc_type) {
 		case IMPORT_DESC_TYPE_FUNC:
 			ret = read_uleb_uint32_t(pstate, &import->desc.typeidx);
-			if (!ret) goto error;
+			if (!ret)
+				goto error;
 			break;
 		case IMPORT_DESC_TYPE_TABLE:
 			ret = read_uint8_t(pstate, &ft);
-			if (!ret) goto error;
-			if (ft != TABLE_TYPE_ELEM_TYPE) goto error;
+			if (!ret)
+				goto error;
+			if (ft != TABLE_TYPE_ELEM_TYPE)
+				goto error;
 
 			ret = read_limits(pstate, &import->desc.tabletype);
-			if (!ret) goto error;
+			if (!ret)
+				goto error;
 
 			break;
 		case IMPORT_DESC_TYPE_MEM:
 			ret = read_limits(pstate, &import->desc.memtype);
-			if (!ret) goto error;
+			if (!ret)
+				goto error;
 			break;
 		case IMPORT_DESC_TYPE_GLOBAL:
 			{
 				uint8_t valtype;
 				ret = read_uint8_t(pstate, &valtype);
-				if (!ret) goto error;
+				if (!ret)
+					goto error;
 				import->desc.globaltype.valtype = valtype;
 			}
 
 			{
 				uint8_t mut;
 				ret = read_uint8_t(pstate, &mut);
-				if (!ret) goto error;
+				if (!ret)
+					goto error;
 				import->desc.globaltype.mut = mut;
 			}
 
@@ -486,7 +529,6 @@ int main(int argc, char *argv[])
 		printf("Error loading file %s\n", strerror(errno));
 		return -1;
 	}
-
 #define READ(msg, fn, ...)						\
 	do {								\
 		int ret;						\
@@ -510,8 +552,8 @@ int main(int argc, char *argv[])
 		READ("magic", read_uint32_t, &magic);
 
 		if (magic != WASM_MAGIC) {
-			printf("Bad WASM magic 0x%" PRIx32 " vs 0x%" PRIx32 "\n", magic,
-			       WASM_MAGIC);
+			printf("Bad WASM magic 0x%" PRIx32 " vs 0x%" PRIx32
+			       "\n", magic, WASM_MAGIC);
 			return -1;
 		}
 	}
@@ -523,8 +565,8 @@ int main(int argc, char *argv[])
 		READ("version", read_uint32_t, &version);
 
 		if (version != VERSION) {
-			printf("Unsupported WASM version 0x%" PRIx32 " vs 0x%" PRIx32 "\n",
-			       version, VERSION);
+			printf("Unsupported WASM version 0x%" PRIx32 " vs 0x%"
+			       PRIx32 "\n", version, VERSION);
 			return -1;
 		}
 
@@ -542,7 +584,8 @@ int main(int argc, char *argv[])
 				if (is_eof(&pstate)) {
 					break;
 				}
-				printf("Error reading id %s\n", strerror(errno));
+				printf("Error reading id %s\n",
+				       strerror(errno));
 				return -1;
 			}
 		}
@@ -556,7 +599,8 @@ int main(int argc, char *argv[])
 			READ("type section", read_type_section, &type_section);
 			break;
 		case SECTION_ID_IMPORT:
-			READ("import section", read_import_section, &import_section);
+			READ("import section", read_import_section,
+			     &import_section);
 			break;
 		case SECTION_ID_FUNCTION:
 		case SECTION_ID_TABLE:
