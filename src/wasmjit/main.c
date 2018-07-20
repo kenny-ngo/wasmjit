@@ -515,8 +515,6 @@ struct FunctionSection {
 	uint32_t *typeidxs;
 };
 
-#define TABLE_TYPE_ELEM_TYPE 0x70
-
 int read_function_section(struct ParseState *pstate,
 			  struct FunctionSection *function_section)
 {
