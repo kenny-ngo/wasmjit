@@ -575,12 +575,15 @@ int read_table_section(struct ParseState *pstate,
 	if (table_section->n_tables) {
 		uint32_t i;
 
-		table_section->tables = calloc(table_section->n_tables, sizeof(struct TableSectionTable));
+		table_section->tables =
+		    calloc(table_section->n_tables,
+			   sizeof(struct TableSectionTable));
 		if (!table_section->tables)
 			goto error;
 
 		for (i = 0; i < table_section->n_tables; ++i) {
-			struct TableSectionTable *table = &table_section->tables[i];
+			struct TableSectionTable *table =
+			    &table_section->tables[i];
 
 			uint8_t elemtype;
 			ret = read_uint8_t(pstate, &elemtype);
