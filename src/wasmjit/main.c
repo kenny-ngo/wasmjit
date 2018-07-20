@@ -22,6 +22,7 @@
   SOFTWARE.
  */
 
+#include <assert.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -171,7 +172,7 @@ DEFINE_INT_READER(uint8_t);
 			ret = read_uint8_t(pstate, &byt);		\
 			if (!ret) return ret;				\
 									\
-			*data |= (byt & 0x7f) << shift;			\
+			*data |= ((type) (byt & 0x7f)) << shift;	\
 			if (!(byt & 0x80)) {				\
 				break;					\
 			}						\
@@ -183,6 +184,10 @@ DEFINE_INT_READER(uint8_t);
 	}
 
 DEFINE_ULEB_READER(uint32_t);
+DEFINE_ULEB_READER(uint64_t);
+
+int read_float(struct ParseState *pstate, float *data);
+int read_double(struct ParseState *pstate, double *data);
 
 char *read_string(struct ParseState *pstate)
 {
@@ -658,6 +663,9 @@ int read_memory_section(struct ParseState *pstate,
 	return 0;
 }
 
+#define BLOCK_TERMINAL 0x0B
+#define ELSE_TERMINAL 0x05
+
 enum {
 	/* Control Instructions */
 	OPCODE_UNREACHABLE = 0x00,
@@ -852,48 +860,453 @@ enum {
 struct Instr {
 	uint8_t opcode;
 	union {
-		struct {
-			struct {
-				uint8_t is_empty;
-				uint8_t valtype;
-			} blocktype;
-			uint32_t n_instructions;
+		struct BlockLoopExtra {
+			uint8_t blocktype;
+			size_t n_instructions;
 			struct Instr *instructions;
 		} block, loop;
 		struct {
-			struct {
-				uint8_t is_empty;
-				uint8_t valtype;
-			} blocktype;
-			uint32_t n_instructions_then;
+			uint8_t blocktype;
+			size_t n_instructions_then;
 			struct Instr *instructions_then;
-			uint32_t n_instructions_else;
+			size_t n_instructions_else;
 			struct Instr *instructions_else;
 		} if_;
-		struct {
-			int labelidx;
+		struct BrIfExtra {
+			uint32_t labelidx;
 		} br, br_if;
 		struct {
 			uint32_t n_labelidxs;
-			int *labelidxs;
-			int labelidx;
+			uint32_t *labelidxs;
+			uint32_t labelidx;
 		} br_table;
-		/* TODO: add the rest */
+		struct {
+			uint32_t funcidx;
+		} call;
+		struct {
+			uint32_t typeidx;
+		} call_indirect;
+		struct LocalExtra {
+			uint32_t localidx;
+		} get_local, set_local, tee_local;
+		struct GlobalExtra {
+			uint32_t globalidx;
+		} get_global, set_global;
+		struct LoadStoreExtra {
+			uint32_t align;
+			uint32_t offset;
+		} i32_load, i64_load, f32_load, f64_load,
+			i32_load8_s, i32_load8_u, i32_load16_s, i32_load16_u,
+			i64_load8_s, i64_load8_u, i64_load16_s, i64_load16_u,
+			i64_load32_s, i64_load32_u,
+			i32_store, i64_store, f32_store, f64_store,
+			i32_store8, i32_store16, i64_store8, i64_store16, i64_store32;
+		struct {
+			uint32_t value;
+		} i32_const;
+		struct {
+			uint64_t value;
+		} i64_const;
+		struct {
+			float value;
+		} f32_const;
+		struct {
+			double value;
+		} f64_const;
 	} data;
 };
 
-int read_instruction(struct ParseState *pstate, struct Instr *instr)
+void init_instruction(struct Instr *instr) {
+	memset(instr, 0, sizeof(*instr));
+}
+
+void free_instruction(struct Instr *instr) {
+}
+
+struct Instr *read_instructions(struct ParseState *pstate, size_t *n_instructions, int allow_else, int allow_block);
+
+int read_instruction(struct ParseState *pstate, struct Instr *instr, int allow_else, int allow_block)
 {
-	(void)pstate;
-	(void)instr;
+	int ret;
+
+	init_instruction(instr);
+
+	ret = read_uint8_t(pstate, &instr->opcode);
+	if (!ret) return ret;
+
+	switch (instr->opcode) {
+	case BLOCK_TERMINAL:
+		return allow_block;
+	case ELSE_TERMINAL:
+		return allow_else;
+	case OPCODE_BLOCK: case OPCODE_LOOP: {
+		struct BlockLoopExtra *block;
+
+		block = instr->opcode == OPCODE_BLOCK
+			? &instr->data.block
+			: &instr->data.loop;
+
+		ret = read_uint8_t(pstate, &block->blocktype);
+		if (!ret) goto error;
+
+		block->instructions = read_instructions(pstate, &block->n_instructions, 0, 1);
+		if (!block->instructions) goto error;
+
+		break;
+	}
+	case OPCODE_IF: {
+		ret = read_uint8_t(pstate, &instr->data.if_.blocktype);
+		if (!ret) goto error;
+
+		instr->data.if_.instructions_then = read_instructions(pstate, &instr->data.if_.n_instructions_then, 1, 1);
+		if (!instr->data.if_.instructions_then) goto error;
+
+		instr->data.if_.instructions_else = read_instructions(pstate, &instr->data.if_.n_instructions_else, 0, 1);
+		if (!instr->data.if_.instructions_else) goto error;
+
+		break;
+	}
+	case OPCODE_BR: case OPCODE_BR_IF: {
+		struct BrIfExtra *block = instr->opcode == OPCODE_BR
+			? &instr->data.br
+			: &instr->data.br_if;
+
+		ret = read_uleb_uint32_t(pstate, &block->labelidx);
+		if (!ret)
+			goto error;
+
+		break;
+	}
+	case OPCODE_BR_TABLE: {
+		ret = read_uleb_uint32_t(pstate, &instr->data.br_table.n_labelidxs);
+		if (!ret)
+			goto error;
+
+		if (instr->data.br_table.n_labelidxs) {
+			uint32_t i;
+
+			instr->data.br_table.labelidxs =
+				calloc(instr->data.br_table.n_labelidxs,
+				       sizeof(int));
+			if (!instr->data.br_table.labelidxs)
+				goto error;
+
+			for (i = 0; i < instr->data.br_table.n_labelidxs; ++i) {
+				ret = read_uleb_uint32_t(pstate, &instr->data.br_table.labelidxs[i]);
+				if (!ret)
+					goto error;
+			}
+		}
+
+		ret = read_uleb_uint32_t(pstate, &instr->data.br_table.labelidx);
+		if (!ret)
+			goto error;
+
+		break;
+	}
+	case OPCODE_CALL: {
+		ret = read_uleb_uint32_t(pstate, &instr->data.call.funcidx);
+		if (!ret)
+			goto error;
+
+		break;
+	}
+	case OPCODE_CALL_INDIRECT: {
+		ret = read_uleb_uint32_t(pstate, &instr->data.call_indirect.typeidx);
+		if (!ret)
+			goto error;
+
+		break;
+	}
+	case OPCODE_GET_LOCAL: case OPCODE_SET_LOCAL: case OPCODE_TEE_LOCAL: {
+		struct LocalExtra *local;
+		switch (instr->opcode) {
+		case OPCODE_GET_LOCAL:
+			local = &instr->data.get_local;
+			break;
+		case OPCODE_SET_LOCAL:
+			local = &instr->data.set_local;
+			break;
+		case OPCODE_TEE_LOCAL:
+			local = &instr->data.tee_local;
+			break;
+		default:
+			assert(0);
+		}
+
+		ret = read_uleb_uint32_t(pstate, &local->localidx);
+		if (!ret)
+			goto error;
+
+		break;
+	}
+	case OPCODE_GET_GLOBAL: case OPCODE_SET_GLOBAL:	{
+		struct GlobalExtra *gextra;
+
+		gextra = instr->opcode == OPCODE_GET_GLOBAL
+			? &instr->data.get_global
+			: &instr->data.set_global;
+
+		ret = read_uleb_uint32_t(pstate, &gextra->globalidx);
+		if (!ret)
+			goto error;
+
+		break;
+	}
+	case OPCODE_I32_LOAD: case OPCODE_I64_LOAD: case OPCODE_F32_LOAD:
+	case OPCODE_F64_LOAD: case OPCODE_I32_LOAD8_S: case OPCODE_I32_LOAD8_U: case OPCODE_I32_LOAD16_S:
+	case OPCODE_I32_LOAD16_U: case OPCODE_I64_LOAD8_S: case OPCODE_I64_LOAD8_U: case OPCODE_I64_LOAD16_S:
+	case OPCODE_I64_LOAD16_U: case OPCODE_I64_LOAD32_S: case OPCODE_I64_LOAD32_U: case OPCODE_I32_STORE:
+	case OPCODE_I64_STORE: case OPCODE_F32_STORE: case OPCODE_F64_STORE: case OPCODE_I32_STORE8:
+	case OPCODE_I32_STORE16: case OPCODE_I64_STORE8: case OPCODE_I64_STORE16: case OPCODE_I64_STORE32: {
+		struct LoadStoreExtra *extra;
+
+		switch (instr->opcode) {
+		case OPCODE_I32_LOAD: extra = &instr->data.i32_load; break;
+		case OPCODE_I64_LOAD: extra = &instr->data.i64_load; break;
+		case OPCODE_F32_LOAD: extra = &instr->data.f32_load; break;
+		case OPCODE_F64_LOAD: extra = &instr->data.f64_load; break;
+		case OPCODE_I32_LOAD8_S: extra = &instr->data.i32_load8_s; break;
+		case OPCODE_I32_LOAD8_U: extra = &instr->data.i32_load8_u; break;
+		case OPCODE_I32_LOAD16_S: extra = &instr->data.i32_load16_s; break;
+		case OPCODE_I32_LOAD16_U: extra = &instr->data.i32_load16_u; break;
+		case OPCODE_I64_LOAD8_S: extra = &instr->data.i64_load8_s; break;
+		case OPCODE_I64_LOAD8_U: extra = &instr->data.i64_load8_u; break;
+		case OPCODE_I64_LOAD16_S: extra = &instr->data.i64_load16_s; break;
+		case OPCODE_I64_LOAD16_U: extra = &instr->data.i64_load16_u; break;
+		case OPCODE_I64_LOAD32_S: extra = &instr->data.i64_load32_s; break;
+		case OPCODE_I64_LOAD32_U: extra = &instr->data.i64_load32_u; break;
+		case OPCODE_I32_STORE: extra = &instr->data.i32_store; break;
+		case OPCODE_I64_STORE: extra = &instr->data.i64_store; break;
+		case OPCODE_F32_STORE: extra = &instr->data.f32_store; break;
+		case OPCODE_F64_STORE: extra = &instr->data.f64_store; break;
+		case OPCODE_I32_STORE8: extra = &instr->data.i32_store8; break;
+		case OPCODE_I32_STORE16: extra = &instr->data.i32_store16; break;
+		case OPCODE_I64_STORE8: extra = &instr->data.i64_store8; break;
+		case OPCODE_I64_STORE16: extra = &instr->data.i64_store16; break;
+		case OPCODE_I64_STORE32: extra = &instr->data.i64_store32; break;
+		default: assert(0); break;
+		}
+
+		ret = read_uleb_uint32_t(pstate, &extra->align);
+		if (!ret)
+			goto error;
+
+		ret = read_uleb_uint32_t(pstate, &extra->offset);
+		if (!ret)
+			goto error;
+
+		break;
+	}
+	case OPCODE_I32_CONST: {
+		ret = read_uleb_uint32_t(pstate, &instr->data.i32_const.value);
+		if (!ret)
+			goto error;
+		break;
+	}
+	case OPCODE_I64_CONST: {
+		ret = read_uleb_uint64_t(pstate, &instr->data.i64_const.value);
+		if (!ret)
+			goto error;
+		break;
+	}
+	case OPCODE_F32_CONST: {
+		ret = read_float(pstate, &instr->data.f32_const.value);
+		if (!ret)
+			goto error;
+		break;
+	}
+	case OPCODE_F64_CONST: {
+		ret = read_double(pstate, &instr->data.f64_const.value);
+		if (!ret)
+			goto error;
+		break;
+	}
+	case OPCODE_UNREACHABLE: case OPCODE_NOP:
+	case OPCODE_RETURN:
+	case OPCODE_DROP: case OPCODE_SELECT:
+	case OPCODE_MEMORY_SIZE:
+	case OPCODE_MEMORY_GROW:
+	case OPCODE_I32_EQZ:
+	case OPCODE_I32_EQ:
+	case OPCODE_I32_NE:
+	case OPCODE_I32_LT_S:
+	case OPCODE_I32_LT_U:
+	case OPCODE_I32_GT_S:
+	case OPCODE_I32_GT_U:
+	case OPCODE_I32_LE_S:
+	case OPCODE_I32_LE_U:
+	case OPCODE_I32_GE_S:
+	case OPCODE_I32_GE_U:
+	case OPCODE_I64_EQZ:
+	case OPCODE_I64_EQ:
+	case OPCODE_I64_NE:
+	case OPCODE_I64_LT_S:
+	case OPCODE_I64_LT_U:
+	case OPCODE_I64_GT_S:
+	case OPCODE_I64_GT_U:
+	case OPCODE_I64_LE_S:
+	case OPCODE_I64_LE_U:
+	case OPCODE_I64_GE_S:
+	case OPCODE_I64_GE_U:
+	case OPCODE_F32_EQ:
+	case OPCODE_F32_NE:
+	case OPCODE_F32_LT:
+	case OPCODE_F32_GT:
+	case OPCODE_F32_LE:
+	case OPCODE_F32_GE:
+	case OPCODE_F64_EQ:
+	case OPCODE_F64_NE:
+	case OPCODE_F64_LT:
+	case OPCODE_F64_GT:
+	case OPCODE_F64_LE:
+	case OPCODE_F64_GE:
+	case OPCODE_I32_CLZ:
+	case OPCODE_I32_CTZ:
+	case OPCODE_I32_POPCNT:
+	case OPCODE_I32_ADD:
+	case OPCODE_I32_SUB:
+	case OPCODE_I32_MUL:
+	case OPCODE_I32_DIV_S:
+	case OPCODE_I32_DIV_U:
+	case OPCODE_I32_REM_S:
+	case OPCODE_I32_REM_U:
+	case OPCODE_I32_AND:
+	case OPCODE_I32_OR:
+	case OPCODE_I32_XOR:
+	case OPCODE_I32_SHL:
+	case OPCODE_I32_SHR_S:
+	case OPCODE_I32_SHR_U:
+	case OPCODE_I32_ROTL:
+	case OPCODE_I32_ROTR:
+	case OPCODE_I64_CLZ:
+	case OPCODE_I64_CTZ:
+	case OPCODE_I64_POPCNT:
+	case OPCODE_I64_ADD:
+	case OPCODE_I64_SUB:
+	case OPCODE_I64_MUL:
+	case OPCODE_I64_DIV_S:
+	case OPCODE_I64_DIV_U:
+	case OPCODE_I64_REM_S:
+	case OPCODE_I64_REM_U:
+	case OPCODE_I64_AND:
+	case OPCODE_I64_OR:
+	case OPCODE_I64_XOR:
+	case OPCODE_I64_SHL:
+	case OPCODE_I64_SHR_S:
+	case OPCODE_I64_SHR_U:
+	case OPCODE_I64_ROTL:
+	case OPCODE_I64_ROTR:
+	case OPCODE_F32_ABS:
+	case OPCODE_F32_NEG:
+	case OPCODE_F32_CEIL:
+	case OPCODE_F32_FLOOR:
+	case OPCODE_F32_TRUNC:
+	case OPCODE_F32_NEAREST:
+	case OPCODE_F32_SQRT:
+	case OPCODE_F32_ADD:
+	case OPCODE_F32_SUB:
+	case OPCODE_F32_MUL:
+	case OPCODE_F32_DIV:
+	case OPCODE_F32_MIN:
+	case OPCODE_F32_MAX:
+	case OPCODE_F32_COPYSIGN:
+	case OPCODE_F64_ABS:
+	case OPCODE_F64_NEG:
+	case OPCODE_F64_CEIL:
+	case OPCODE_F64_FLOOR:
+	case OPCODE_F64_TRUNC:
+	case OPCODE_F64_NEAREST:
+	case OPCODE_F64_SQRT:
+	case OPCODE_F64_ADD:
+	case OPCODE_F64_SUB:
+	case OPCODE_F64_MUL:
+	case OPCODE_F64_DIV:
+	case OPCODE_F64_MIN:
+	case OPCODE_F64_MAX:
+	case OPCODE_F64_COPYSIGN:
+	case OPCODE_I32_WRAP_I64:
+	case OPCODE_I32_TRUNC_S_F32:
+	case OPCODE_I32_TRUNC_U_F32:
+	case OPCODE_I32_TRUNC_S_F64:
+	case OPCODE_I32_TRUNC_U_F64:
+	case OPCODE_I64_EXTEND_S_I32:
+	case OPCODE_I64_EXTEND_U_I32:
+	case OPCODE_I64_TRUNC_S_F32:
+	case OPCODE_I64_TRUNC_U_F32:
+	case OPCODE_I64_TRUNC_S_F64:
+	case OPCODE_I64_TRUNC_U_F64:
+	case OPCODE_F32_CONVERT_S_I32:
+	case OPCODE_F32_CONVERT_U_I32:
+	case OPCODE_F32_CONVERT_U_I64:
+	case OPCODE_F32_CONVERT_S_I64:
+	case OPCODE_F32_DEMOTE_F64:
+	case OPCODE_F64_CONVERT_S_I32:
+	case OPCODE_F64_CONVERT_U_I32:
+	case OPCODE_F64_CONVERT_U_I64:
+	case OPCODE_F64_CONVERT_S_I64:
+	case OPCODE_F64_PROMOTE_F32:
+	case OPCODE_I32_REINTERPRET_F32:
+	case OPCODE_I64_REINTERPRET_F64:
+	case OPCODE_F32_REINTERPRET_I32:
+	case OPCODE_F64_REINTERPRET_I46:
+		break;
+	default:
+		goto error;
+	}
+
+	return 1;
+
+ error:
+	free_instruction(instr);
 	return 0;
+}
+
+struct Instr *read_instructions(struct ParseState *pstate, size_t *n_instructions, int allow_else, int allow_block) {
+	struct Instr *instructions = NULL;
+	while (1) {
+		int ret;
+		struct Instr instruction, *next_instructions;
+		size_t new_len;
+
+		ret = read_instruction(pstate, &instruction, allow_else, allow_block);
+		if (!ret)
+			goto error;
+
+		if (instruction.opcode == BLOCK_TERMINAL || instruction.opcode == ELSE_TERMINAL)
+			break;
+
+		new_len = *n_instructions + 1;
+
+		next_instructions = realloc(instructions, new_len);
+		if (!next_instructions) {
+			goto error;
+		}
+
+		next_instructions[new_len - 1] = instruction;
+
+		instructions = next_instructions;
+		*n_instructions = new_len;
+	}
+
+	return instructions;
+
+ error:
+	if (instructions) {
+		size_t i;
+		for (i = 0; i < *n_instructions; ++i) {
+			free_instruction(&instructions[i]);
+		}
+		free(instructions);
+	}
+	return NULL;
 }
 
 struct GlobalSection {
 	uint32_t n_globals;
 	struct GlobalSectionGlobal {
 		struct GlobalType type;
-		uint32_t n_instructions;
+		size_t n_instructions;
 		struct Instr *instructions;
 	} *globals;
 };
@@ -926,23 +1339,9 @@ int read_global_section(struct ParseState *pstate,
 			if (!ret)
 				goto error;
 
-			global->n_instructions = 0;
-			while (1) {
-				struct Instr instruction, *next_instructions;
-				ret = read_instruction(pstate, &instruction);
-				if (!ret)
-					goto error;
-
-				++global->n_instructions;
-
-				next_instructions =
-				    realloc(global->instructions,
-					    global->n_instructions);
-				if (!next_instructions) {
-					goto error;
-				}
-
-				global->instructions = next_instructions;
+			global->instructions = read_instructions(pstate, &global->n_instructions, 0, 1);
+			if (!global->instructions) {
+				goto error;
 			}
 		}
 	}
@@ -1080,8 +1479,6 @@ int main(int argc, char *argv[])
 			return -1;
 		}
 	}
-
-	/* */
 
 	return 0;
 }
