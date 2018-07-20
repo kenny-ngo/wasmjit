@@ -618,6 +618,8 @@ int read_memory_section(struct ParseState *pstate,
 {
 	int ret;
 
+	memory_section->memories = NULL;
+
 	ret = read_uleb_uint32_t(pstate, &memory_section->n_memories);
 	if (!ret)
 		goto error;
