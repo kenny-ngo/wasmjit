@@ -603,6 +603,51 @@ int read_table_section(struct ParseState *pstate,
 	return 0;
 }
 
+struct MemorySection {
+	uint32_t n_memories;
+	struct MemorySectionMemory {
+		struct Limits memtype;
+	} *memories;
+};
+
+int read_memory_section(struct ParseState *pstate,
+			struct MemorySection *memory_section)
+{
+	int ret;
+
+	ret = read_uleb_uint32_t(pstate, &memory_section->n_memories);
+	if (!ret)
+		goto error;
+
+	if (memory_section->n_memories) {
+		uint32_t i;
+
+		memory_section->memories =
+		    calloc(memory_section->n_memories,
+			   sizeof(struct MemorySectionMemory));
+		if (!memory_section->memories) {
+			goto error;
+		}
+
+		for (i = 0; i < memory_section->n_memories; ++i) {
+			struct MemorySectionMemory *memory =
+			    &memory_section->memories[i];
+
+			ret = read_limits(pstate, &memory->memtype);
+			if (!ret)
+				goto error;
+		}
+	}
+
+	return 1;
+
+ error:
+	if (memory_section->memories) {
+		free(memory_section->memories);
+	}
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
@@ -611,6 +656,7 @@ int main(int argc, char *argv[])
 	struct ImportSection import_section;
 	struct FunctionSection function_section;
 	struct TableSection table_section;
+	struct MemorySection memory_section;
 
 	init_pstate(&pstate);
 
@@ -706,6 +752,9 @@ int main(int argc, char *argv[])
 			     &table_section);
 			break;
 		case SECTION_ID_MEMORY:
+			READ("memory section", read_memory_section,
+			     &memory_section);
+			break;
 		case SECTION_ID_GLOBAL:
 		case SECTION_ID_EXPORT:
 		case SECTION_ID_START:
