@@ -553,6 +553,56 @@ int read_function_section(struct ParseState *pstate,
 	return 0;
 }
 
+struct TableSection {
+	uint32_t n_tables;
+	struct TableSectionTable {
+		int elemtype;
+		struct Limits limits;
+	} *tables;
+};
+
+int read_table_section(struct ParseState *pstate,
+		       struct TableSection *table_section)
+{
+	int ret;
+
+	table_section->tables = NULL;
+
+	ret = read_uleb_uint32_t(pstate, &table_section->n_tables);
+	if (!ret)
+		goto error;
+
+	if (table_section->n_tables) {
+		uint32_t i;
+
+		table_section->tables = calloc(table_section->n_tables, sizeof(struct TableSectionTable));
+		if (!table_section->tables)
+			goto error;
+
+		for (i = 0; i < table_section->n_tables; ++i) {
+			struct TableSectionTable *table = &table_section->tables[i];
+
+			uint8_t elemtype;
+			ret = read_uint8_t(pstate, &elemtype);
+			if (!ret)
+				goto error;
+			table->elemtype = elemtype;
+
+			ret = read_limits(pstate, &table->limits);
+			if (!ret)
+				goto error;
+		}
+	}
+
+	return 1;
+
+ error:
+	if (table_section->tables) {
+		free(table_section->tables);
+	}
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
@@ -560,6 +610,7 @@ int main(int argc, char *argv[])
 	struct TypeSection type_section;
 	struct ImportSection import_section;
 	struct FunctionSection function_section;
+	struct TableSection table_section;
 
 	init_pstate(&pstate);
 
@@ -651,6 +702,9 @@ int main(int argc, char *argv[])
 			     &function_section);
 			break;
 		case SECTION_ID_TABLE:
+			READ("table section", read_table_section,
+			     &table_section);
+			break;
 		case SECTION_ID_MEMORY:
 		case SECTION_ID_GLOBAL:
 		case SECTION_ID_EXPORT:
