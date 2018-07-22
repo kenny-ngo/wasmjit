@@ -1466,6 +1466,69 @@ int read_global_section(struct ParseState *pstate,
 	return 0;
 }
 
+struct ExportSection {
+	uint32_t n_exports;
+	struct ExportSectionExport {
+		char *name;
+		uint8_t idx_type;
+		uint32_t idx;
+	} *exports;
+};
+
+int read_export_section(struct ParseState *pstate,
+			struct ExportSection *export_section)
+{
+	int ret;
+
+	export_section->exports = NULL;
+
+	ret = read_uleb_uint32_t(pstate, &export_section->n_exports);
+	if (!ret)
+		goto error;
+
+	if (export_section->n_exports) {
+		uint32_t i;
+
+		export_section->exports =
+		    calloc(export_section->n_exports,
+			   sizeof(struct ExportSectionExport));
+		if (!export_section->exports)
+			goto error;
+
+		for (i = 0; i < export_section->n_exports; ++i) {
+			struct ExportSectionExport *export =
+			    &export_section->exports[i];
+
+			export->name = read_string(pstate);
+			if (!export->name)
+				goto error;
+
+			ret = read_uint8_t(pstate, &export->idx_type);
+			if (!ret)
+				goto error;
+
+			ret = read_uleb_uint32_t(pstate, &export->idx);
+			if (!ret)
+				goto error;
+		}
+	}
+
+	return 1;
+
+ error:
+	if (export_section->exports) {
+		uint32_t i;
+		for (i = 0; i < export_section->n_exports; ++i) {
+			if (export_section->exports[i].name) {
+				free(export_section->exports[i].name);
+			}
+		}
+		free(export_section->exports);
+	}
+
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
@@ -1476,6 +1539,7 @@ int main(int argc, char *argv[])
 	struct TableSection table_section;
 	struct MemorySection memory_section;
 	struct GlobalSection global_section;
+	struct ExportSection export_section;
 
 	init_pstate(&pstate);
 
@@ -1579,6 +1643,9 @@ int main(int argc, char *argv[])
 			     &global_section);
 			break;
 		case SECTION_ID_EXPORT:
+			READ("export section", read_export_section,
+			     &export_section);
+			break;
 		case SECTION_ID_START:
 		case SECTION_ID_ELEMENT:
 		case SECTION_ID_CODE:
