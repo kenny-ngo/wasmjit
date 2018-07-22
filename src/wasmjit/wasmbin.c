@@ -1,3 +1,5 @@
+/* -*-mode:c; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*- */
+
 /*
   Copyright (c) 2018 Rian Hunter
 
