@@ -97,10 +97,11 @@ struct ParseState {
 	char *input;
 	size_t amt_left;
 };
-
-void init_pstate(struct ParseState *pstate)
+int init_pstate(struct ParseState *pstate, char *file_name)
 {
 	pstate->eof = 0;
+	pstate->input = load_file(file_name, &pstate->amt_left);
+	return pstate->input;
 }
 
 int is_eof(struct ParseState *pstate)
@@ -1950,15 +1951,13 @@ int main(int argc, char *argv[])
 	struct CodeSection code_section;
 	struct DataSection data_section;
 
-	init_pstate(&pstate);
-
 	if (argc < 2) {
 		printf("Need an input file\n");
 		return -1;
 	}
 
-	pstate.input = load_file(argv[1], &pstate.amt_left);
-	if (!pstate.input) {
+	ret = init_pstate(&pstate, argv[1]);
+	if (!ret) {
 		printf("Error loading file %s\n", strerror(errno));
 		return -1;
 	}
