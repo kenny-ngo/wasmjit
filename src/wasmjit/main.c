@@ -201,11 +201,13 @@ DEFINE_ULEB_READER(uint64_t);
 int read_float(struct ParseState *pstate, float *data);
 int read_double(struct ParseState *pstate, double *data);
 
-char *read_string(struct ParseState *pstate)
+char *read_buf_internal(struct ParseState *pstate, uint32_t *buf_size,
+			int zero_term)
 {
 	char *toret;
 	int ret;
 	uint32_t string_size;
+	int as_string = zero_term ? 1 : 0;
 
 	ret = read_uleb_uint32_t(pstate, &string_size);
 	if (!ret)
@@ -216,17 +218,33 @@ char *read_string(struct ParseState *pstate)
 		return NULL;
 	}
 
-	toret = malloc(string_size + 1);
+	toret = malloc(string_size + as_string);
 	if (!toret)
 		return NULL;
 
 	memcpy(toret, pstate->input, string_size);
-	toret[string_size] = '\0';
+	if (as_string) {
+		toret[string_size] = '\0';
+	}
+
+	if (buf_size) {
+		*buf_size = string_size;
+	}
 
 	pstate->input += string_size;
 	pstate->amt_left -= string_size;
 
 	return toret;
+}
+
+char *read_string(struct ParseState *pstate)
+{
+	return read_buf_internal(pstate, NULL, 1);
+}
+
+char *read_buffer(struct ParseState *pstate, uint32_t *buf_size)
+{
+	return read_buf_internal(pstate, buf_size, 0);
 }
 
 struct Limits {
@@ -1739,6 +1757,78 @@ int read_code_section(struct ParseState *pstate,
 	return 0;
 }
 
+struct DataSection {
+	uint32_t n_datas;
+	struct DataSectionData {
+		uint32_t memidx;
+		size_t n_instructions;
+		struct Instr *instructions;
+		uint32_t buf_size;
+		char *buf;
+	} *datas;
+};
+
+int read_data_section(struct ParseState *pstate,
+		      struct DataSection *data_section)
+{
+	int ret;
+
+	data_section->datas = NULL;
+
+	ret = read_uleb_uint32_t(pstate, &data_section->n_datas);
+	if (!ret)
+		goto error;
+
+	if (data_section->n_datas) {
+		uint32_t i;
+
+		data_section->datas =
+		    calloc(data_section->n_datas,
+			   sizeof(struct DataSectionData));
+		if (!data_section->datas)
+			goto error;
+
+		for (i = 0; i < data_section->n_datas; ++i) {
+			struct DataSectionData *data = &data_section->datas[i];
+
+			ret = read_uleb_uint32_t(pstate, &data->memidx);
+			if (!ret)
+				goto error;
+
+			data->instructions =
+			    read_instructions(pstate,
+					      &data->n_instructions, 0, 1);
+			if (!data->instructions)
+				goto error;
+
+			data->buf = read_buffer(pstate, &data->buf_size);
+			if (!data->buf)
+				goto error;
+		}
+	}
+
+	return 1;
+
+ error:
+	if (data_section->datas) {
+		uint32_t i;
+		for (i = 0; i < data_section->n_datas; ++i) {
+			struct DataSectionData *data = &data_section->datas[i];
+
+			if (data->instructions) {
+				free_instructions(data->instructions,
+						  data->n_instructions);
+			}
+
+			if (data->buf) {
+				free(data->buf);
+			}
+		}
+		free(data_section->datas);
+	}
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
@@ -1753,6 +1843,7 @@ int main(int argc, char *argv[])
 	struct StartSection start_section;
 	struct ElementSection element_section;
 	struct CodeSection code_section;
+	struct DataSection data_section;
 
 	init_pstate(&pstate);
 
@@ -1871,7 +1962,7 @@ int main(int argc, char *argv[])
 			READ("code section", read_code_section, &code_section);
 			break;
 		case SECTION_ID_DATA:
-			READ("custom section", advance_parser, size);
+			READ("data section", read_data_section, &data_section);
 			break;
 		default:
 			printf("Unsupported wasm section: 0x%" PRIx32 "\n", id);
