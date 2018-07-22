@@ -22,40 +22,21 @@
   SOFTWARE.
  */
 
-#include <wasmjit/wasmbin_parse.h>
+#ifndef __WASMJIT__WASMBIN_PARSE_H__
+#define __WASMJIT__WASMBIN_PARSE_H__
+
 #include <wasmjit/wasmbin.h>
 
-#include <assert.h>
-#include <inttypes.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
+#include <stddef.h>
 
-#include <errno.h>
+struct ParseState {
+	int eof;
+	char *input;
+	size_t amt_left;
+};
 
-int main(int argc, char *argv[])
-{
-	int ret;
-	struct ParseState pstate;
-	struct Module module;
+int read_module(struct ParseState *pstate, struct Module *module);
 
-	if (argc < 2) {
-		printf("Need an input file\n");
-		return -1;
-	}
+int init_pstate(struct ParseState *pstate, char *file_name);
 
-	ret = init_pstate(&pstate, argv[1]);
-	if (!ret) {
-		printf("Error loading file %s\n", strerror(errno));
-		return -1;
-	}
-
-	ret = read_module(&pstate, &module);
-	if (!ret) {
-		printf("Error parsing module\n");
-		return -1;
-	}
-
-	return 0;
-}
+#endif

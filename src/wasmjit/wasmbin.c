@@ -1,5 +1,3 @@
-/* -*-mode:c; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*- */
-
 /*
   Copyright (c) 2018 Rian Hunter
 
@@ -22,40 +20,26 @@
   SOFTWARE.
  */
 
-#include <wasmjit/wasmbin_parse.h>
 #include <wasmjit/wasmbin.h>
 
-#include <assert.h>
-#include <inttypes.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
+#include <stdlib.h>
 
-#include <errno.h>
-
-int main(int argc, char *argv[])
+void init_instruction(struct Instr *instr)
 {
-	int ret;
-	struct ParseState pstate;
-	struct Module module;
+	memset(instr, 0, sizeof(*instr));
+}
 
-	if (argc < 2) {
-		printf("Need an input file\n");
-		return -1;
+void free_instruction(struct Instr *instr)
+{
+}
+
+void free_instructions(struct Instr *instructions, size_t n_instructions)
+{
+	size_t i;
+	for (i = 0; i < n_instructions; ++i) {
+		free_instruction(&instructions[i]);
 	}
-
-	ret = init_pstate(&pstate, argv[1]);
-	if (!ret) {
-		printf("Error loading file %s\n", strerror(errno));
-		return -1;
-	}
-
-	ret = read_module(&pstate, &module);
-	if (!ret) {
-		printf("Error parsing module\n");
-		return -1;
-	}
-
-	return 0;
+	free(instructions);
 }
