@@ -1360,6 +1360,9 @@ struct Instr *read_instructions(struct ParseState *pstate,
 				int allow_block)
 {
 	struct Instr *instructions = NULL;
+
+	assert(!*n_instructions);
+
 	while (1) {
 		int ret;
 		struct Instr instruction, *next_instructions;
