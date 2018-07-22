@@ -1935,10 +1935,7 @@ void dump_instructions(const struct Instr *instructions, size_t n_instructions)
 	dump_instructions_inner(instructions, n_instructions, 0);
 }
 
-int main(int argc, char *argv[])
-{
-	int ret;
-	struct ParseState pstate;
+struct Module {
 	struct TypeSection type_section;
 	struct ImportSection import_section;
 	struct FunctionSection function_section;
@@ -1950,29 +1947,22 @@ int main(int argc, char *argv[])
 	struct ElementSection element_section;
 	struct CodeSection code_section;
 	struct DataSection data_section;
+};
 
-	if (argc < 2) {
-		printf("Need an input file\n");
-		return -1;
-	}
-
-	ret = init_pstate(&pstate, argv[1]);
-	if (!ret) {
-		printf("Error loading file %s\n", strerror(errno));
-		return -1;
-	}
+int read_module(struct ParseState *pstate, struct Module *module)
+{
 #define READ(msg, fn, ...)						\
 	do {								\
 		int ret;						\
-		ret = fn(&pstate, __VA_ARGS__);				\
+		ret = fn(pstate, __VA_ARGS__);				\
 		if (!ret) {						\
-			if (is_eof(&pstate)) {				\
-				printf("EOF while reading " msg "\n");	\
+			if (is_eof(pstate)) {				\
+				fprintf(stderr, "EOF while reading " msg "\n"); \
 			}						\
 			else {						\
-				printf("Error reading " msg ": %s\n", strerror(errno));	\
+				fprintf(stderr, "Error reading " msg ": %s\n", strerror(errno)); \
 			}						\
-			return -1;					\
+			return 0;					\
 		}							\
 	}								\
 	while (0)
@@ -1984,9 +1974,10 @@ int main(int argc, char *argv[])
 		READ("magic", read_uint32_t, &magic);
 
 		if (magic != WASM_MAGIC) {
-			printf("Bad WASM magic 0x%" PRIx32 " vs 0x%"
-			       PRIx32 "\n", magic, WASM_MAGIC);
-			return -1;
+			fprintf(stderr,
+				"Bad WASM magic 0x%" PRIx32 " vs 0x%"
+				PRIx32 "\n", magic, WASM_MAGIC);
+			return 0;
 		}
 	}
 
@@ -1997,9 +1988,10 @@ int main(int argc, char *argv[])
 		READ("version", read_uint32_t, &version);
 
 		if (version != VERSION) {
-			printf("Unsupported WASM version 0x%" PRIx32
-			       " vs 0x%" PRIx32 "\n", version, VERSION);
-			return -1;
+			fprintf(stderr,
+				"Unsupported WASM version 0x%" PRIx32
+				" vs 0x%" PRIx32 "\n", version, VERSION);
+			return 0;
 		}
 
 	}
@@ -2011,14 +2003,15 @@ int main(int argc, char *argv[])
 
 		{
 			int ret;
-			ret = read_uint8_t(&pstate, &id);
+			ret = read_uint8_t(pstate, &id);
 			if (!ret) {
-				if (is_eof(&pstate)) {
+				if (is_eof(pstate)) {
 					break;
 				}
-				printf("Error reading id %s\n",
-				       strerror(errno));
-				return -1;
+				fprintf(stderr,
+					"Error reading id %s\n",
+					strerror(errno));
+				return 0;
 			}
 		}
 		READ("size", read_uleb_uint32_t, &size);
@@ -2028,50 +2021,77 @@ int main(int argc, char *argv[])
 			READ("custom section", advance_parser, size);
 			break;
 		case SECTION_ID_TYPE:
-			READ("type section", read_type_section, &type_section);
+			READ("type section", read_type_section, &module->type_section);
 			break;
 		case SECTION_ID_IMPORT:
 			READ("import section", read_import_section,
-			     &import_section);
+			     &module->import_section);
 			break;
 		case SECTION_ID_FUNCTION:
 			READ("function section", read_function_section,
-			     &function_section);
+			     &module->function_section);
 			break;
 		case SECTION_ID_TABLE:
 			READ("table section", read_table_section,
-			     &table_section);
+			     &module->table_section);
 			break;
 		case SECTION_ID_MEMORY:
 			READ("memory section", read_memory_section,
-			     &memory_section);
+			     &module->memory_section);
 			break;
 		case SECTION_ID_GLOBAL:
 			READ("global section", read_global_section,
-			     &global_section);
+			     &module->global_section);
 			break;
 		case SECTION_ID_EXPORT:
 			READ("export section", read_export_section,
-			     &export_section);
+			     &module->export_section);
 			break;
 		case SECTION_ID_START:
 			READ("start section", read_start_section,
-			     &start_section);
+			     &module->start_section);
 			break;
 		case SECTION_ID_ELEMENT:
 			READ("element section", read_element_section,
-			     &element_section);
+			     &module->element_section);
 			break;
 		case SECTION_ID_CODE:
-			READ("code section", read_code_section, &code_section);
+			READ("code section", read_code_section,
+			     &module->code_section);
 			break;
 		case SECTION_ID_DATA:
-			READ("data section", read_data_section, &data_section);
+			READ("data section", read_data_section,
+			     &module->data_section);
 			break;
 		default:
 			printf("Unsupported wasm section: 0x%" PRIx32 "\n", id);
-			return -1;
+			return 0;
 		}
+	}
+	return 1;
+}
+
+int main(int argc, char *argv[])
+{
+	int ret;
+	struct ParseState pstate;
+	struct Module module;
+
+	if (argc < 2) {
+		printf("Need an input file\n");
+		return -1;
+	}
+
+	ret = init_pstate(&pstate, argv[1]);
+	if (!ret) {
+		printf("Error loading file %s\n", strerror(errno));
+		return -1;
+	}
+
+	ret = read_module(&pstate, &module);
+	if (!ret) {
+		printf("Error parsing module\n");
+		return -1;
 	}
 
 	return 0;
