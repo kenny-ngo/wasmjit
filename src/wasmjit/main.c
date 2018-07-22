@@ -35,7 +35,7 @@
 
 #include <sys/stat.h>
 
-char *load_file(char *file_name, size_t * size)
+char *load_file(char *file_name, size_t *size)
 {
 	FILE *f = NULL;
 	char *input = NULL;
@@ -896,11 +896,12 @@ struct Instr {
 			uint32_t align;
 			uint32_t offset;
 		} i32_load, i64_load, f32_load, f64_load,
-			i32_load8_s, i32_load8_u, i32_load16_s, i32_load16_u,
-			i64_load8_s, i64_load8_u, i64_load16_s, i64_load16_u,
-			i64_load32_s, i64_load32_u,
-			i32_store, i64_store, f32_store, f64_store,
-			i32_store8, i32_store16, i64_store8, i64_store16, i64_store32;
+		    i32_load8_s, i32_load8_u, i32_load16_s, i32_load16_u,
+		    i64_load8_s, i64_load8_u, i64_load16_s, i64_load16_u,
+		    i64_load32_s, i64_load32_u,
+		    i32_store, i64_store, f32_store, f64_store,
+		    i32_store8, i32_store16, i64_store8, i64_store16,
+		    i64_store32;
 		struct {
 			uint32_t value;
 		} i32_const;
@@ -916,69 +917,89 @@ struct Instr {
 	} data;
 };
 
-void init_instruction(struct Instr *instr) {
+void init_instruction(struct Instr *instr)
+{
 	memset(instr, 0, sizeof(*instr));
 }
 
-void free_instruction(struct Instr *instr) {
+void free_instruction(struct Instr *instr)
+{
 }
 
-struct Instr *read_instructions(struct ParseState *pstate, size_t *n_instructions, int allow_else, int allow_block);
+struct Instr *read_instructions(struct ParseState *pstate,
+				size_t *n_instructions, int allow_else,
+				int allow_block);
 
-int read_instruction(struct ParseState *pstate, struct Instr *instr, int allow_else, int allow_block)
+int read_instruction(struct ParseState *pstate, struct Instr *instr,
+		     int allow_else, int allow_block)
 {
 	int ret;
+	struct BlockLoopExtra *block;
+	struct BrIfExtra *brextra;
+	struct LocalExtra *local;
+	struct GlobalExtra *gextra;
+	struct LoadStoreExtra *lsextra;
 
 	init_instruction(instr);
 
 	ret = read_uint8_t(pstate, &instr->opcode);
-	if (!ret) return ret;
+	if (!ret)
+		return ret;
 
 	switch (instr->opcode) {
 	case BLOCK_TERMINAL:
 		return allow_block;
 	case ELSE_TERMINAL:
 		return allow_else;
-	case OPCODE_BLOCK: case OPCODE_LOOP: {
-		struct BlockLoopExtra *block;
-
+	case OPCODE_BLOCK:
+	case OPCODE_LOOP:
 		block = instr->opcode == OPCODE_BLOCK
-			? &instr->data.block
-			: &instr->data.loop;
+		    ? &instr->data.block : &instr->data.loop;
 
 		ret = read_uint8_t(pstate, &block->blocktype);
-		if (!ret) goto error;
+		if (!ret)
+			goto error;
 
-		block->instructions = read_instructions(pstate, &block->n_instructions, 0, 1);
-		if (!block->instructions) goto error;
+		block->instructions =
+		    read_instructions(pstate, &block->n_instructions, 0, 1);
+		if (!block->instructions)
+			goto error;
 
 		break;
-	}
-	case OPCODE_IF: {
+	case OPCODE_IF:
 		ret = read_uint8_t(pstate, &instr->data.if_.blocktype);
-		if (!ret) goto error;
+		if (!ret)
+			goto error;
 
-		instr->data.if_.instructions_then = read_instructions(pstate, &instr->data.if_.n_instructions_then, 1, 1);
-		if (!instr->data.if_.instructions_then) goto error;
+		instr->data.if_.instructions_then =
+		    read_instructions(pstate,
+				      &instr->data.if_.n_instructions_then, 1,
+				      1);
+		if (!instr->data.if_.instructions_then)
+			goto error;
 
-		instr->data.if_.instructions_else = read_instructions(pstate, &instr->data.if_.n_instructions_else, 0, 1);
-		if (!instr->data.if_.instructions_else) goto error;
+		instr->data.if_.instructions_else =
+		    read_instructions(pstate,
+				      &instr->data.if_.n_instructions_else, 0,
+				      1);
+		if (!instr->data.if_.instructions_else)
+			goto error;
 
 		break;
-	}
-	case OPCODE_BR: case OPCODE_BR_IF: {
-		struct BrIfExtra *block = instr->opcode == OPCODE_BR
-			? &instr->data.br
-			: &instr->data.br_if;
+	case OPCODE_BR:
+	case OPCODE_BR_IF:
+		brextra = instr->opcode == OPCODE_BR
+		    ? &instr->data.br : &instr->data.br_if;
 
-		ret = read_uleb_uint32_t(pstate, &block->labelidx);
+		ret = read_uleb_uint32_t(pstate, &brextra->labelidx);
 		if (!ret)
 			goto error;
 
 		break;
-	}
-	case OPCODE_BR_TABLE: {
-		ret = read_uleb_uint32_t(pstate, &instr->data.br_table.n_labelidxs);
+	case OPCODE_BR_TABLE:
+		ret =
+		    read_uleb_uint32_t(pstate,
+				       &instr->data.br_table.n_labelidxs);
 		if (!ret)
 			goto error;
 
@@ -986,40 +1007,44 @@ int read_instruction(struct ParseState *pstate, struct Instr *instr, int allow_e
 			uint32_t i;
 
 			instr->data.br_table.labelidxs =
-				calloc(instr->data.br_table.n_labelidxs,
-				       sizeof(int));
+			    calloc(instr->data.br_table.n_labelidxs,
+				   sizeof(int));
 			if (!instr->data.br_table.labelidxs)
 				goto error;
 
 			for (i = 0; i < instr->data.br_table.n_labelidxs; ++i) {
-				ret = read_uleb_uint32_t(pstate, &instr->data.br_table.labelidxs[i]);
+				ret =
+				    read_uleb_uint32_t(pstate,
+						       &instr->data.
+						       br_table.labelidxs[i]);
 				if (!ret)
 					goto error;
 			}
 		}
 
-		ret = read_uleb_uint32_t(pstate, &instr->data.br_table.labelidx);
+		ret =
+		    read_uleb_uint32_t(pstate, &instr->data.br_table.labelidx);
 		if (!ret)
 			goto error;
 
 		break;
-	}
-	case OPCODE_CALL: {
+	case OPCODE_CALL:
 		ret = read_uleb_uint32_t(pstate, &instr->data.call.funcidx);
 		if (!ret)
 			goto error;
 
 		break;
-	}
-	case OPCODE_CALL_INDIRECT: {
-		ret = read_uleb_uint32_t(pstate, &instr->data.call_indirect.typeidx);
+	case OPCODE_CALL_INDIRECT:
+		ret =
+		    read_uleb_uint32_t(pstate,
+				       &instr->data.call_indirect.typeidx);
 		if (!ret)
 			goto error;
 
 		break;
-	}
-	case OPCODE_GET_LOCAL: case OPCODE_SET_LOCAL: case OPCODE_TEE_LOCAL: {
-		struct LocalExtra *local;
+	case OPCODE_GET_LOCAL:
+	case OPCODE_SET_LOCAL:
+	case OPCODE_TEE_LOCAL:
 		switch (instr->opcode) {
 		case OPCODE_GET_LOCAL:
 			local = &instr->data.get_local;
@@ -1039,92 +1064,148 @@ int read_instruction(struct ParseState *pstate, struct Instr *instr, int allow_e
 			goto error;
 
 		break;
-	}
-	case OPCODE_GET_GLOBAL: case OPCODE_SET_GLOBAL:	{
-		struct GlobalExtra *gextra;
-
+	case OPCODE_GET_GLOBAL:
+	case OPCODE_SET_GLOBAL:
 		gextra = instr->opcode == OPCODE_GET_GLOBAL
-			? &instr->data.get_global
-			: &instr->data.set_global;
+		    ? &instr->data.get_global : &instr->data.set_global;
 
 		ret = read_uleb_uint32_t(pstate, &gextra->globalidx);
 		if (!ret)
 			goto error;
 
 		break;
-	}
-	case OPCODE_I32_LOAD: case OPCODE_I64_LOAD: case OPCODE_F32_LOAD:
-	case OPCODE_F64_LOAD: case OPCODE_I32_LOAD8_S: case OPCODE_I32_LOAD8_U: case OPCODE_I32_LOAD16_S:
-	case OPCODE_I32_LOAD16_U: case OPCODE_I64_LOAD8_S: case OPCODE_I64_LOAD8_U: case OPCODE_I64_LOAD16_S:
-	case OPCODE_I64_LOAD16_U: case OPCODE_I64_LOAD32_S: case OPCODE_I64_LOAD32_U: case OPCODE_I32_STORE:
-	case OPCODE_I64_STORE: case OPCODE_F32_STORE: case OPCODE_F64_STORE: case OPCODE_I32_STORE8:
-	case OPCODE_I32_STORE16: case OPCODE_I64_STORE8: case OPCODE_I64_STORE16: case OPCODE_I64_STORE32: {
-		struct LoadStoreExtra *extra;
-
+	case OPCODE_I32_LOAD:
+	case OPCODE_I64_LOAD:
+	case OPCODE_F32_LOAD:
+	case OPCODE_F64_LOAD:
+	case OPCODE_I32_LOAD8_S:
+	case OPCODE_I32_LOAD8_U:
+	case OPCODE_I32_LOAD16_S:
+	case OPCODE_I32_LOAD16_U:
+	case OPCODE_I64_LOAD8_S:
+	case OPCODE_I64_LOAD8_U:
+	case OPCODE_I64_LOAD16_S:
+	case OPCODE_I64_LOAD16_U:
+	case OPCODE_I64_LOAD32_S:
+	case OPCODE_I64_LOAD32_U:
+	case OPCODE_I32_STORE:
+	case OPCODE_I64_STORE:
+	case OPCODE_F32_STORE:
+	case OPCODE_F64_STORE:
+	case OPCODE_I32_STORE8:
+	case OPCODE_I32_STORE16:
+	case OPCODE_I64_STORE8:
+	case OPCODE_I64_STORE16:
+	case OPCODE_I64_STORE32:
 		switch (instr->opcode) {
-		case OPCODE_I32_LOAD: extra = &instr->data.i32_load; break;
-		case OPCODE_I64_LOAD: extra = &instr->data.i64_load; break;
-		case OPCODE_F32_LOAD: extra = &instr->data.f32_load; break;
-		case OPCODE_F64_LOAD: extra = &instr->data.f64_load; break;
-		case OPCODE_I32_LOAD8_S: extra = &instr->data.i32_load8_s; break;
-		case OPCODE_I32_LOAD8_U: extra = &instr->data.i32_load8_u; break;
-		case OPCODE_I32_LOAD16_S: extra = &instr->data.i32_load16_s; break;
-		case OPCODE_I32_LOAD16_U: extra = &instr->data.i32_load16_u; break;
-		case OPCODE_I64_LOAD8_S: extra = &instr->data.i64_load8_s; break;
-		case OPCODE_I64_LOAD8_U: extra = &instr->data.i64_load8_u; break;
-		case OPCODE_I64_LOAD16_S: extra = &instr->data.i64_load16_s; break;
-		case OPCODE_I64_LOAD16_U: extra = &instr->data.i64_load16_u; break;
-		case OPCODE_I64_LOAD32_S: extra = &instr->data.i64_load32_s; break;
-		case OPCODE_I64_LOAD32_U: extra = &instr->data.i64_load32_u; break;
-		case OPCODE_I32_STORE: extra = &instr->data.i32_store; break;
-		case OPCODE_I64_STORE: extra = &instr->data.i64_store; break;
-		case OPCODE_F32_STORE: extra = &instr->data.f32_store; break;
-		case OPCODE_F64_STORE: extra = &instr->data.f64_store; break;
-		case OPCODE_I32_STORE8: extra = &instr->data.i32_store8; break;
-		case OPCODE_I32_STORE16: extra = &instr->data.i32_store16; break;
-		case OPCODE_I64_STORE8: extra = &instr->data.i64_store8; break;
-		case OPCODE_I64_STORE16: extra = &instr->data.i64_store16; break;
-		case OPCODE_I64_STORE32: extra = &instr->data.i64_store32; break;
-		default: assert(0); break;
+		case OPCODE_I32_LOAD:
+			lsextra = &instr->data.i32_load;
+			break;
+		case OPCODE_I64_LOAD:
+			lsextra = &instr->data.i64_load;
+			break;
+		case OPCODE_F32_LOAD:
+			lsextra = &instr->data.f32_load;
+			break;
+		case OPCODE_F64_LOAD:
+			lsextra = &instr->data.f64_load;
+			break;
+		case OPCODE_I32_LOAD8_S:
+			lsextra = &instr->data.i32_load8_s;
+			break;
+		case OPCODE_I32_LOAD8_U:
+			lsextra = &instr->data.i32_load8_u;
+			break;
+		case OPCODE_I32_LOAD16_S:
+			lsextra = &instr->data.i32_load16_s;
+			break;
+		case OPCODE_I32_LOAD16_U:
+			lsextra = &instr->data.i32_load16_u;
+			break;
+		case OPCODE_I64_LOAD8_S:
+			lsextra = &instr->data.i64_load8_s;
+			break;
+		case OPCODE_I64_LOAD8_U:
+			lsextra = &instr->data.i64_load8_u;
+			break;
+		case OPCODE_I64_LOAD16_S:
+			lsextra = &instr->data.i64_load16_s;
+			break;
+		case OPCODE_I64_LOAD16_U:
+			lsextra = &instr->data.i64_load16_u;
+			break;
+		case OPCODE_I64_LOAD32_S:
+			lsextra = &instr->data.i64_load32_s;
+			break;
+		case OPCODE_I64_LOAD32_U:
+			lsextra = &instr->data.i64_load32_u;
+			break;
+		case OPCODE_I32_STORE:
+			lsextra = &instr->data.i32_store;
+			break;
+		case OPCODE_I64_STORE:
+			lsextra = &instr->data.i64_store;
+			break;
+		case OPCODE_F32_STORE:
+			lsextra = &instr->data.f32_store;
+			break;
+		case OPCODE_F64_STORE:
+			lsextra = &instr->data.f64_store;
+			break;
+		case OPCODE_I32_STORE8:
+			lsextra = &instr->data.i32_store8;
+			break;
+		case OPCODE_I32_STORE16:
+			lsextra = &instr->data.i32_store16;
+			break;
+		case OPCODE_I64_STORE8:
+			lsextra = &instr->data.i64_store8;
+			break;
+		case OPCODE_I64_STORE16:
+			lsextra = &instr->data.i64_store16;
+			break;
+		case OPCODE_I64_STORE32:
+			lsextra = &instr->data.i64_store32;
+			break;
+		default:
+			assert(0);
+			break;
 		}
 
-		ret = read_uleb_uint32_t(pstate, &extra->align);
+		ret = read_uleb_uint32_t(pstate, &lsextra->align);
 		if (!ret)
 			goto error;
 
-		ret = read_uleb_uint32_t(pstate, &extra->offset);
+		ret = read_uleb_uint32_t(pstate, &lsextra->offset);
 		if (!ret)
 			goto error;
 
 		break;
-	}
-	case OPCODE_I32_CONST: {
+	case OPCODE_I32_CONST:
 		ret = read_uleb_uint32_t(pstate, &instr->data.i32_const.value);
 		if (!ret)
 			goto error;
 		break;
-	}
-	case OPCODE_I64_CONST: {
+	case OPCODE_I64_CONST:
 		ret = read_uleb_uint64_t(pstate, &instr->data.i64_const.value);
 		if (!ret)
 			goto error;
 		break;
-	}
-	case OPCODE_F32_CONST: {
+	case OPCODE_F32_CONST:
 		ret = read_float(pstate, &instr->data.f32_const.value);
 		if (!ret)
 			goto error;
 		break;
-	}
-	case OPCODE_F64_CONST: {
+	case OPCODE_F64_CONST:
 		ret = read_double(pstate, &instr->data.f64_const.value);
 		if (!ret)
 			goto error;
 		break;
-	}
-	case OPCODE_UNREACHABLE: case OPCODE_NOP:
+	case OPCODE_UNREACHABLE:
+	case OPCODE_NOP:
 	case OPCODE_RETURN:
-	case OPCODE_DROP: case OPCODE_SELECT:
+	case OPCODE_DROP:
+	case OPCODE_SELECT:
 	case OPCODE_MEMORY_SIZE:
 	case OPCODE_MEMORY_GROW:
 	case OPCODE_I32_EQZ:
@@ -1262,19 +1343,26 @@ int read_instruction(struct ParseState *pstate, struct Instr *instr, int allow_e
 	return 0;
 }
 
-struct Instr *read_instructions(struct ParseState *pstate, size_t *n_instructions, int allow_else, int allow_block) {
+struct Instr *read_instructions(struct ParseState *pstate,
+				size_t *n_instructions, int allow_else,
+				int allow_block)
+{
 	struct Instr *instructions = NULL;
 	while (1) {
 		int ret;
 		struct Instr instruction, *next_instructions;
 		size_t new_len;
 
-		ret = read_instruction(pstate, &instruction, allow_else, allow_block);
+		ret =
+		    read_instruction(pstate, &instruction, allow_else,
+				     allow_block);
 		if (!ret)
 			goto error;
 
-		if (instruction.opcode == BLOCK_TERMINAL || instruction.opcode == ELSE_TERMINAL)
+		if (instruction.opcode == BLOCK_TERMINAL
+		    || instruction.opcode == ELSE_TERMINAL) {
 			break;
+		}
 
 		new_len = *n_instructions + 1;
 
@@ -1339,7 +1427,9 @@ int read_global_section(struct ParseState *pstate,
 			if (!ret)
 				goto error;
 
-			global->instructions = read_instructions(pstate, &global->n_instructions, 0, 1);
+			global->instructions = read_instructions(pstate,
+								 &global->n_instructions,
+								 0, 1);
 			if (!global->instructions) {
 				goto error;
 			}
@@ -1399,8 +1489,8 @@ int main(int argc, char *argv[])
 		READ("magic", read_uint32_t, &magic);
 
 		if (magic != WASM_MAGIC) {
-			printf("Bad WASM magic 0x%" PRIx32 " vs 0x%" PRIx32
-			       "\n", magic, WASM_MAGIC);
+			printf("Bad WASM magic 0x%" PRIx32 " vs 0x%"
+			       PRIx32 "\n", magic, WASM_MAGIC);
 			return -1;
 		}
 	}
@@ -1412,8 +1502,8 @@ int main(int argc, char *argv[])
 		READ("version", read_uint32_t, &version);
 
 		if (version != VERSION) {
-			printf("Unsupported WASM version 0x%" PRIx32 " vs 0x%"
-			       PRIx32 "\n", version, VERSION);
+			printf("Unsupported WASM version 0x%" PRIx32
+			       " vs 0x%" PRIx32 "\n", version, VERSION);
 			return -1;
 		}
 
