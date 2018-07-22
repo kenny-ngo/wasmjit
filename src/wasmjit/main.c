@@ -1829,6 +1829,111 @@ int read_data_section(struct ParseState *pstate,
 	return 0;
 }
 
+
+void dump_global_section(struct GlobalSection *global_section)
+{
+	uint32_t i;
+
+	for (i = 0; i < global_section->n_globals; ++i) {
+		struct GlobalSectionGlobal *global =
+		    &global_section->globals[i];
+		printf("Global Section %" PRIu32 " type: %" PRIu8
+		       " can mute: %" PRIu8 "\n", i,
+		       global->type.valtype, global->type.mut);
+	}
+}
+
+
+void dump_instructions_inner(const struct Instr *instructions,
+			     size_t n_instructions, int indent);
+
+void dump_instruction(const struct Instr *instruction, int indent)
+{
+	int sps = indent * 2;
+	const char *name;
+	switch (instruction->opcode) {
+	case OPCODE_UNREACHABLE:
+		printf("%*sunreachable\n", sps, "");
+		break;
+	case OPCODE_BLOCK:
+		printf("%*sblock 0x%02" PRIx8 " %p\n", sps, "",
+		       instruction->data.block.blocktype,
+		       instruction->data.block.instructions);
+		dump_instructions_inner(instruction->data.block.instructions,
+					instruction->data.block.n_instructions,
+					indent + 1);
+		break;
+	case OPCODE_LOOP:
+		printf("%*sloop 0x%02" PRIx8 "\n", sps, "",
+		       instruction->data.loop.blocktype);
+		dump_instructions_inner(instruction->data.loop.instructions,
+					instruction->data.loop.n_instructions,
+					indent + 1);
+		break;
+	case OPCODE_BR_IF:
+		printf("%*sbr_if 0x%" PRIx32 "\n", sps, "",
+		       instruction->data.br_if.labelidx);
+		break;
+	case OPCODE_RETURN:
+		printf("%*sreturn\n", sps, "");
+		break;
+	case OPCODE_CALL:
+		printf("%*scall 0x%" PRIx32 "\n", sps, "",
+		       instruction->data.call.funcidx);
+		break;
+	case OPCODE_GET_LOCAL:
+		printf("%*sget_local 0x%" PRIx32 "\n", sps, "",
+		       instruction->data.get_local.localidx);
+		break;
+	case OPCODE_SET_LOCAL:
+		printf("%*sset_local 0x%" PRIx32 "\n", sps, "",
+		       instruction->data.set_local.localidx);
+		break;
+	case OPCODE_TEE_LOCAL:
+		printf("%*stee_local 0x%" PRIx32 "\n", sps, "",
+		       instruction->data.tee_local.localidx);
+		break;
+	case OPCODE_I32_LOAD:
+		name = "i32.load";
+		printf("%*s%s align: 0x%" PRIx32 " offset: 0x%" PRIx32
+		       "\n", sps, "", name,
+		       instruction->data.i32_load.align,
+		       instruction->data.i32_load.offset);
+		break;
+	case OPCODE_I32_CONST:
+		printf("%*si32.const 0x%" PRIx32 "\n", sps, "",
+		       instruction->data.i32_const.value);
+		break;
+	case OPCODE_I32_LT_S:
+		printf("%*si32.lt_s\n", sps, "");
+		break;
+	case OPCODE_I32_ADD:
+		printf("%*si32.add\n", sps, "");
+		break;
+	case OPCODE_I32_MUL:
+		printf("%*si32.mul\n", sps, "");
+		break;
+	default:
+		printf("%*sBAD 0x%02" PRIx8 "\n", sps, "", instruction->opcode);
+		exit(0);
+	}
+}
+
+void dump_instructions_inner(const struct Instr *instructions,
+			     size_t n_instructions, int indent)
+{
+	uint32_t i;
+
+	for (i = 0; i < n_instructions; ++i) {
+		dump_instruction(&instructions[i], indent);
+	}
+}
+
+void dump_instructions(const struct Instr *instructions, size_t n_instructions)
+{
+	dump_instructions_inner(instructions, n_instructions, 0);
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
