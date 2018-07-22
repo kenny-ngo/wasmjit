@@ -1637,6 +1637,108 @@ int read_element_section(struct ParseState *pstate,
 	return 0;
 }
 
+struct CodeSection {
+	uint32_t n_codes;
+	struct CodeSectionCode {
+		uint32_t size;
+		uint32_t n_locals;
+		struct CodeSectionCodeLocal {
+			uint32_t count;
+			uint8_t valtype;
+		} *locals;
+		size_t n_instructions;
+		struct Instr *instructions;
+	} *codes;
+};
+
+int read_code_section(struct ParseState *pstate,
+		      struct CodeSection *code_section)
+{
+	int ret;
+
+	code_section->codes = NULL;
+
+	ret = read_uleb_uint32_t(pstate, &code_section->n_codes);
+	if (!ret)
+		goto error;
+
+	if (code_section->n_codes) {
+		uint32_t i;
+
+		code_section->codes =
+		    calloc(code_section->n_codes,
+			   sizeof(struct CodeSectionCode));
+		if (!code_section->codes)
+			goto error;
+
+		for (i = 0; i < code_section->n_codes; ++i) {
+			struct CodeSectionCode *code = &code_section->codes[i];
+
+			ret = read_uleb_uint32_t(pstate, &code->size);
+			if (!ret)
+				goto error;
+
+			ret = read_uleb_uint32_t(pstate, &code->n_locals);
+			if (!ret)
+				goto error;
+
+			if (code->n_locals) {
+				uint32_t j;
+
+				code->locals =
+				    calloc(code->n_locals,
+					   sizeof(struct CodeSectionCodeLocal));
+				if (!code->locals)
+					goto error;
+
+				for (j = 0; j < code->n_locals; ++j) {
+					struct CodeSectionCodeLocal
+					*code_local = &code->locals[j];
+
+					ret =
+					    read_uleb_uint32_t(pstate,
+							       &code_local->count);
+					if (!ret)
+						goto error;
+
+					ret =
+					    read_uint8_t(pstate,
+							 &code_local->valtype);
+					if (!ret)
+						goto error;
+				}
+			}
+
+			code->instructions =
+			    read_instructions(pstate,
+					      &code->n_instructions, 0, 1);
+			if (!code->instructions)
+				goto error;
+		}
+	}
+
+	return 1;
+
+ error:
+	if (code_section->codes) {
+		uint32_t i;
+		for (i = 0; i < code_section->n_codes; ++i) {
+			struct CodeSectionCode *code = &code_section->codes[i];
+
+			if (code->locals) {
+				free(code->locals);
+			}
+
+			if (code->instructions) {
+				free_instructions(code->instructions,
+						  code->n_instructions);
+			}
+		}
+		free(code_section->codes);
+	}
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
@@ -1650,6 +1752,7 @@ int main(int argc, char *argv[])
 	struct ExportSection export_section;
 	struct StartSection start_section;
 	struct ElementSection element_section;
+	struct CodeSection code_section;
 
 	init_pstate(&pstate);
 
@@ -1765,6 +1868,8 @@ int main(int argc, char *argv[])
 			     &element_section);
 			break;
 		case SECTION_ID_CODE:
+			READ("code section", read_code_section, &code_section);
+			break;
 		case SECTION_ID_DATA:
 			READ("custom section", advance_parser, size);
 			break;
