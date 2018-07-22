@@ -1373,6 +1373,7 @@ struct Instr *read_instructions(struct ParseState *pstate,
 
 		if (instruction.opcode == BLOCK_TERMINAL
 		    || instruction.opcode == ELSE_TERMINAL) {
+			free_instruction(&instruction);
 			break;
 		}
 
@@ -1380,6 +1381,7 @@ struct Instr *read_instructions(struct ParseState *pstate,
 
 		next_instructions = realloc(instructions, new_len);
 		if (!next_instructions) {
+			free_instruction(&instruction);
 			goto error;
 		}
 
