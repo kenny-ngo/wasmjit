@@ -1529,6 +1529,16 @@ int read_export_section(struct ParseState *pstate,
 	return 0;
 }
 
+struct StartSection {
+	uint32_t funcidx;
+};
+
+int read_start_section(struct ParseState *pstate,
+		       struct StartSection *start_section)
+{
+	return read_uleb_uint32_t(pstate, &start_section->funcidx);
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
@@ -1540,6 +1550,7 @@ int main(int argc, char *argv[])
 	struct MemorySection memory_section;
 	struct GlobalSection global_section;
 	struct ExportSection export_section;
+	struct StartSection start_section;
 
 	init_pstate(&pstate);
 
@@ -1647,6 +1658,9 @@ int main(int argc, char *argv[])
 			     &export_section);
 			break;
 		case SECTION_ID_START:
+			READ("start section", read_start_section,
+			     &start_section);
+			break;
 		case SECTION_ID_ELEMENT:
 		case SECTION_ID_CODE:
 		case SECTION_ID_DATA:
