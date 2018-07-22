@@ -1355,6 +1355,15 @@ int read_instruction(struct ParseState *pstate, struct Instr *instr,
 	return 0;
 }
 
+void free_instructions(struct Instr *instructions, size_t n_instructions)
+{
+	size_t i;
+	for (i = 0; i < n_instructions; ++i) {
+		free_instruction(&instructions[i]);
+	}
+	free(instructions);
+}
+
 struct Instr *read_instructions(struct ParseState *pstate,
 				size_t *n_instructions, int allow_else,
 				int allow_block)
@@ -1404,11 +1413,7 @@ struct Instr *read_instructions(struct ParseState *pstate,
 
  error:
 	if (instructions) {
-		size_t i;
-		for (i = 0; i < *n_instructions; ++i) {
-			free_instruction(&instructions[i]);
-		}
-		free(instructions);
+		free_instructions(instructions, *n_instructions);
 	}
 	return NULL;
 }
@@ -1539,6 +1544,99 @@ int read_start_section(struct ParseState *pstate,
 	return read_uleb_uint32_t(pstate, &start_section->funcidx);
 }
 
+struct ElementSection {
+	uint32_t n_elements;
+	struct ElementSectionElement {
+		uint32_t tableidx;
+		size_t n_instructions;
+		struct Instr *instructions;
+		uint32_t n_funcidxs;
+		uint32_t *funcidxs;
+	} *elements;
+};
+
+int read_element_section(struct ParseState *pstate,
+			 struct ElementSection *element_section)
+{
+	int ret;
+
+	element_section->elements = NULL;
+
+	ret = read_uleb_uint32_t(pstate, &element_section->n_elements);
+	if (!ret)
+		goto error;
+
+	if (element_section->n_elements) {
+		uint32_t i;
+
+		element_section->elements =
+		    calloc(element_section->n_elements,
+			   sizeof(struct ElementSectionElement));
+		if (!element_section->elements)
+			goto error;
+
+		for (i = 0; i < element_section->n_elements; ++i) {
+			struct ElementSectionElement *element =
+			    &element_section->elements[i];
+
+			ret = read_uleb_uint32_t(pstate, &element->tableidx);
+			if (!ret)
+				goto error;
+
+			element->instructions =
+			    read_instructions(pstate,
+					      &element->n_instructions, 0, 1);
+			if (!element->instructions)
+				goto error;
+
+			ret = read_uleb_uint32_t(pstate, &element->n_funcidxs);
+			if (!ret)
+				goto error;
+
+			if (element->n_funcidxs) {
+				uint32_t j;
+
+				element->funcidxs =
+				    calloc(element->n_funcidxs,
+					   sizeof(uint32_t));
+				if (!element->funcidxs)
+					goto error;
+
+				for (j = 0; j < element->n_funcidxs; ++j) {
+					ret =
+					    read_uleb_uint32_t(pstate,
+							       &element->funcidxs
+							       [j]);
+					if (!ret)
+						goto error;
+				}
+			}
+		}
+	}
+
+	return 1;
+
+ error:
+	if (element_section->elements) {
+		uint32_t i;
+		for (i = 0; i < element_section->n_elements; ++i) {
+			struct ElementSectionElement *element =
+			    &element_section->elements[i];
+
+			if (element->instructions) {
+				free_instructions(element->instructions,
+						  element->n_instructions);
+			}
+
+			if (element->funcidxs) {
+				free(element->funcidxs);
+			}
+		}
+		free(element_section->elements);
+	}
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
@@ -1551,6 +1649,7 @@ int main(int argc, char *argv[])
 	struct GlobalSection global_section;
 	struct ExportSection export_section;
 	struct StartSection start_section;
+	struct ElementSection element_section;
 
 	init_pstate(&pstate);
 
@@ -1662,6 +1761,9 @@ int main(int argc, char *argv[])
 			     &start_section);
 			break;
 		case SECTION_ID_ELEMENT:
+			READ("element section", read_element_section,
+			     &element_section);
+			break;
 		case SECTION_ID_CODE:
 		case SECTION_ID_DATA:
 			READ("custom section", advance_parser, size);
