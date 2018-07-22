@@ -1575,11 +1575,9 @@ int main(int argc, char *argv[])
 			     &memory_section);
 			break;
 		case SECTION_ID_GLOBAL:
-			/*
-			   READ("global section", read_global_section,
-			   &global_section);
-			   break;
-			 */
+			READ("global section", read_global_section,
+			     &global_section);
+			break;
 		case SECTION_ID_EXPORT:
 		case SECTION_ID_START:
 		case SECTION_ID_ELEMENT:
