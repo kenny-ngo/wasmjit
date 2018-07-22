@@ -1382,7 +1382,13 @@ struct Instr *read_instructions(struct ParseState *pstate,
 
 		new_len = *n_instructions + 1;
 
-		next_instructions = realloc(instructions, new_len);
+		size_t size;
+		if (__builtin_umull_overflow
+		    (new_len, sizeof(struct Instr), &size)) {
+			goto error;
+		}
+
+		next_instructions = realloc(instructions, size);
 		if (!next_instructions) {
 			free_instruction(&instruction);
 			goto error;
