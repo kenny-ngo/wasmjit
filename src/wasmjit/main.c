@@ -139,6 +139,16 @@ uint8_t uint8_t_swap_bytes(uint8_t data)
 	return data;
 }
 
+float float_swap_bytes(float data)
+{
+	return data;
+}
+
+double double_swap_bytes(double data)
+{
+	return data;
+}
+
 #define DEFINE_INT_READER(type) \
 	int read_##type(struct ParseState *pstate, type *data)	\
 	{							\
@@ -158,6 +168,8 @@ uint8_t uint8_t_swap_bytes(uint8_t data)
 
 DEFINE_INT_READER(uint32_t);
 DEFINE_INT_READER(uint8_t);
+DEFINE_INT_READER(float);
+DEFINE_INT_READER(double);
 
 #define DEFINE_ULEB_READER(type)					\
 	int read_uleb_##type(struct ParseState *pstate, type *data)	\
