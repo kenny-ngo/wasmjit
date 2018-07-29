@@ -24,6 +24,7 @@
 
 #include <wasmjit/wasmbin.h>
 #include <wasmjit/wasmbin_parse.h>
+#include <wasmjit/util.h>
 
 #include <assert.h>
 #include <inttypes.h>
@@ -135,21 +136,6 @@ int advance_parser(struct ParseState *pstate, size_t size)
 	pstate->amt_left -= size;
 	pstate->input += size;
 	return 1;
-}
-
-uint32_t uint32_t_swap_bytes(uint32_t data)
-{
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-	return data;
-#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-	uint32_t _4 = data >> 24;
-	uint32_t _3 = (data >> 16) & 0xFF;
-	uint32_t _2 = (data >> 8) & 0xFF;
-	uint32_t _1 = (data >> 0) & 0xFF;
-	return _4 | (_3 << 8) | (_2 << 16) | (_1 << 24);
-#else
-#error Unsupported Architecture
-#endif
 }
 
 uint8_t uint8_t_swap_bytes(uint8_t data)

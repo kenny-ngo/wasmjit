@@ -22,62 +22,24 @@
   SOFTWARE.
  */
 
-#include <wasmjit/wasmbin_compile.h>
-#include <wasmjit/wasmbin_dump.h>
-#include <wasmjit/wasmbin_parse.h>
-#include <wasmjit/wasmbin.h>
+#ifndef __WASMJIT__UTIL_H__
+#define __WASMJIT__UTIL_H__
 
-#include <assert.h>
-#include <inttypes.h>
-#include <stdio.h>
 #include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
 
-#include <errno.h>
-
-int main(int argc, char *argv[])
+static uint32_t uint32_t_swap_bytes(uint32_t data)
 {
-	int ret;
-	struct ParseState pstate;
-	struct Module module;
-
-	if (argc < 2) {
-		printf("Need an input file\n");
-		return -1;
-	}
-
-	ret = init_pstate(&pstate, argv[1]);
-	if (!ret) {
-		printf("Error loading file %s\n", strerror(errno));
-		return -1;
-	}
-
-	ret = read_module(&pstate, &module);
-	if (!ret) {
-		printf("Error parsing module\n");
-		return -1;
-	}
-
-	/* the most basic validation */
-	if (module.code_section.n_codes !=
-	    module.function_section.n_typeidxs) {
-		printf("# Functions != # Codes %"PRIu32" != %"PRIu32"\n",
-		       module.function_section.n_typeidxs,
-		       module.code_section.n_codes);
-		return -1;
-	}
-
-	{
-		uint32_t i;
-
-		for (i = 0; i < module.code_section.n_codes; ++i) {
-			uint32_t j;
-			j = module.function_section.typeidxs[i];
-			wasmjit_compile_code(&module.type_section.types[j],
-					     &module.code_section.codes[i]);
-		}
-	}
-
-	return 0;
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+	return data;
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+	uint32_t _4 = data >> 24;
+	uint32_t _3 = (data >> 16) & 0xFF;
+	uint32_t _2 = (data >> 8) & 0xFF;
+	uint32_t _1 = (data >> 0) & 0xFF;
+	return _4 | (_3 << 8) | (_2 << 16) | (_1 << 24);
+#else
+#error Unsupported Architecture
+#endif
 }
+
+#endif
