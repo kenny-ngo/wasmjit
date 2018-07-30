@@ -72,9 +72,8 @@ void dump_instruction(const struct Instr *instruction, int indent)
 		printf("%*sunreachable\n", sps, "");
 		break;
 	case OPCODE_BLOCK:
-		printf("%*sblock 0x%02" PRIx8 " %p\n", sps, "",
-		       instruction->data.block.blocktype,
-		       instruction->data.block.instructions);
+		printf("%*sblock 0x%02" PRIx8 "\n", sps, "",
+		       instruction->data.block.blocktype);
 		dump_instructions_inner(instruction->data.block.instructions,
 					instruction->data.block.n_instructions,
 					indent + 1);
