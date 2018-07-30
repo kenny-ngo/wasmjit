@@ -5,7 +5,7 @@
 
 INDENT=indent
 
-if which -s gindent
+if which gindent > /dev/null
 then
     INDENT=gindent
 fi
