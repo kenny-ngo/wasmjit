@@ -49,7 +49,7 @@ struct Store {
 	} *mems;
 };
 
-#define DEFINE_VECTOR(name, _type)					\
+#define DEFINE_VECTOR_GROW(name, _type)					\
 	int name ## _grow (_type *sstack, size_t n_elts) {		\
 		void *newstackelts;					\
 		newstackelts = realloc(sstack->elts, (sstack->n_elts + n_elts) * sizeof(sstack->elts[0])); \
@@ -61,9 +61,10 @@ struct Store {
 		sstack->n_elts += n_elts;				\
 									\
 		return 1;						\
-	}								\
-									\
-	static int name ## _truncate(_type *sstack, int amt) {		\
+	}
+
+#define DEFINE_VECTOR_TRUNCATE(name, _type)				\
+	static int name ## _truncate(_type *sstack, size_t amt) {	\
 		void *newstackelts;					\
 									\
 		assert(amt <= sstack->n_elts);				\
@@ -84,7 +85,7 @@ struct SizedBuffer {
 	char *elts;
 };
 
-DEFINE_VECTOR(buffer, struct SizedBuffer);
+DEFINE_VECTOR_GROW(buffer, struct SizedBuffer);
 
 static int output_buf(struct SizedBuffer *sstack, const char *buf,
 		      size_t n_elts)
@@ -104,14 +105,14 @@ struct BranchPoints {
 	} *elts;
 };
 
-DEFINE_VECTOR(bp, struct BranchPoints);
+DEFINE_VECTOR_GROW(bp, struct BranchPoints);
 
 struct LabelContinuations {
 	size_t n_elts;
 	size_t *elts;
 };
 
-DEFINE_VECTOR(labels, struct LabelContinuations);
+DEFINE_VECTOR_GROW(labels, struct LabelContinuations);
 
 struct StaticStack {
 	size_t n_elts;
@@ -132,7 +133,8 @@ struct StaticStack {
 	} *elts;
 };
 
-DEFINE_VECTOR(stack, struct StaticStack);
+DEFINE_VECTOR_GROW(stack, struct StaticStack);
+DEFINE_VECTOR_TRUNCATE(stack, struct StaticStack);
 
 static int push_stack(struct StaticStack *sstack, int type)
 {
@@ -170,13 +172,14 @@ static int wasmjit_compile_instructions(const struct TypeSectionType *type,
 {
 	char buf[0x100];
 	size_t i;
-	int n_locals, ret, tmp;
+	int n_locals;
 
 	// TODO: assert n_locals <= INT_MAX
 	n_locals = code->n_locals;
 
 #define BUFFMT(...)						\
 	do {							\
+		int ret;					\
 		ret = snprintf(buf, sizeof(buf), __VA_ARGS__);	\
 		if (ret < 0)					\
 			goto error;				\
@@ -308,7 +311,7 @@ static int wasmjit_compile_instructions(const struct TypeSectionType *type,
 					/* mov %rsp, %rsi */
 					OUTS("\x48\x89\xe6");
 
-					if ((arity - 1) * 8) {
+					if (arity - 1) {
 						/* add <(arity - 1) * 8>, %rsi */
 						assert((arity - 1) * 8 <=
 						       INT_MAX);
@@ -326,7 +329,7 @@ static int wasmjit_compile_instructions(const struct TypeSectionType *type,
 					OUTS("\x48\x89\xe7");
 
 					/* add <(arity - 1 + stack_shift) * 8>, %rdi */
-					if ((arity - 1 + stack_shift) * 8) {
+					if (arity - 1 + stack_shift) {
 						assert((arity - 1 +
 							stack_shift) * 8 <=
 						       INT_MAX);
@@ -388,6 +391,7 @@ static int wasmjit_compile_instructions(const struct TypeSectionType *type,
 
 				if (instructions[i].opcode == OPCODE_BR_IF) {
 					/* update je operand in previous if block */
+					int ret;
 					size_t offset =
 					    output->n_elts - je_offset;
 					assert(offset < 128 && offset > 0);

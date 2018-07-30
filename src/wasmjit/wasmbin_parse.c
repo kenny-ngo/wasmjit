@@ -91,7 +91,7 @@ char *load_file(char *file_name, size_t *size)
 	}
 
 	rets = fread(input, sizeof(char), st.st_size, f);
-	if (rets != st.st_size) {
+	if (rets != (size_t) st.st_size) {
 		goto error_exit;
 	}
 
@@ -118,7 +118,7 @@ int init_pstate(struct ParseState *pstate, char *file_name)
 {
 	pstate->eof = 0;
 	pstate->input = load_file(file_name, &pstate->amt_left);
-	return (int) pstate->input;
+	return pstate->input ? 1 : 0;
 }
 
 

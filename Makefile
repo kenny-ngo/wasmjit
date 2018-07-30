@@ -1,6 +1,6 @@
 # *** THIS IS NOT A LONG TERM SOLUTION ***
 
-CFLAGS ?= -Isrc -g
+CFLAGS ?= -Isrc -g -Wall -Wextra -Werror
 
 all: wasmjit
 
