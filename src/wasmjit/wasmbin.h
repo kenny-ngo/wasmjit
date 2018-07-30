@@ -220,6 +220,7 @@ enum {
 };
 
 enum {
+	VALTYPE_NULL = 0x40,
 	VALTYPE_I32 = 0x7f,
 	VALTYPE_I64 = 0x7e,
 	VALTYPE_F32 = 0x7d,
