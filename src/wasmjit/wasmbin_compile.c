@@ -26,6 +26,7 @@
 #include <wasmjit/util.h>
 
 #include <assert.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -95,6 +96,63 @@ static int output_buf(struct SizedBuffer *sstack, const char *buf,
 	return 1;
 }
 
+struct BranchPoints {
+	size_t n_elts;
+	struct BranchPointElt {
+		size_t branch_offset;
+		size_t continuation_idx;
+	} *elts;
+};
+
+DEFINE_VECTOR(bp, struct BranchPoints);
+
+struct LabelContinuations {
+	size_t n_elts;
+	size_t *elts;
+};
+
+DEFINE_VECTOR(labels, struct LabelContinuations);
+
+struct StaticStack {
+	size_t n_elts;
+	struct StackElt {
+		enum {
+			STACK_I32,
+			STACK_I64,
+			STACK_F32,
+			STACK_F64,
+			STACK_LABEL,
+		} type;
+		union {
+			struct {
+				int arity;
+				int continuation_idx;
+			} label;
+		} data;
+	} *elts;
+};
+
+DEFINE_VECTOR(stack, struct StaticStack);
+
+static int push_stack(struct StaticStack *sstack, int type)
+{
+	if (!stack_grow(sstack, 1))
+		return 0;
+	sstack->elts[sstack->n_elts - 1].type = type;
+	return 1;
+}
+
+static int peek_stack(struct StaticStack *sstack)
+{
+	assert(sstack->n_elts);
+	return sstack->elts[sstack->n_elts - 1].type;
+}
+
+static int pop_stack(struct StaticStack *sstack)
+{
+	return stack_truncate(sstack, 1);
+}
+
 static void encode_le_uint32_t(uint32_t val, char *buf)
 {
 	uint32_t le_val = uint32_t_swap_bytes(val);
@@ -125,6 +183,15 @@ static int wasmjit_compile_instructions(const struct TypeSectionType *type,
 	}							\
 	while (1)
 
+#define INC_LABELS()				\
+	do {					\
+		int res;			\
+		res = labels_grow(labels, 1);	\
+		if (!res)			\
+			goto error;		\
+	}					\
+	while (0)
+
 #define OUTS(str)					   \
 	do {						   \
 		if (!output_buf(output, str, strlen(str))) \
@@ -137,28 +204,204 @@ static int wasmjit_compile_instructions(const struct TypeSectionType *type,
 		case OPCODE_UNREACHABLE:
 			break;
 		case OPCODE_BLOCK:
-			wasmjit_compile_instructions(type,
-						     code,
-						     instructions[i].data.block.instructions,
-						     instructions[i].data.block.n_instructions,
-						     output,
-						     NULL);
-			break;
 		case OPCODE_LOOP:
-			wasmjit_compile_instructions(type,
-						     code,
-						     instructions[i].data.loop.instructions,
-						     instructions[i].data.loop.n_instructions,
-						     output,
-						     NULL);
+			{
+				int arity;
+				size_t label_idx, stack_idx, output_idx;
+				struct StackElt *elt;
+
+				arity =
+				    instructions[i].data.block.blocktype !=
+				    VALTYPE_NULL ? 1 : 0;
+
+				label_idx = labels->n_elts;
+				INC_LABELS();
+
+				stack_idx = sstack->n_elts;
+				if (!stack_grow(sstack, 1))
+					goto error;
+				elt = &sstack->elts[stack_idx];
+				elt->type = STACK_LABEL;
+				elt->data.label.arity = arity;
+				elt->data.label.continuation_idx = label_idx;
+
+				output_idx = output->n_elts;
+				wasmjit_compile_instructions(type,
+							     code,
+							     instructions
+							     [i].data.
+							     block.instructions,
+							     instructions
+							     [i].data.
+							     block.n_instructions,
+							     output, labels,
+							     branches, sstack);
+
+				/* shift stack results over label */
+				memmove(&sstack->elts[stack_idx],
+					&sstack->elts[sstack->n_elts - arity],
+					arity * sizeof(sstack->elts[0]));
+				if (!stack_truncate(sstack, stack_idx + arity))
+					goto error;
+
+				switch (instructions[i].opcode) {
+				case OPCODE_BLOCK:
+					labels->elts[label_idx] =
+					    output->n_elts;
+					break;
+				case OPCODE_LOOP:
+					labels->elts[label_idx] = output_idx;
+					break;
+				default:
+					assert(0);
+					break;
+				}
+			}
 			break;
 		case OPCODE_BR_IF:
-			/* pop value off stack */
-			/*
-			  if true, then pop everything off stack until L
-			  and go after stack, (store ptr in branches)
-			 */
-			/* if false, continue */
+		case OPCODE_BR:
+			{
+				uint32_t j, labelidx, arity, stack_shift;
+				size_t je_offset, je_offset_2;
+
+				if (instructions[i].opcode == OPCODE_BR_IF) {
+					/* LOGIC: v = pop_stack() */
+
+					/* pop %rsi */
+					assert(peek_stack(sstack) == STACK_I32);
+					if (!pop_stack(sstack))
+						goto error;
+					OUTS("\x5e");
+
+					/* LOGIC: if (v) br(); */
+
+					/* testl %esi, %esi */
+					OUTS("\x85\xf6");
+
+					/* je AFTER_BR */
+					je_offset = output->n_elts;
+					OUTS("\xeb\x01");
+				}
+
+				/* find out bottom of stack to L */
+				j = sstack->n_elts;
+				labelidx = instructions[i].data.br.labelidx;
+				while (j--) {
+					if (sstack->elts[j].type == STACK_LABEL) {
+						if (!labelidx) {
+							break;
+						}
+						labelidx--;
+					}
+				}
+
+				arity = sstack->elts[j].data.label.arity;
+				stack_shift =
+				    sstack->n_elts - j - (labelidx + 1) - arity;
+
+				if (arity) {
+					/* move top <arity> values for Lth label to
+					   bottom of stack where Lth label is */
+
+					/* LOGIC: memmove(sp + stack_shift * 8, sp, arity * 8); */
+
+					/* mov %rsp, %rsi */
+					OUTS("\x48\x89\xe6");
+
+					if ((arity - 1) * 8) {
+						/* add <(arity - 1) * 8>, %rsi */
+						assert((arity - 1) * 8 <=
+						       INT_MAX);
+						OUTS("\x48\x03\x34\x25");
+						encode_le_uint32_t((arity -
+								    1) * 8,
+								   buf);
+						if (!output_buf
+						    (output, buf,
+						     sizeof(uint32_t)))
+							goto error;
+					}
+
+					/* mov %rsp, %rdi */
+					OUTS("\x48\x89\xe7");
+
+					/* add <(arity - 1 + stack_shift) * 8>, %rdi */
+					if ((arity - 1 + stack_shift) * 8) {
+						assert((arity - 1 +
+							stack_shift) * 8 <=
+						       INT_MAX);
+						OUTS("\x48\x03\x3c\x25");
+						encode_le_uint32_t((arity - 1 +
+								    stack_shift)
+								   * 8, buf);
+						if (!output_buf
+						    (output, buf,
+						     sizeof(uint32_t)))
+							goto error;
+					}
+
+					/* mov <arity>, %rcx */
+					OUTS("\x48\x89\xe5");
+					assert(arity <= INT_MAX);
+					encode_le_uint32_t(arity, buf);
+					if (!output_buf
+					    (output, buf, sizeof(uint32_t)))
+						goto error;
+
+					/* std */
+					OUTS("\xfd");
+
+					/* rep movsq */
+					OUTS("\x48\xa5");
+				}
+
+				/* increment esp to Lth label (simulating pop) */
+				/* add <stack_shift * 8>, %rsp */
+				OUTS("\x48\x03\x24\x25");
+				assert(stack_shift * 8 <= INT_MAX);
+				encode_le_uint32_t(stack_shift * 8, buf);
+				if (!output_buf(output, buf, sizeof(uint32_t)))
+					goto error;
+
+				/* place jmp to Lth label */
+
+				/* jmp <BRANCH POINT> */
+				je_offset_2 = output->n_elts;
+				OUTS("\xe9\x90\x90\x90\x90");
+
+				/* add jmp offset to branches list */
+				{
+					size_t branch_idx;
+
+					branch_idx = branches->n_elts;
+					if (!bp_grow(branches, 1))
+						goto error;
+
+					branches->
+					    elts[branch_idx].branch_offset =
+					    je_offset_2;
+					branches->
+					    elts[branch_idx].continuation_idx =
+					    sstack->elts[j].data.
+					    label.continuation_idx;
+				}
+
+				if (instructions[i].opcode == OPCODE_BR_IF) {
+					/* update je operand in previous if block */
+					size_t offset =
+					    output->n_elts - je_offset;
+					assert(offset < 128 && offset > 0);
+					ret =
+					    snprintf(buf, sizeof(buf), "\xeb%c",
+						     (int)offset);
+					if (ret < 0)
+						goto error;
+					assert(strlen(buf) == 2);
+					memcpy(&output->elts[je_offset], buf,
+					       2);
+				}
+			}
+
 			break;
 		case OPCODE_RETURN:
 			break;
@@ -303,6 +546,7 @@ static int wasmjit_compile_instructions(const struct TypeSectionType *type,
 	}
 
 #undef OUTS
+#undef INC_LABELS
 #undef BUFFMT
 
 	return 1;
@@ -314,14 +558,16 @@ static int wasmjit_compile_instructions(const struct TypeSectionType *type,
 void wasmjit_compile_code(const struct TypeSectionType *type,
 			  const struct CodeSectionCode *code)
 {
-	struct SizedBuffer output = {0, NULL};
-	struct BranchPoints *branches = NULL;
+	struct SizedBuffer output = { 0, NULL };
+	struct BranchPoints branches = { 0, NULL };
+	struct StaticStack sstack = { 0, NULL };
+	struct LabelContinuations labels = { 0, NULL };
 
 	/* TODO: output prologue, i.e. create stack frame */
 
 	wasmjit_compile_instructions(type, code,
 				     code->instructions, code->n_instructions,
-				     &output, &branches);
+				     &output, &labels, &branches, &sstack);
 
 	/* TODO: output epilogue */
 }
