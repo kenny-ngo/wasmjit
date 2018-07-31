@@ -23,6 +23,7 @@
  */
 
 #include <wasmjit/wasmbin.h>
+#include <wasmjit/wasmbin_compile.h>
 #include <wasmjit/util.h>
 
 #include <assert.h>
@@ -31,23 +32,6 @@
 #include <stdio.h>
 #include <string.h>
 
-struct ModuleInst {
-	size_t *funcaddrs;
-	size_t *tableaddrs;
-	size_t *memaddrs;
-	size_t *globaladdrs;
-};
-
-struct Store {
-	struct FuncInst {
-		struct ModuleInst *module;
-		void *code;
-	} *funcs;
-	struct MemInst {
-		char *data;
-		uint32_t max;
-	} *mems;
-};
 
 #define DEFINE_VECTOR_GROW(name, _type)					\
 	int name ## _grow (_type *sstack, size_t n_elts) {		\
@@ -161,7 +145,15 @@ static void encode_le_uint32_t(uint32_t val, char *buf)
 	memcpy(buf, &le_val, sizeof(le_val));
 }
 
-static int wasmjit_compile_instructions(const struct TypeSectionType *type,
+static void encode_le_uint64_t(uint64_t val, char *buf)
+{
+	uint64_t le_val = uint64_t_swap_bytes(val);
+	memcpy(buf, &le_val, sizeof(le_val));
+}
+
+static int wasmjit_compile_instructions(const struct Store *store,
+					const struct ModuleInst *module,
+					const struct TypeSectionType *type,
 					const struct CodeSectionCode *code,
 					const struct Instr *instructions,
 					size_t n_instructions,
@@ -172,10 +164,6 @@ static int wasmjit_compile_instructions(const struct TypeSectionType *type,
 {
 	char buf[0x100];
 	size_t i;
-	int n_locals;
-
-	// TODO: assert n_locals <= INT_MAX
-	n_locals = code->n_locals;
 
 #define BUFFMT(...)						\
 	do {							\
@@ -229,7 +217,9 @@ static int wasmjit_compile_instructions(const struct TypeSectionType *type,
 				elt->data.label.continuation_idx = label_idx;
 
 				output_idx = output->n_elts;
-				wasmjit_compile_instructions(type,
+				wasmjit_compile_instructions(store,
+							     module,
+							     type,
 							     code,
 							     instructions
 							     [i].data.
@@ -421,53 +411,21 @@ static int wasmjit_compile_instructions(const struct TypeSectionType *type,
 		case OPCODE_TEE_LOCAL:
 			break;
 		case OPCODE_I32_LOAD:
-			/* LOGIC: module = frame->module... */
+			/* LOGIC: max = store->mems[maddr].max - 4 */
+			{
+				size_t maddr =
+				    module->memaddrs[0] *
+				    sizeof(struct MemInst);
+				uint32_t max = store->mems[maddr].max;
 
-			/* movq (n_locals + 1) * 8(%rbp), %rax */
-			OUTS("\x48\x8b\x85");
-			encode_le_uint32_t((n_locals + 1) * 8, buf);
-			if (!output_buf(output, buf, sizeof(uint32_t)))
-				goto error;
+				assert(max >= sizeof(uint32_t));
 
-			/* LOGIC: maddr = module->memaddrs[0] */
-
-			/* movq memaddrs_offset(%rax), %rax */
-			assert(offsetof(struct ModuleInst, memaddrs) < 128);
-			BUFFMT("\x48\x8b\x40%c",
-			       (int)offsetof(struct ModuleInst, memaddrs));
-			assert(strlen(buf) == 4);
-			if (!output_buf(output, buf, 4))
-				goto error;
-
-			/* movq 0(%rax), %rax */
-			if (!output_buf(output, "\x48\x8b\x00", 3))
-				goto error;
-
-			/* LOGIC: store == rbx */
-
-			/* LOGIC: max = store->mems[maddr].max */
-
-			assert(sizeof(struct MemInst) == 16);
-
-			/* movq %rax, %rdx */
-			/* shlq $4, %rdx */
-			OUTS("\x48\x89\xc2\x48\xc1\xe2\x04");
-
-			/* addq mems_offset(%rbx), %rdx */
-			assert(offsetof(struct Store, mems) < 128);
-			BUFFMT("\x48\x03\x53%c",
-			       (int)offsetof(struct Store, mems));
-			assert(strlen(buf) == 4);
-			if (!output_buf(output, buf, 4))
-				goto error;
-
-			/* mov max_offset(%rdx), %edi */
-			assert(offsetof(struct MemInst, max) < 128);
-			BUFFMT("\x8b\x7a%c",
-			       (int)offsetof(struct MemInst, max));
-			assert(strlen(buf) == 3);
-			if (!output_buf(output, buf, 3))
-				goto error;
+				/* movq $const, %edi */
+				OUTS("\xbf");
+				encode_le_uint32_t(max - sizeof(uint32_t), buf);
+				if (!output_buf(output, buf, sizeof(uint32_t)))
+					goto error;
+			}
 
 			/* LOGIC: ea = pop_stack() */
 
@@ -493,18 +451,7 @@ static int wasmjit_compile_instructions(const struct TypeSectionType *type,
 				OUTS("\x71\x02\xcd\x04");
 			}
 
-			/* LOGIC: if ea + 4 > max then trap() */
-
-			/* sub 4, %edi */
-			OUTS("\x2b\x3c\x25");
-			encode_le_uint32_t(sizeof(uint32_t), buf);
-			if (!output_buf(output, buf, sizeof(uint32_t)))
-				goto error;
-
-			/* jno AFTER_TRAP: */
-			/* int $4 */
-			/* AFTER_TRAP1  */
-			OUTS("\x71\x02\xcd\x04");
+			/* LOGIC: if ea > max then trap() */
 
 			/* cmp %edi, %esi */
 			OUTS("\x39\xfe");
@@ -515,14 +462,19 @@ static int wasmjit_compile_instructions(const struct TypeSectionType *type,
 			OUTS("\x7e\x02\xcd\x04");
 
 			/* LOGIC: data = store->mems[maddr].data */
-			/* mov data_offset(%rdx), %rdi */
-			assert(offsetof(struct MemInst, data) < 128);
-			BUFFMT("\x48\x8b\x7a%c",
-			       (int)offsetof(struct MemInst, data));
-			assert(strlen(buf) ==
-			       (4 - (offsetof(struct MemInst, data) == 0)));
-			if (!output_buf(output, buf, 4))
-				goto error;
+			{
+				size_t maddr =
+				    module->memaddrs[0] *
+				    sizeof(struct MemInst);
+				uintptr_t data =
+				    (uintptr_t) store->mems[maddr].data;
+
+				/* movq data, %rdi */
+				OUTS("\x48\xbf");
+				encode_le_uint64_t(data, buf);
+				if (!output_buf(output, buf, sizeof(uint64_t)))
+					goto error;
+			}
 
 			/* LOGIC: push_stack(data[ea]) */
 
@@ -559,7 +511,9 @@ static int wasmjit_compile_instructions(const struct TypeSectionType *type,
 	return 0;
 }
 
-void wasmjit_compile_code(const struct TypeSectionType *type,
+void wasmjit_compile_code(const struct Store *store,
+			  const struct ModuleInst *module,
+			  const struct TypeSectionType *type,
 			  const struct CodeSectionCode *code)
 {
 	struct SizedBuffer output = { 0, NULL };
@@ -569,7 +523,7 @@ void wasmjit_compile_code(const struct TypeSectionType *type,
 
 	/* TODO: output prologue, i.e. create stack frame */
 
-	wasmjit_compile_instructions(type, code,
+	wasmjit_compile_instructions(store, module, type, code,
 				     code->instructions, code->n_instructions,
 				     &output, &labels, &branches, &sstack);
 

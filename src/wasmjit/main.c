@@ -70,11 +70,15 @@ int main(int argc, char *argv[])
 
 	{
 		uint32_t i;
+		struct Store store;
+		struct ModuleInst module_inst;
 
 		for (i = 0; i < module.code_section.n_codes; ++i) {
 			uint32_t j;
 			j = module.function_section.typeidxs[i];
-			wasmjit_compile_code(&module.type_section.types[j],
+			wasmjit_compile_code(&store,
+					     &module_inst,
+					     &module.type_section.types[j],
 					     &module.code_section.codes[i]);
 		}
 	}

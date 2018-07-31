@@ -27,6 +27,7 @@
 
 #include <stdint.h>
 
+__attribute__ ((unused))
 static uint32_t uint32_t_swap_bytes(uint32_t data)
 {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
@@ -37,6 +38,20 @@ static uint32_t uint32_t_swap_bytes(uint32_t data)
 	uint32_t _2 = (data >> 8) & 0xFF;
 	uint32_t _1 = (data >> 0) & 0xFF;
 	return _4 | (_3 << 8) | (_2 << 16) | (_1 << 24);
+#else
+#error Unsupported Architecture
+#endif
+}
+
+__attribute__ ((unused))
+static uint64_t uint64_t_swap_bytes(uint64_t data)
+{
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+	return data;
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+	uint64_t bottom = uint32_t_swap_bytes(data & 0xffffffff);
+	uint64_t top = uint32_t_swap_bytes((data >> 32) & 0xffffffff);
+	return (bottom << 32) | top;
 #else
 #error Unsupported Architecture
 #endif

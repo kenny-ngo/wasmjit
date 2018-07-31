@@ -27,6 +27,30 @@
 
 #include <wasmjit/wasmbin.h>
 
-void wasmjit_compile_code(const struct TypeSectionType *type, const struct CodeSectionCode *code);
+#include <stddef.h>
+
+struct ModuleInst {
+	size_t *funcaddrs;
+	size_t *tableaddrs;
+	size_t *memaddrs;
+	size_t *globaladdrs;
+};
+
+struct Store {
+	size_t n_funcs;
+	struct FuncInst {
+		void *code;
+	} *funcs;
+	size_t n_mems;
+	struct MemInst {
+		char *data;
+		uint32_t max;
+	} *mems;
+};
+
+void wasmjit_compile_code(const struct Store *store,
+			  const struct ModuleInst *module,
+			  const struct TypeSectionType *type,
+			  const struct CodeSectionCode *code);
 
 #endif
