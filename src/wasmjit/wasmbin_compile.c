@@ -578,10 +578,28 @@ static int wasmjit_compile_instructions(const struct Store *store,
 			}
 			break;
 		case OPCODE_GET_LOCAL:
+			assert(code->locals[instructions[i].data.get_local.localidx].count == 1);
+			/* push 8*(offset + 1)(%rbp)*/
+			OUTS("\xff\x75");
+			OUTB((int16_t) ((instructions[i].data.get_local.localidx + 1) * 8));
+			push_stack(sstack, code->locals[instructions[i].data.get_local.localidx].valtype);
 			break;
 		case OPCODE_SET_LOCAL:
+			assert(code->locals[instructions[i].data.set_local.localidx].count == 1);
+			/* pop 8*(offset + 1)(%rbp) */
+			OUTS("\x8f\x45");
+			OUTB((int16_t) ((instructions[i].data.set_local.localidx + 1) * 8));
+			assert(peek_stack(sstack) == code->locals[instructions[i].data.set_local.localidx].valtype);
+			pop_stack(sstack);
 			break;
 		case OPCODE_TEE_LOCAL:
+			assert(code->locals[instructions[i].data.tee_local.localidx].count == 1);
+			/* movq (%rsp), %rax */
+			OUTS("\x48\x8b\x04\x24");
+			/* movq %rax, 8*(offset + 1)(%rbp)*/
+			OUTS("\x48\x89\x45");
+			OUTB((int16_t) ((instructions[i].data.tee_local.localidx + 1) * 8));
+			assert(peek_stack(sstack) == code->locals[instructions[i].data.tee_local.localidx].valtype);
 			break;
 		case OPCODE_I32_LOAD:
 			/* LOGIC: max = store->mems[maddr].max - 4 */
@@ -661,13 +679,61 @@ static int wasmjit_compile_instructions(const struct Store *store,
 
 			break;
 		case OPCODE_I32_CONST:
-			/* push value onto stack */
+			/* push $value */
+			OUTS("\x68");
+			encode_le_uint32_t(instructions[i].
+					   data.i32_const.value, buf);
+			if (!output_buf(output, buf, sizeof(uint32_t)))
+				goto error;
 			break;
 		case OPCODE_I32_LT_S:
+			/* popq %rdi */
+			assert(peek_stack(sstack) == STACK_I32);
+			pop_stack(sstack);
+			OUTS("\x5f");
+			/* popq %rsi */
+			assert(peek_stack(sstack) == STACK_I32);
+			pop_stack(sstack);
+			OUTS("\x5e");
+			/* xor %rax, %rax */
+			OUTS("\x48\x31\xc0");
+			/* cmpl	%edi, %esi */
+			OUTS("\x39\xfe");
+			/* setl %al */
+			OUTS("\x0f\x9c\xc0");
+			/* push %rax */
+			OUTS("\x50");
+			push_stack(sstack, STACK_I32);
 			break;
 		case OPCODE_I32_ADD:
+			/* popq %rdi */
+			assert(peek_stack(sstack) == STACK_I32);
+			pop_stack(sstack);
+			OUTS("\x5f");
+			/* popq %rsi */
+			assert(peek_stack(sstack) == STACK_I32);
+			pop_stack(sstack);
+			OUTS("\x5e");
+			/* add %rsi, %rdi */
+			OUTS("\x48\x01\xf7");
+			/* push %rdi */
+			OUTS("\x57");
+			push_stack(sstack, STACK_I32);
 			break;
 		case OPCODE_I32_MUL:
+			/* popq %rax */
+			assert(peek_stack(sstack) == STACK_I32);
+			pop_stack(sstack);
+			OUTS("\x58");
+			/* popq %rsi */
+			assert(peek_stack(sstack) == STACK_I32);
+			pop_stack(sstack);
+			OUTS("\x5e");
+			/* imul %esi */
+			OUTS("\xf7\xee");
+			/* push %rax */
+			OUTS("\x50");
+			push_stack(sstack, STACK_I32);
 			break;
 		default:
 			break;
