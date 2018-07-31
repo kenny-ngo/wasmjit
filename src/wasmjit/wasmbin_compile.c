@@ -323,7 +323,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 						assert((arity - 1 +
 							stack_shift) * 8 <=
 						       INT_MAX);
-						OUTS("\x48\x03\x3c\x25");
+						OUTS("\x48\x81\xc7");
 						encode_le_uint32_t((arity - 1 +
 								    stack_shift)
 								   * 8, buf);
@@ -334,7 +334,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					}
 
 					/* mov <arity>, %rcx */
-					OUTS("\x48\x89\xe5");
+					OUTS("\x48\xc7\xc1");
 					assert(arity <= INT_MAX);
 					encode_le_uint32_t(arity, buf);
 					if (!output_buf
@@ -350,7 +350,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 
 				/* increment esp to Lth label (simulating pop) */
 				/* add <stack_shift * 8>, %rsp */
-				OUTS("\x48\x03\x24\x25");
+				OUTS("\x48\x81\xc4");
 				assert(stack_shift * 8 <= INT_MAX);
 				encode_le_uint32_t(stack_shift * 8, buf);
 				if (!output_buf(output, buf, sizeof(uint32_t)))
@@ -421,7 +421,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				assert(max >= sizeof(uint32_t));
 
 				/* movq $const, %edi */
-				OUTS("\xbf");
+				OUTS("\x48\xc7\xc7");
 				encode_le_uint32_t(max - sizeof(uint32_t), buf);
 				if (!output_buf(output, buf, sizeof(uint32_t)))
 					goto error;
@@ -439,7 +439,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				/* LOGIC: ea += memarg.offset */
 
 				/* add <VAL>, %esi */
-				OUTS("\x03\x34\x25");
+				OUTS("\x81\xc6");
 				encode_le_uint32_t(instructions[i].
 						   data.i32_load.offset, buf);
 				if (!output_buf(output, buf, sizeof(uint32_t)))
@@ -466,11 +466,11 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				size_t maddr =
 				    module->memaddrs[0] *
 				    sizeof(struct MemInst);
-				uintptr_t data =
+				uint64_t data =
 				    (uintptr_t) store->mems[maddr].data;
 
-				/* movq data, %rdi */
-				OUTS("\x48\xbf");
+				/* movq $data, %rdi */
+				OUTS("\x48\xb8");
 				encode_le_uint64_t(data, buf);
 				if (!output_buf(output, buf, sizeof(uint64_t)))
 					goto error;
