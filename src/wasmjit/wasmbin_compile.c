@@ -81,6 +81,8 @@ static int output_buf(struct SizedBuffer *sstack, const char *buf,
 	return 1;
 }
 
+#define FUNC_EXIT_CONT SIZE_MAX
+
 struct BranchPoints {
 	size_t n_elts;
 	struct BranchPointElt {
@@ -102,10 +104,10 @@ struct StaticStack {
 	size_t n_elts;
 	struct StackElt {
 		enum {
-			STACK_I32,
-			STACK_I64,
-			STACK_F32,
-			STACK_F64,
+			STACK_I32 = VALTYPE_I32,
+			STACK_I64 = VALTYPE_I64,
+			STACK_F32 = VALTYPE_F32,
+			STACK_F64 = VALTYPE_F64,
 			STACK_LABEL,
 		} type;
 		union {
@@ -139,6 +141,16 @@ static int pop_stack(struct StaticStack *sstack)
 	return stack_truncate(sstack, 1);
 }
 
+struct CallPoints {
+	size_t n_elts;
+	struct CallPointElt {
+		size_t branch_offset;
+		void *addr;
+	} *elts;
+};
+
+DEFINE_VECTOR_GROW(cp, struct CallPoints);
+
 static void encode_le_uint32_t(uint32_t val, char *buf)
 {
 	uint32_t le_val = uint32_t_swap_bytes(val);
@@ -160,6 +172,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					struct SizedBuffer *output,
 					struct LabelContinuations *labels,
 					struct BranchPoints *branches,
+					struct CallPoints *calls,
 					struct StaticStack *sstack)
 {
 	char buf[0x100];
@@ -186,6 +199,16 @@ static int wasmjit_compile_instructions(const struct Store *store,
 #define OUTS(str)					   \
 	do {						   \
 		if (!output_buf(output, str, strlen(str))) \
+			goto error;			   \
+	}						   \
+	while (0)
+
+#define OUTB(b)						   \
+	do {						   \
+		char __b;				   \
+		assert((b) <= 127 || (b) >= -128);	   \
+		__b = b;				   \
+		if (!output_buf(output, &__b, 1))	   \
 			goto error;			   \
 	}						   \
 	while (0)
@@ -228,7 +251,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 							     [i].data.
 							     block.n_instructions,
 							     output, labels,
-							     branches, sstack);
+							     branches, calls, sstack);
 
 				/* shift stack results over label */
 				memmove(&sstack->elts[stack_idx],
@@ -398,11 +421,161 @@ static int wasmjit_compile_instructions(const struct Store *store,
 
 			break;
 		case OPCODE_RETURN:
+			/* shift $arity values from top of stock to below */
+
+			/* lea (arity - 1)*8(%rsp), %rsi */
+			OUTS("\x48\x8d\x74\x24");
+			OUTB((intmax_t) ((type->n_outputs - 1) * 8));
+
+			/* lea -8(%rbp), %rdi */
+			OUTS("\x48\x8d\x7d\xf8");
+
+			/* mov $arity, %rcx */
+			OUTS("\x48\xc7\xc1");
+			encode_le_uint32_t(type->n_outputs, buf);
+			if (!output_buf(output, buf, sizeof(uint32_t)))
+				goto error;
+
+			/* std */
+			OUTS("\xfd");
+
+			/* rep movsq */
+			OUTS("\x48\xa5");
+
+			/* adjust stack to top of arity */
+			/* lea -arity * 8(%rbp), %rsp */
+			OUTS("\x48\x8d\x65");
+			OUTB((intmax_t) (type->n_outputs * -8));
+
+			/* jmp <EPILOGUE> */
+			{
+				size_t branch_idx;
+
+				branch_idx = branches->n_elts;
+				if (!bp_grow(branches, 1))
+					goto error;
+
+				branches->elts[branch_idx].
+					branch_offset = output->n_elts;
+				branches->elts[branch_idx].
+					continuation_idx = FUNC_EXIT_CONT;
+
+				OUTS("\xe9\x90\x90\x90\x90");
+			}
+
 			break;
 		case OPCODE_CALL:
-			// push module_inst (rsp - 8, *rsp = module_inst)
-			// push arg_n...
-			// jmp to function
+			{
+				uint32_t fidx = instructions[i].data.call.funcidx;
+				size_t faddr = module->funcaddrs[fidx];
+				void *addr = store->funcs[faddr].code;
+				size_t n_inputs = store->funcs[faddr].type.n_inputs;
+				size_t i;
+				size_t n_movs = 0, n_xmm_movs = 0, n_stack = 0;
+
+				char *movs[] = {
+					"\x48\x8b\x7c\x24", /* mov N(%rsp), %rdi */
+					"\x48\x8b\x74\x24", /* mov N(%rsp), %rsi */
+					"\x48\x8b\x54\x24", /* mov N(%rsp), %rdx */
+					"\x48\x8b\x4c\x24", /* mov N(%rsp), %rcx */
+					"\x4c\x8b\x44\x24", /* mov N(%rsp), %r8 */
+					"\x4c\x8b\x4c\x24", /* mov N(%rsp), %r9 */
+				};
+
+				char *f32_movs[] = {
+					"\xf3\x0f\x10\x44\x24", /* movss N(%rsp), %xmm0 */
+					"\xf3\x0f\x10\x4c\x24", /* movss N(%rsp), %xmm1 */
+					"\xf3\x0f\x10\x54\x24", /* movss N(%rsp), %xmm2 */
+					"\xf3\x0f\x10\x5c\x24", /* movss N(%rsp), %xmm3 */
+					"\xf3\x0f\x10\x64\x24", /* movss N(%rsp), %xmm4 */
+					"\xf3\x0f\x10\x6c\x24", /* movss N(%rsp), %xmm5 */
+					"\xf3\x0f\x10\x74\x24", /* movss N(%rsp), %xmm6 */
+					"\xf3\x0f\x10\x7c\x24", /* movss N(%rsp), %xmm7 */
+				};
+
+				char *f64_movs[] = {
+					"\xf2\x0f\x10\x44\x24", /* movsd N(%rsp), %xmm0 */
+					"\xf2\x0f\x10\x4c\x24", /* movsd N(%rsp), %xmm1 */
+					"\xf2\x0f\x10\x54\x24", /* movsd N(%rsp), %xmm2 */
+					"\xf2\x0f\x10\x5c\x24", /* movsd N(%rsp), %xmm3 */
+					"\xf2\x0f\x10\x64\x24", /* movsd N(%rsp), %xmm4 */
+					"\xf2\x0f\x10\x6c\x24", /* movsd N(%rsp), %xmm5 */
+					"\xf2\x0f\x10\x74\x24", /* movsd N(%rsp), %xmm6 */
+					"\xf2\x0f\x10\x7c\x24", /* movsd N(%rsp), %xmm7 */
+				};
+
+				for (i = 0; i < n_inputs; ++i) {
+					intmax_t stack_offset;
+					assert(sstack->elts[sstack->n_elts - n_inputs + i].type ==
+					       store->funcs[faddr].type.input_types[i]);
+
+					stack_offset = (n_inputs - i - 1 + n_stack) * 8;
+					if (stack_offset > 127 || stack_offset < -128)
+						goto error;
+
+					/* mov -n_inputs + i(%rsp), %rdi */
+					if ((store->funcs[faddr].type.input_types[i] == VALTYPE_I32 ||
+					     store->funcs[faddr].type.input_types[i] == VALTYPE_I64) &&
+					    n_movs < 6) {
+						OUTS(movs[n_movs]);
+						n_movs += 1;
+					}
+					else if (store->funcs[faddr].type.input_types[i] == VALTYPE_F32 &&
+						 n_xmm_movs < 8) {
+						OUTS(f32_movs[n_xmm_movs]);
+						n_xmm_movs += 1;
+					}
+					else if (store->funcs[faddr].type.input_types[i] == VALTYPE_F64 &&
+						 n_xmm_movs < 8) {
+						OUTS(f64_movs[n_xmm_movs]);
+						n_xmm_movs += 1;
+					}
+					else {
+						OUTS("\xff\x74\x24"); /* push N(%rsp) */
+						n_stack += 1;
+					}
+
+					OUTB(stack_offset);
+				}
+
+				/* call <addr> */
+				{
+					size_t call_idx;
+
+					call_idx = calls->n_elts;
+					if (!cp_grow(calls, 1))
+						goto error;
+
+					calls->elts[call_idx].
+						branch_offset = output->n_elts;
+					calls->elts[call_idx].
+						addr = addr;
+
+					OUTS("\xe8\x90\x90\x90\x90");
+				}
+
+				/* clean up stack */
+				/* add (n_stack + n_inputs) * 8, %rsp */
+				OUTS("\x48\x81\xc4");
+				encode_le_uint32_t((n_stack + n_inputs) * 8, buf);
+				if (!output_buf(output, buf, sizeof(uint32_t)))
+					goto error;
+
+
+				if (store->funcs[faddr].type.n_outputs) {
+					assert(store->funcs[faddr].type.n_outputs == 1);
+					if (store->funcs[faddr].type.output_types[0] == VALTYPE_F32 ||
+					    store->funcs[faddr].type.output_types[0] == VALTYPE_F64) {
+						/* movq %xmm0, %rax */
+						OUTS("\x66\x48\x0f\x7e\xc0");
+					}
+					/* push %rax */
+					OUTS("\x50");
+				}
+
+				stack_truncate(sstack, sstack->n_elts - store->funcs[faddr].type.n_inputs);
+				push_stack(sstack, store->funcs[faddr].type.output_types[0]);
+			}
 			break;
 		case OPCODE_GET_LOCAL:
 			break;
@@ -501,6 +674,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 		}
 	}
 
+#undef OUTB
 #undef OUTS
 #undef INC_LABELS
 #undef BUFFMT
@@ -517,6 +691,7 @@ void wasmjit_compile_code(const struct Store *store,
 			  const struct CodeSectionCode *code)
 {
 	struct SizedBuffer output = { 0, NULL };
+	struct CallPoints calls = { 0, NULL };
 	struct BranchPoints branches = { 0, NULL };
 	struct StaticStack sstack = { 0, NULL };
 	struct LabelContinuations labels = { 0, NULL };
@@ -525,7 +700,7 @@ void wasmjit_compile_code(const struct Store *store,
 
 	wasmjit_compile_instructions(store, module, type, code,
 				     code->instructions, code->n_instructions,
-				     &output, &labels, &branches, &sstack);
+				     &output, &labels, &branches, &calls, &sstack);
 
 	/* TODO: output epilogue */
 }

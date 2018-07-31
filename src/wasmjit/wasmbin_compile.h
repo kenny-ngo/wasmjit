@@ -39,6 +39,12 @@ struct ModuleInst {
 struct Store {
 	size_t n_funcs;
 	struct FuncInst {
+		struct Type {
+			size_t n_inputs;
+			unsigned *input_types;
+			size_t n_outputs;
+			unsigned *output_types;
+		} type;
 		void *code;
 	} *funcs;
 	size_t n_mems;
