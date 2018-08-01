@@ -28,6 +28,7 @@
 #include <wasmjit/vector.h>
 
 #include <stddef.h>
+#include <stdint.h>
 
 struct MemoryReferences {
 	size_t n_elts;
@@ -45,5 +46,27 @@ struct MemoryReferences {
 
 __attribute__ ((unused))
 static DEFINE_VECTOR_GROW(memrefs, struct MemoryReferences);
+
+struct Store {
+	struct StoreFuncs {
+		size_t n_elts;
+		struct FuncInst {
+			struct FuncInstType {
+				size_t n_inputs;
+				unsigned *input_types;
+				size_t n_outputs;
+				unsigned *output_types;
+			} type;
+			void *code;
+		} *elts;
+	} funcs;
+	struct StoreMems {
+		size_t n_elts;
+		struct MemInst {
+			char *data;
+			uint32_t max;
+		} *elts;
+	} mems;
+};
 
 #endif

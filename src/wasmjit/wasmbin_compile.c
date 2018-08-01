@@ -426,8 +426,8 @@ static int wasmjit_compile_instructions(const struct Store *store,
 		case OPCODE_CALL:
 			{
 				uint32_t fidx = instructions[i].data.call.funcidx;
-				size_t faddr = module->funcaddrs[fidx];
-				size_t n_inputs = store->funcs[faddr].type.n_inputs;
+				size_t faddr = module->funcaddrs.elts[fidx];
+				size_t n_inputs = store->funcs.elts[faddr].type.n_inputs;
 				size_t i;
 				size_t n_movs = 0, n_xmm_movs = 0, n_stack = 0;
 
@@ -465,25 +465,25 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				for (i = 0; i < n_inputs; ++i) {
 					intmax_t stack_offset;
 					assert(sstack->elts[sstack->n_elts - n_inputs + i].type ==
-					       store->funcs[faddr].type.input_types[i]);
+					       store->funcs.elts[faddr].type.input_types[i]);
 
 					stack_offset = (n_inputs - i - 1 + n_stack) * 8;
 					if (stack_offset > 127 || stack_offset < -128)
 						goto error;
 
 					/* mov -n_inputs + i(%rsp), %rdi */
-					if ((store->funcs[faddr].type.input_types[i] == VALTYPE_I32 ||
-					     store->funcs[faddr].type.input_types[i] == VALTYPE_I64) &&
+					if ((store->funcs.elts[faddr].type.input_types[i] == VALTYPE_I32 ||
+					     store->funcs.elts[faddr].type.input_types[i] == VALTYPE_I64) &&
 					    n_movs < 6) {
 						OUTS(movs[n_movs]);
 						n_movs += 1;
 					}
-					else if (store->funcs[faddr].type.input_types[i] == VALTYPE_F32 &&
+					else if (store->funcs.elts[faddr].type.input_types[i] == VALTYPE_F32 &&
 						 n_xmm_movs < 8) {
 						OUTS(f32_movs[n_xmm_movs]);
 						n_xmm_movs += 1;
 					}
-					else if (store->funcs[faddr].type.input_types[i] == VALTYPE_F64 &&
+					else if (store->funcs.elts[faddr].type.input_types[i] == VALTYPE_F64 &&
 						 n_xmm_movs < 8) {
 						OUTS(f64_movs[n_xmm_movs]);
 						n_xmm_movs += 1;
@@ -524,10 +524,10 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					goto error;
 
 
-				if (store->funcs[faddr].type.n_outputs) {
-					assert(store->funcs[faddr].type.n_outputs == 1);
-					if (store->funcs[faddr].type.output_types[0] == VALTYPE_F32 ||
-					    store->funcs[faddr].type.output_types[0] == VALTYPE_F64) {
+				if (store->funcs.elts[faddr].type.n_outputs) {
+					assert(store->funcs.elts[faddr].type.n_outputs == 1);
+					if (store->funcs.elts[faddr].type.output_types[0] == VALTYPE_F32 ||
+					    store->funcs.elts[faddr].type.output_types[0] == VALTYPE_F64) {
 						/* movq %xmm0, %rax */
 						OUTS("\x66\x48\x0f\x7e\xc0");
 					}
@@ -535,8 +535,8 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					OUTS("\x50");
 				}
 
-				stack_truncate(sstack, sstack->n_elts - store->funcs[faddr].type.n_inputs);
-				push_stack(sstack, store->funcs[faddr].type.output_types[0]);
+				stack_truncate(sstack, sstack->n_elts - store->funcs.elts[faddr].type.n_inputs);
+				push_stack(sstack, store->funcs.elts[faddr].type.output_types[0]);
 			}
 			break;
 		case OPCODE_GET_LOCAL:
@@ -629,7 +629,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				memrefs->elts[memref_idx].
 					code_offset = output->n_elts - 4;
 				memrefs->elts[memref_idx].
-					addr = module->memaddrs[0];
+					addr = module->memaddrs.elts[0];
 			}
 
 			/* LOGIC: if ea > max then trap() */
@@ -642,7 +642,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 			/* AFTER_TRAP1  */
 			OUTS("\x7e\x02\xcd\x04");
 
-			/* LOGIC: data = store->mems[maddr].data */
+			/* LOGIC: data = store->mems.elts[maddr].data */
 			{
 				/* movq $data, %rdi */
 				OUTS("\x48\xbf\x90\x90\x90\x90\x90\x90\x90\x90");
@@ -662,7 +662,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					memrefs->elts[memref_idx].
 						code_offset = output->n_elts - 8;
 					memrefs->elts[memref_idx].
-						addr = module->memaddrs[0];
+						addr = module->memaddrs.elts[0];
 				}
 			}
 

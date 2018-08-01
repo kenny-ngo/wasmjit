@@ -26,32 +26,20 @@
 #define __WASMJIT__WASMBIN_COMPILE_H__
 
 #include <wasmjit/wasmbin.h>
+#include <wasmjit/runtime.h>
 
 #include <stddef.h>
 
-struct ModuleInst {
-	size_t *funcaddrs;
-	size_t *tableaddrs;
-	size_t *memaddrs;
-	size_t *globaladdrs;
+struct Addrs {
+	size_t n_elts;
+	size_t *elts;
 };
 
-struct Store {
-	size_t n_funcs;
-	struct FuncInst {
-		struct Type {
-			size_t n_inputs;
-			unsigned *input_types;
-			size_t n_outputs;
-			unsigned *output_types;
-		} type;
-		void *code;
-	} *funcs;
-	size_t n_mems;
-	struct MemInst {
-		char *data;
-		uint32_t max;
-	} *mems;
+struct ModuleInst {
+	struct Addrs funcaddrs;
+	struct Addrs tableaddrs;
+	struct Addrs memaddrs;
+	struct Addrs globaladdrs;
 };
 
 void wasmjit_compile_code(const struct Store *store,
