@@ -39,7 +39,7 @@ struct SizedBuffer {
 	char *elts;
 };
 
-DEFINE_VECTOR_GROW(buffer, struct SizedBuffer);
+static DEFINE_VECTOR_GROW(buffer, struct SizedBuffer);
 
 static int output_buf(struct SizedBuffer *sstack, const char *buf,
 		      size_t n_elts)
@@ -61,14 +61,14 @@ struct BranchPoints {
 	} *elts;
 };
 
-DEFINE_VECTOR_GROW(bp, struct BranchPoints);
+static DEFINE_VECTOR_GROW(bp, struct BranchPoints);
 
 struct LabelContinuations {
 	size_t n_elts;
 	size_t *elts;
 };
 
-DEFINE_VECTOR_GROW(labels, struct LabelContinuations);
+static DEFINE_VECTOR_GROW(labels, struct LabelContinuations);
 
 struct StaticStack {
 	size_t n_elts;
@@ -89,8 +89,8 @@ struct StaticStack {
 	} *elts;
 };
 
-DEFINE_VECTOR_GROW(stack, struct StaticStack);
-DEFINE_VECTOR_TRUNCATE(stack, struct StaticStack);
+static DEFINE_VECTOR_GROW(stack, struct StaticStack);
+static DEFINE_VECTOR_TRUNCATE(stack, struct StaticStack);
 
 static int push_stack(struct StaticStack *sstack, int type)
 {
