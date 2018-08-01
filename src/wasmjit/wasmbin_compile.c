@@ -94,6 +94,10 @@ static DEFINE_VECTOR_TRUNCATE(stack, struct StaticStack);
 
 static int push_stack(struct StaticStack *sstack, unsigned type)
 {
+	assert(type == STACK_I32 ||
+	       type == STACK_I64 ||
+	       type == STACK_F32 ||
+	       type == STACK_F64);
 	if (!stack_grow(sstack, 1))
 		return 0;
 	sstack->elts[sstack->n_elts - 1].type = type;
