@@ -26,6 +26,7 @@
 #include <wasmjit/wasmbin_compile.h>
 #include <wasmjit/util.h>
 #include <wasmjit/vector.h>
+#include <wasmjit/runtime.h>
 
 #include <assert.h>
 #include <limits.h>
@@ -110,27 +111,12 @@ static int pop_stack(struct StaticStack *sstack)
 	return stack_truncate(sstack, sstack->n_elts - 1);
 }
 
-struct CallPoints {
-	size_t n_elts;
-	struct CallPointElt {
-		size_t branch_offset;
-		void *addr;
-	} *elts;
-};
-
-DEFINE_VECTOR_GROW(cp, struct CallPoints);
-
 static void encode_le_uint32_t(uint32_t val, char *buf)
 {
 	uint32_t le_val = uint32_t_swap_bytes(val);
 	memcpy(buf, &le_val, sizeof(le_val));
 }
 
-static void encode_le_uint64_t(uint64_t val, char *buf)
-{
-	uint64_t le_val = uint64_t_swap_bytes(val);
-	memcpy(buf, &le_val, sizeof(le_val));
-}
 
 static int wasmjit_compile_instructions(const struct Store *store,
 					const struct ModuleInst *module,
@@ -141,7 +127,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					struct SizedBuffer *output,
 					struct LabelContinuations *labels,
 					struct BranchPoints *branches,
-					struct CallPoints *calls,
+					struct MemoryReferences *memrefs,
 					struct StaticStack *sstack)
 {
 	char buf[0x100];
@@ -220,7 +206,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 							     [i].data.
 							     block.n_instructions,
 							     output, labels,
-							     branches, calls, sstack);
+							     branches, memrefs, sstack);
 
 				/* shift stack results over label */
 				memmove(&sstack->elts[stack_idx],
@@ -437,7 +423,6 @@ static int wasmjit_compile_instructions(const struct Store *store,
 			{
 				uint32_t fidx = instructions[i].data.call.funcidx;
 				size_t faddr = module->funcaddrs[fidx];
-				void *addr = store->funcs[faddr].code;
 				size_t n_inputs = store->funcs[faddr].type.n_inputs;
 				size_t i;
 				size_t n_movs = 0, n_xmm_movs = 0, n_stack = 0;
@@ -509,16 +494,20 @@ static int wasmjit_compile_instructions(const struct Store *store,
 
 				/* call <addr> */
 				{
-					size_t call_idx;
+					size_t memref_idx;
 
-					call_idx = calls->n_elts;
-					if (!cp_grow(calls, 1))
+					memref_idx = memrefs->n_elts;
+					if (!memrefs_grow(memrefs, 1))
 						goto error;
 
-					calls->elts[call_idx].
-						branch_offset = output->n_elts;
-					calls->elts[call_idx].
-						addr = addr;
+					memrefs->elts[memref_idx].
+						type = MEMREF_CALL;
+					memrefs->elts[memref_idx].
+						extra_offset = 4;
+					memrefs->elts[memref_idx].
+						code_offset = output->n_elts + 1;
+					memrefs->elts[memref_idx].
+						addr = faddr;
 
 					OUTS("\xe8\x90\x90\x90\x90");
 				}
@@ -571,22 +560,6 @@ static int wasmjit_compile_instructions(const struct Store *store,
 			assert(peek_stack(sstack) == code->locals[instructions[i].data.tee_local.localidx].valtype);
 			break;
 		case OPCODE_I32_LOAD:
-			/* LOGIC: max = store->mems[maddr].max - 4 */
-			{
-				size_t maddr =
-				    module->memaddrs[0] *
-				    sizeof(struct MemInst);
-				uint32_t max = store->mems[maddr].max;
-
-				assert(max >= sizeof(uint32_t));
-
-				/* movq $const, %edi */
-				OUTS("\x48\xc7\xc7");
-				encode_le_uint32_t(max - sizeof(uint32_t), buf);
-				if (!output_buf(output, buf, sizeof(uint32_t)))
-					goto error;
-			}
-
 			/* LOGIC: ea = pop_stack() */
 
 			/* pop %rsi */
@@ -611,6 +584,29 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				OUTS("\x71\x02\xcd\x04");
 			}
 
+			/* LOGIC: max = store->mems[maddr].max - 4 */
+
+			/* movq $const, %edi */
+			OUTS("\x48\xc7\xc7\x90\x90\x90\x90");
+
+			/* add reference to max */
+			{
+				size_t memref_idx;
+
+				memref_idx = memrefs->n_elts;
+				if (!memrefs_grow(memrefs, 1))
+					goto error;
+
+				memrefs->elts[memref_idx].
+					type = MEMREF_MEM_MAX;
+				memrefs->elts[memref_idx].
+					extra_offset = 0;
+				memrefs->elts[memref_idx].
+					code_offset = output->n_elts - 4;
+				memrefs->elts[memref_idx].
+					addr = module->memaddrs[0];
+			}
+
 			/* LOGIC: if ea > max then trap() */
 
 			/* cmp %edi, %esi */
@@ -623,17 +619,26 @@ static int wasmjit_compile_instructions(const struct Store *store,
 
 			/* LOGIC: data = store->mems[maddr].data */
 			{
-				size_t maddr =
-				    module->memaddrs[0] *
-				    sizeof(struct MemInst);
-				uint64_t data =
-				    (uintptr_t) store->mems[maddr].data;
-
 				/* movq $data, %rdi */
-				OUTS("\x48\xb8");
-				encode_le_uint64_t(data, buf);
-				if (!output_buf(output, buf, sizeof(uint64_t)))
-					goto error;
+				OUTS("\x48\xbf\x90\x90\x90\x90\x90\x90\x90\x90");
+
+				/* add reference to data */
+				{
+					size_t memref_idx;
+
+					memref_idx = memrefs->n_elts;
+					if (!memrefs_grow(memrefs, 1))
+						goto error;
+
+					memrefs->elts[memref_idx].
+						type = MEMREF_MEM_ADDR;
+					memrefs->elts[memref_idx].
+						extra_offset = 0;
+					memrefs->elts[memref_idx].
+						code_offset = output->n_elts - 8;
+					memrefs->elts[memref_idx].
+						addr = module->memaddrs[0];
+				}
 			}
 
 			/* LOGIC: push_stack(data[ea]) */
@@ -726,7 +731,7 @@ void wasmjit_compile_code(const struct Store *store,
 			  const struct CodeSectionCode *code)
 {
 	struct SizedBuffer output = { 0, NULL };
-	struct CallPoints calls = { 0, NULL };
+	struct MemoryReferences *memrefs = { 0, NULL };
 	struct BranchPoints branches = { 0, NULL };
 	struct StaticStack sstack = { 0, NULL };
 	struct LabelContinuations labels = { 0, NULL };
@@ -735,7 +740,7 @@ void wasmjit_compile_code(const struct Store *store,
 
 	wasmjit_compile_instructions(store, module, type, code,
 				     code->instructions, code->n_instructions,
-				     &output, &labels, &branches, &calls, &sstack);
+				     &output, &labels, &branches, &memrefs, &sstack);
 
 	/* TODO: output epilogue */
 }
