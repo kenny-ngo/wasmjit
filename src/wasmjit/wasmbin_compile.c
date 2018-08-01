@@ -745,6 +745,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 			push_stack(sstack, STACK_I32);
 			break;
 		default:
+			assert(0);
 			break;
 		}
 	}
