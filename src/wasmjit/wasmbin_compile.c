@@ -255,7 +255,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 
 					/* je AFTER_BR */
 					je_offset = output->n_elts;
-					OUTS("\xeb\x01");
+					OUTS("\x74\x01");
 				}
 
 				/* find out bottom of stack to L */
@@ -366,10 +366,10 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					/* update je operand in previous if block */
 					int ret;
 					size_t offset =
-					    output->n_elts - je_offset;
+					    output->n_elts - je_offset - 2;
 					assert(offset < 128 && offset > 0);
 					ret =
-					    snprintf(buf, sizeof(buf), "\xeb%c",
+					    snprintf(buf, sizeof(buf), "\x74%c",
 						     (int)offset);
 					if (ret < 0)
 						goto error;
