@@ -261,7 +261,8 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				/* find out bottom of stack to L */
 				j = sstack->n_elts;
 				labelidx = instructions[i].data.br.labelidx;
-				while (j--) {
+				while (j) {
+					j -= 1;
 					if (sstack->elts[j].type == STACK_LABEL) {
 						if (!labelidx) {
 							break;
