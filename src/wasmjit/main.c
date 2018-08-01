@@ -72,6 +72,41 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
+	if (1) {
+		uint32_t i;
+
+		for (i = 0; i < module.code_section.n_codes; ++i) {
+			uint32_t j;
+			struct TypeSectionType *type;
+			struct CodeSectionCode *code = &module.code_section.codes[i];
+
+			type = &module.type_section.types[module.function_section.typeidxs[i]];
+
+			printf("Code #%"PRIu32"\n", i);
+
+			printf("Locals (%"PRIu32"):\n", code->n_locals);
+			for (j = 0; j < code->n_locals; ++j) {
+				printf("  %s (%"PRIu32")\n", wasmjit_valtype_repr(code->locals[j].valtype),
+				       code->locals[i].count);
+			}
+
+			printf("Signature: [");
+			for (j = 0; j < type->n_inputs; ++j) {
+				printf("%s,", wasmjit_valtype_repr(type->input_types[j]));
+			}
+			printf("] -> [");
+			for (j = 0; j < type->n_outputs; ++j) {
+				printf("%s,", wasmjit_valtype_repr(type->output_types[j]));
+			}
+			printf("]\n");
+
+			printf("Instructions:\n");
+			dump_instructions(module.code_section.codes[i].instructions,
+					  module.code_section.codes[i].n_instructions, 1);
+			printf("\n");
+		}
+	}
+
 	/* the most basic validation */
 	if (module.code_section.n_codes !=
 	    module.function_section.n_typeidxs) {

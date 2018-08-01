@@ -25,6 +25,7 @@
 #ifndef __WASMJIT__WASMBIN_H__
 #define __WASMJIT__WASMBIN_H__
 
+#include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -227,6 +228,16 @@ enum {
 	VALTYPE_F64 = 0x7c,
 };
 
+__attribute__((unused))
+static const char *wasmjit_valtype_repr(unsigned valtype) {
+	switch (valtype) {
+	case VALTYPE_I32: return "I32";
+	case VALTYPE_I64: return "I64";
+	case VALTYPE_F32: return "F32";
+	case VALTYPE_F64: return "F64";
+	default: assert(0); return NULL;
+	}
+}
 
 enum {
 	IMPORT_DESC_TYPE_FUNC,
