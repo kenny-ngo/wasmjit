@@ -371,6 +371,7 @@ struct ExportSection {
 };
 
 struct StartSection {
+	int has_start;
 	uint32_t funcidx;
 };
 

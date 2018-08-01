@@ -1167,6 +1167,7 @@ int read_export_section(struct ParseState *pstate,
 int read_start_section(struct ParseState *pstate,
 		       struct StartSection *start_section)
 {
+	start_section->has_start = 1;
 	return read_uleb_uint32_t(pstate, &start_section->funcidx);
 }
 
@@ -1418,6 +1419,8 @@ int read_module(struct ParseState *pstate, struct Module *module)
 		}							\
 	}								\
 	while (0)
+
+	memset(module, 0, sizeof(*module));
 
 	/* check magic */
 	{
