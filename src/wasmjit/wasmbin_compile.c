@@ -610,38 +610,40 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				OUTS("\x71\x02\xcd\x04");
 			}
 
-			/* LOGIC: max = store->mems[maddr].max - 4 */
+			if (store->mems.elts[module->memaddrs.elts[0]].has_max) {
+				/* LOGIC: max = store->mems.elts[maddr].max - 4 */
 
-			/* movq $const, %edi */
-			OUTS("\x48\xc7\xc7\x90\x90\x90\x90");
+				/* movq $const, %edi */
+				OUTS("\x48\xc7\xc7\x90\x90\x90\x90");
 
-			/* add reference to max */
-			{
-				size_t memref_idx;
+				/* add reference to max */
+				{
+					size_t memref_idx;
 
-				memref_idx = memrefs->n_elts;
-				if (!memrefs_grow(memrefs, 1))
-					goto error;
+					memref_idx = memrefs->n_elts;
+					if (!memrefs_grow(memrefs, 1))
+						goto error;
 
-				memrefs->elts[memref_idx].
-					type = MEMREF_MEM_MAX;
-				memrefs->elts[memref_idx].
-					extra_offset = 0;
-				memrefs->elts[memref_idx].
-					code_offset = output->n_elts - 4;
-				memrefs->elts[memref_idx].
-					addr = module->memaddrs.elts[0];
+					memrefs->elts[memref_idx].
+						type = MEMREF_MEM_MAX;
+					memrefs->elts[memref_idx].
+						extra_offset = 0;
+					memrefs->elts[memref_idx].
+						code_offset = output->n_elts - 4;
+					memrefs->elts[memref_idx].
+						addr = module->memaddrs.elts[0];
+				}
+
+				/* LOGIC: if ea > max then trap() */
+
+				/* cmp %edi, %esi */
+				OUTS("\x39\xfe");
+
+				/* jle AFTER_TRAP: */
+				/* int $4 */
+				/* AFTER_TRAP1  */
+				OUTS("\x7e\x02\xcd\x04");
 			}
-
-			/* LOGIC: if ea > max then trap() */
-
-			/* cmp %edi, %esi */
-			OUTS("\x39\xfe");
-
-			/* jle AFTER_TRAP: */
-			/* int $4 */
-			/* AFTER_TRAP1  */
-			OUTS("\x7e\x02\xcd\x04");
 
 			/* LOGIC: data = store->mems.elts[maddr].data */
 			{

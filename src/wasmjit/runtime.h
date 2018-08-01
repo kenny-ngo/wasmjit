@@ -65,6 +65,7 @@ struct Store {
 		struct MemInst {
 			char *data;
 			uint32_t max;
+			int has_max;
 		} *elts;
 	} mems;
 };
