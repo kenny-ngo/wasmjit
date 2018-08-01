@@ -25,44 +25,13 @@
 #include <wasmjit/wasmbin.h>
 #include <wasmjit/wasmbin_compile.h>
 #include <wasmjit/util.h>
+#include <wasmjit/vector.h>
 
 #include <assert.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-
-
-#define DEFINE_VECTOR_GROW(name, _type)					\
-	int name ## _grow (_type *sstack, size_t n_elts) {		\
-		void *newstackelts;					\
-		newstackelts = realloc(sstack->elts, (sstack->n_elts + n_elts) * sizeof(sstack->elts[0])); \
-		if (!newstackelts) {					\
-			return 0;					\
-		}							\
-									\
-		sstack->elts = newstackelts;				\
-		sstack->n_elts += n_elts;				\
-									\
-		return 1;						\
-	}
-
-#define DEFINE_VECTOR_TRUNCATE(name, _type)				\
-	static int name ## _truncate(_type *sstack, size_t amt) {	\
-		void *newstackelts;					\
-									\
-		assert(amt <= sstack->n_elts);				\
-									\
-		newstackelts = realloc(sstack->elts, amt * sizeof(sstack->elts[0])); \
-		if (!newstackelts) {					\
-			return 0;					\
-		}							\
-									\
-		sstack->elts = newstackelts;				\
-		sstack->n_elts = amt;					\
-									\
-		return 1;						\
-	}
 
 struct SizedBuffer {
 	size_t n_elts;
