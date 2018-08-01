@@ -337,11 +337,13 @@ static int wasmjit_compile_instructions(const struct Store *store,
 
 				/* increment esp to Lth label (simulating pop) */
 				/* add <stack_shift * 8>, %rsp */
-				OUTS("\x48\x81\xc4");
-				assert(stack_shift * 8 <= INT_MAX);
-				encode_le_uint32_t(stack_shift * 8, buf);
-				if (!output_buf(output, buf, sizeof(uint32_t)))
-					goto error;
+				if (stack_shift) {
+					OUTS("\x48\x81\xc4");
+					assert(stack_shift * 8 <= INT_MAX);
+					encode_le_uint32_t(stack_shift * 8, buf);
+					if (!output_buf(output, buf, sizeof(uint32_t)))
+						goto error;
+				}
 
 				/* place jmp to Lth label */
 
