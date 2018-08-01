@@ -92,7 +92,7 @@ struct StaticStack {
 static DEFINE_VECTOR_GROW(stack, struct StaticStack);
 static DEFINE_VECTOR_TRUNCATE(stack, struct StaticStack);
 
-static int push_stack(struct StaticStack *sstack, int type)
+static int push_stack(struct StaticStack *sstack, unsigned type)
 {
 	if (!stack_grow(sstack, 1))
 		return 0;
@@ -100,7 +100,7 @@ static int push_stack(struct StaticStack *sstack, int type)
 	return 1;
 }
 
-static int peek_stack(struct StaticStack *sstack)
+static unsigned peek_stack(struct StaticStack *sstack)
 {
 	assert(sstack->n_elts);
 	return sstack->elts[sstack->n_elts - 1].type;

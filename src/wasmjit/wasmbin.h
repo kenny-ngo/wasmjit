@@ -313,7 +313,7 @@ struct TypeSection {
 	uint32_t n_types;
 	struct TypeSectionType {
 		uint32_t n_inputs, n_outputs;
-		int *input_types, *output_types;
+		unsigned *input_types, *output_types;
 	} *types;
 };
 
