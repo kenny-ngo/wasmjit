@@ -685,6 +685,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					   data.i32_const.value, buf);
 			if (!output_buf(output, buf, sizeof(uint32_t)))
 				goto error;
+			push_stack(sstack, STACK_I32);
 			break;
 		case OPCODE_I32_LT_S:
 			/* popq %rdi */
