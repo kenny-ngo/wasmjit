@@ -107,7 +107,7 @@ static int peek_stack(struct StaticStack *sstack)
 
 static int pop_stack(struct StaticStack *sstack)
 {
-	return stack_truncate(sstack, 1);
+	return stack_truncate(sstack, sstack->n_elts - 1);
 }
 
 struct CallPoints {
