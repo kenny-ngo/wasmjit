@@ -236,8 +236,8 @@ static int wasmjit_compile_instructions(const struct Store *store,
 		case OPCODE_BR_IF:
 		case OPCODE_BR:
 			{
-				uint32_t j, labelidx, arity, stack_shift;
-				size_t je_offset, je_offset_2;
+				uint32_t labelidx, arity, stack_shift;
+				size_t je_offset, je_offset_2, j;
 
 				if (instructions[i].opcode == OPCODE_BR_IF) {
 					/* LOGIC: v = pop_stack() */
