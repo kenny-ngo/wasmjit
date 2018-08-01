@@ -22,9 +22,9 @@
   SOFTWARE.
  */
 
-#include <wasmjit/wasmbin_compile.h>
+#include <wasmjit/compile.h>
 
-#include <wasmjit/wasmbin.h>
+#include <wasmjit/parse.h>
 #include <wasmjit/util.h>
 #include <wasmjit/vector.h>
 #include <wasmjit/runtime.h>

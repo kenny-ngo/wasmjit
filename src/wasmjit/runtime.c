@@ -24,7 +24,7 @@
 
 #include <wasmjit/runtime.h>
 
-#include <wasmjit/wasmbin.h>
+#include <wasmjit/ast.h>
 #include <wasmjit/util.h>
 
 void *wasmjit_get_base_address()

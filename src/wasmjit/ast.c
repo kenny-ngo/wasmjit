@@ -22,7 +22,7 @@
   SOFTWARE.
  */
 
-#include <wasmjit/wasmbin.h>
+#include <wasmjit/ast.h>
 
 #include <stddef.h>
 #include <string.h>

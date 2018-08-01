@@ -22,10 +22,10 @@
   SOFTWARE.
  */
 
-#ifndef __WASMJIT__WASMBIN_PARSE_H__
-#define __WASMJIT__WASMBIN_PARSE_H__
+#ifndef __WASMJIT__PARSE_H__
+#define __WASMJIT__PARSE_H__
 
-#include <wasmjit/wasmbin.h>
+#include <wasmjit/ast.h>
 
 #include <stddef.h>
 

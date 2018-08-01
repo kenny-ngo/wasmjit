@@ -22,33 +22,12 @@
   SOFTWARE.
  */
 
-#ifndef __WASMJIT__WASMBIN_COMPILE_H__
-#define __WASMJIT__WASMBIN_COMPILE_H__
+#ifndef __WASMJIT__WASMBIN_DUMP_H__
+#define __WASMJIT__WASMBIN_DUMP_H__
 
-#include <wasmjit/wasmbin.h>
-#include <wasmjit/runtime.h>
+#include <wasmjit/ast.h>
 
-#include <stddef.h>
-
-struct Addrs {
-	size_t n_elts;
-	size_t *elts;
-};
-
-struct ModuleInst {
-	struct Addrs funcaddrs;
-	struct Addrs tableaddrs;
-	struct Addrs memaddrs;
-	struct Addrs globaladdrs;
-};
-
-__attribute__ ((unused))
-static DEFINE_VECTOR_GROW(addrs, struct Addrs);
-
-char *wasmjit_compile_code(const struct Store *store,
-			   const struct ModuleInst *module,
-			   const struct TypeSectionType *type,
-			   const struct CodeSectionCode *code,
-			   struct MemoryReferences *memrefs, size_t *size);
+void dump_instructions(const struct Instr *instructions, size_t n_instructions,
+		       int indent);
 
 #endif

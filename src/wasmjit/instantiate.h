@@ -25,7 +25,7 @@
 #ifndef __WASMJIT__INSTANTIATE_H__
 #define __WASMJIT__INSTANTIATE_H__
 
-#include <wasmjit/wasmbin.h>
+#include <wasmjit/ast.h>
 #include <wasmjit/runtime.h>
 
 int wasmjit_instantiate(const char *module_name,

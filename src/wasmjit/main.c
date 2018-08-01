@@ -22,10 +22,10 @@
   SOFTWARE.
  */
 
-#include <wasmjit/wasmbin_compile.h>
-#include <wasmjit/wasmbin_dump.h>
-#include <wasmjit/wasmbin_parse.h>
-#include <wasmjit/wasmbin.h>
+#include <wasmjit/ast.h>
+#include <wasmjit/compile.h>
+#include <wasmjit/ast_dump.h>
+#include <wasmjit/parse.h>
 #include <wasmjit/runtime.h>
 #include <wasmjit/instantiate.h>
 #include <wasmjit/execute.h>

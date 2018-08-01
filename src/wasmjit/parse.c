@@ -22,8 +22,7 @@
   SOFTWARE.
  */
 
-#include <wasmjit/wasmbin.h>
-#include <wasmjit/wasmbin_parse.h>
+#include <wasmjit/parse.h>
 #include <wasmjit/util.h>
 
 #include <assert.h>
