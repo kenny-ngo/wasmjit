@@ -27,6 +27,6 @@
 
 #include <wasmjit/wasmbin.h>
 
-void dump_instructions(const struct Instr *instructions, size_t n_instructions);
+void dump_instructions(const struct Instr *instructions, size_t n_instructions, int indent);
 
 #endif

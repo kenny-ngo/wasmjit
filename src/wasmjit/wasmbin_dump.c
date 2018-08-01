@@ -60,8 +60,8 @@ void dump_global_section(struct GlobalSection *global_section)
 	}
 }
 
-void dump_instructions_inner(const struct Instr *instructions,
-			     size_t n_instructions, int indent);
+void dump_instructions(const struct Instr *instructions,
+		       size_t n_instructions, int indent);
 
 void dump_instruction(const struct Instr *instruction, int indent)
 {
@@ -74,16 +74,16 @@ void dump_instruction(const struct Instr *instruction, int indent)
 	case OPCODE_BLOCK:
 		printf("%*sblock 0x%02" PRIx8 "\n", sps, "",
 		       instruction->data.block.blocktype);
-		dump_instructions_inner(instruction->data.block.instructions,
-					instruction->data.block.n_instructions,
-					indent + 1);
+		dump_instructions(instruction->data.block.instructions,
+				  instruction->data.block.n_instructions,
+				  indent + 1);
 		break;
 	case OPCODE_LOOP:
 		printf("%*sloop 0x%02" PRIx8 "\n", sps, "",
 		       instruction->data.loop.blocktype);
-		dump_instructions_inner(instruction->data.loop.instructions,
-					instruction->data.loop.n_instructions,
-					indent + 1);
+		dump_instructions(instruction->data.loop.instructions,
+				  instruction->data.loop.n_instructions,
+				  indent + 1);
 		break;
 	case OPCODE_BR_IF:
 		printf("%*sbr_if 0x%" PRIx32 "\n", sps, "",
@@ -134,17 +134,12 @@ void dump_instruction(const struct Instr *instruction, int indent)
 	}
 }
 
-void dump_instructions_inner(const struct Instr *instructions,
-			     size_t n_instructions, int indent)
+void dump_instructions(const struct Instr *instructions,
+		       size_t n_instructions, int indent)
 {
 	uint32_t i;
 
 	for (i = 0; i < n_instructions; ++i) {
 		dump_instruction(&instructions[i], indent);
 	}
-}
-
-void dump_instructions(const struct Instr *instructions, size_t n_instructions)
-{
-	dump_instructions_inner(instructions, n_instructions, 0);
 }
