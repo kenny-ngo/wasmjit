@@ -752,14 +752,16 @@ static int wasmjit_compile_instructions(const struct Store *store,
 	return 0;
 }
 
-void wasmjit_compile_code(const struct Store *store,
-			  const struct ModuleInst *module,
-			  const struct TypeSectionType *type,
-			  const struct CodeSectionCode *code)
+char *wasmjit_compile_code(const struct Store *store,
+			   const struct ModuleInst *module,
+			   const struct TypeSectionType *type,
+			   const struct CodeSectionCode *code,
+			   struct MemoryReferences *memrefs,
+			   size_t *out_size)
+
 {
 	struct SizedBuffer outputv = { 0, NULL };
 	struct SizedBuffer *output = &outputv;
-	struct MemoryReferences *memrefs = { 0, NULL };
 	struct BranchPoints branches = { 0, NULL };
 	struct StaticStack sstack = { 0, NULL };
 	struct LabelContinuations labels = { 0, NULL };
@@ -895,7 +897,7 @@ void wasmjit_compile_code(const struct Store *store,
 
 	wasmjit_compile_instructions(store, module, type, code,
 				     code->instructions, code->n_instructions,
-				     output, &labels, &branches, &memrefs, locals_fp_offset, &sstack);
+				     output, &labels, &branches, memrefs, locals_fp_offset, &sstack);
 
 	/* fix branch points */
 	{
@@ -925,10 +927,13 @@ void wasmjit_compile_code(const struct Store *store,
 	/* retq */
 	OUTS("\xc3");
 
-	return;
+	*out_size = output->n_elts;
+
+	return output->elts;
 
  error:
-	return;
+	assert(0);
+	return NULL;
 }
 
 #undef OUTB

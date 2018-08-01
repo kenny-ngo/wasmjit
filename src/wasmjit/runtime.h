@@ -48,6 +48,15 @@ __attribute__ ((unused))
 static DEFINE_VECTOR_GROW(memrefs, struct MemoryReferences);
 
 struct Store {
+	struct Namespace {
+		size_t n_elts;
+		struct NamespaceEntry {
+			char *module_name;
+			char *name;
+			unsigned type;
+			size_t addr;
+		} *elts;
+	} names;
 	struct StoreFuncs {
 		size_t n_elts;
 		struct FuncInst {
@@ -58,6 +67,8 @@ struct Store {
 				unsigned *output_types;
 			} type;
 			void *code;
+			size_t code_size;
+			struct MemoryReferences memrefs;
 		} *elts;
 	} funcs;
 	struct StoreMems {
@@ -69,5 +80,12 @@ struct Store {
 		} *elts;
 	} mems;
 };
+
+__attribute__ ((unused))
+static DEFINE_VECTOR_GROW(store_names, struct Namespace);
+__attribute__ ((unused))
+static DEFINE_VECTOR_GROW(store_funcs, struct StoreFuncs);
+__attribute__ ((unused))
+static DEFINE_VECTOR_GROW(store_mems, struct StoreMems);
 
 #endif

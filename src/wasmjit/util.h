@@ -26,6 +26,8 @@
 #define __WASMJIT__UTIL_H__
 
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 __attribute__ ((unused))
 static uint32_t uint32_t_swap_bytes(uint32_t data)
@@ -55,6 +57,24 @@ static uint64_t uint64_t_swap_bytes(uint64_t data)
 #else
 #error Unsupported Architecture
 #endif
+}
+
+__attribute__ ((unused))
+static void *wasmjit_copy_buf(void *buf, size_t n_elts, size_t elt_size)
+{
+	void *newbuf;
+	size_t size;
+	if (__builtin_umull_overflow
+	    (n_elts, elt_size, &size)) {
+		return NULL;
+	}
+
+	newbuf = malloc(size);
+	if (!newbuf)
+		return NULL;
+
+	memcpy(newbuf, buf, size);
+	return newbuf;
 }
 
 #endif

@@ -26,6 +26,8 @@
 #include <wasmjit/wasmbin_dump.h>
 #include <wasmjit/wasmbin_parse.h>
 #include <wasmjit/wasmbin.h>
+#include <wasmjit/runtime.h>
+#include <wasmjit/instantiate.h>
 
 #include <assert.h>
 #include <inttypes.h>
@@ -41,6 +43,8 @@ int main(int argc, char *argv[])
 	int ret;
 	struct ParseState pstate;
 	struct Module module;
+	struct Store store;
+	size_t startaddr;
 
 	if (argc < 2) {
 		printf("Need an input file\n");
@@ -68,20 +72,11 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	{
-		uint32_t i;
-		struct Store store;
-		struct ModuleInst module_inst;
+	/* initialize store */
+	memset(&store, 0, sizeof(store));
 
-		for (i = 0; i < module.code_section.n_codes; ++i) {
-			uint32_t j;
-			j = module.function_section.typeidxs[i];
-			wasmjit_compile_code(&store,
-					     &module_inst,
-					     &module.type_section.types[j],
-					     &module.code_section.codes[i]);
-		}
-	}
+	if (!wasmjit_instantiate("env", &module, &store, &startaddr))
+		return -1;
 
 	return 0;
 }
