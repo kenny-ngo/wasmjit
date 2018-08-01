@@ -66,6 +66,7 @@ struct Store {
 				size_t n_outputs;
 				unsigned *output_types;
 			} type;
+			int is_host;
 			void *code;
 			size_t code_size;
 			struct MemoryReferences memrefs;
@@ -87,5 +88,15 @@ __attribute__ ((unused))
 static DEFINE_VECTOR_GROW(store_funcs, struct StoreFuncs);
 __attribute__ ((unused))
 static DEFINE_VECTOR_GROW(store_mems, struct StoreMems);
+
+int wasmjit_import_function(struct Store *store,
+			    const char *module_name,
+			    const char *name,
+			    void *funcaddr,
+			    size_t n_inputs,
+			    unsigned *input_types,
+			    size_t n_outputs, unsigned *output_types);
+
+void *wasmjit_get_base_address();
 
 #endif

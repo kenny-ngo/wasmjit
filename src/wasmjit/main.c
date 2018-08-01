@@ -39,6 +39,14 @@
 
 #include <errno.h>
 
+#include <unistd.h>
+
+
+uint32_t write_callback(uint32_t fd_arg, uint32_t buf_arg, uint32_t count) {
+	char *base_address = wasmjit_get_base_address();
+	return write(fd_arg, base_address + buf_arg, count);
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
@@ -75,6 +83,17 @@ int main(int argc, char *argv[])
 
 	/* initialize store */
 	memset(&store, 0, sizeof(store));
+
+	{
+		unsigned inputs[3] = {VALTYPE_I32, VALTYPE_I32, VALTYPE_I32};
+		unsigned outputs[1] = {VALTYPE_I32};
+		if (!wasmjit_import_function(&store,
+					     "env", "write",
+					     write_callback,
+					     3, inputs,
+					     1, outputs))
+			return -1;
+	}
 
 	if (!wasmjit_instantiate("env", &module, &store, &startaddr))
 		return -1;
