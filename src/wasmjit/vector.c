@@ -25,13 +25,13 @@
 #include <stdlib.h>
 #include <stddef.h>
 
-void *wasmjit_vector_set_size(void *elts, size_t *n_elts, size_t new_n_elts, size_t elt_size)
+void *wasmjit_vector_set_size(void *elts, size_t *n_elts, size_t new_n_elts,
+			      size_t elt_size)
 {
 	void *newstackelts;
 	size_t total_elt_size;
 
-	if (__builtin_umull_overflow
-	    (new_n_elts, elt_size, &total_elt_size)) {
+	if (__builtin_umull_overflow(new_n_elts, elt_size, &total_elt_size)) {
 		goto error;
 	}
 

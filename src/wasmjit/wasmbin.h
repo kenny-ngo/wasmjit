@@ -228,14 +228,21 @@ enum {
 	VALTYPE_F64 = 0x7c,
 };
 
-__attribute__((unused))
-static const char *wasmjit_valtype_repr(unsigned valtype) {
+__attribute__ ((unused))
+static const char *wasmjit_valtype_repr(unsigned valtype)
+{
 	switch (valtype) {
-	case VALTYPE_I32: return "I32";
-	case VALTYPE_I64: return "I64";
-	case VALTYPE_F32: return "F32";
-	case VALTYPE_F64: return "F64";
-	default: assert(0); return NULL;
+	case VALTYPE_I32:
+		return "I32";
+	case VALTYPE_I64:
+		return "I64";
+	case VALTYPE_F32:
+		return "F32";
+	case VALTYPE_F64:
+		return "F64";
+	default:
+		assert(0);
+		return NULL;
 	}
 }
 

@@ -42,13 +42,13 @@ struct ModuleInst {
 	struct Addrs globaladdrs;
 };
 
-__attribute__((unused)) static DEFINE_VECTOR_GROW(addrs, struct Addrs);
+__attribute__ ((unused))
+static DEFINE_VECTOR_GROW(addrs, struct Addrs);
 
 char *wasmjit_compile_code(const struct Store *store,
 			   const struct ModuleInst *module,
 			   const struct TypeSectionType *type,
 			   const struct CodeSectionCode *code,
-			   struct MemoryReferences *memrefs,
-			   size_t *size);
+			   struct MemoryReferences *memrefs, size_t *size);
 
 #endif

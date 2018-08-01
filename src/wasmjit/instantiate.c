@@ -135,8 +135,8 @@ int wasmjit_instantiate(const char *module_name,
 		struct Addrs *addrs = &module_inst->memaddrs;
 
 		type =
-		    &module->type_section.types[module->function_section.
-						typeidxs[i]];
+		    &module->type_section.types[module->
+						function_section.typeidxs[i]];
 		funcaddr = store->funcs.n_elts;
 
 		if (!store_funcs_grow(&store->funcs, 1))
@@ -169,8 +169,8 @@ int wasmjit_instantiate(const char *module_name,
 		funcinst->code = wasmjit_compile_code(store,
 						      module_inst,
 						      type,
-						      &module->code_section.
-						      codes[i],
+						      &module->
+						      code_section.codes[i],
 						      &funcinst->memrefs,
 						      &funcinst->code_size);
 		if (!funcinst->code) {

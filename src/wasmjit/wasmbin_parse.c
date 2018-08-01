@@ -121,7 +121,6 @@ int init_pstate(struct ParseState *pstate, char *file_name)
 	return pstate->input ? 1 : 0;
 }
 
-
 int is_eof(struct ParseState *pstate)
 {
 	return pstate->eof;
@@ -684,8 +683,8 @@ int read_instruction(struct ParseState *pstate, struct Instr *instr,
 			for (i = 0; i < instr->data.br_table.n_labelidxs; ++i) {
 				ret =
 				    read_uleb_uint32_t(pstate,
-						       &instr->data.
-						       br_table.labelidxs[i]);
+						       &instr->data.br_table.
+						       labelidxs[i]);
 				if (!ret)
 					goto error;
 			}
@@ -1095,7 +1094,8 @@ int read_global_section(struct ParseState *pstate,
 				goto error;
 
 			global->instructions = read_instructions(pstate,
-								 &global->n_instructions,
+								 &global->
+								 n_instructions,
 								 0, 1);
 			if (!global->instructions) {
 				goto error;
@@ -1221,8 +1221,8 @@ int read_element_section(struct ParseState *pstate,
 				for (j = 0; j < element->n_funcidxs; ++j) {
 					ret =
 					    read_uleb_uint32_t(pstate,
-							       &element->funcidxs
-							       [j]);
+							       &element->
+							       funcidxs[j]);
 					if (!ret)
 						goto error;
 				}
@@ -1299,7 +1299,8 @@ int read_code_section(struct ParseState *pstate,
 
 					ret =
 					    read_uleb_uint32_t(pstate,
-							       &code_local->count);
+							       &code_local->
+							       count);
 					if (!ret)
 						goto error;
 
@@ -1476,7 +1477,8 @@ int read_module(struct ParseState *pstate, struct Module *module)
 			READ("custom section", advance_parser, size);
 			break;
 		case SECTION_ID_TYPE:
-			READ("type section", read_type_section, &module->type_section);
+			READ("type section", read_type_section,
+			     &module->type_section);
 			break;
 		case SECTION_ID_IMPORT:
 			READ("import section", read_import_section,

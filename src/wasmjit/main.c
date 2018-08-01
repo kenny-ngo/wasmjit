@@ -41,8 +41,8 @@
 
 #include <unistd.h>
 
-
-uint32_t write_callback(uint32_t fd_arg, uint32_t buf_arg, uint32_t count) {
+uint32_t write_callback(uint32_t fd_arg, uint32_t buf_arg, uint32_t count)
+{
 	char *base_address = wasmjit_get_base_address();
 	return write(fd_arg, base_address + buf_arg, count);
 }
@@ -78,39 +78,49 @@ int main(int argc, char *argv[])
 		for (i = 0; i < module.code_section.n_codes; ++i) {
 			uint32_t j;
 			struct TypeSectionType *type;
-			struct CodeSectionCode *code = &module.code_section.codes[i];
+			struct CodeSectionCode *code =
+			    &module.code_section.codes[i];
 
-			type = &module.type_section.types[module.function_section.typeidxs[i]];
+			type =
+			    &module.type_section.types[module.function_section.
+						       typeidxs[i]];
 
-			printf("Code #%"PRIu32"\n", i);
+			printf("Code #%" PRIu32 "\n", i);
 
-			printf("Locals (%"PRIu32"):\n", code->n_locals);
+			printf("Locals (%" PRIu32 "):\n", code->n_locals);
 			for (j = 0; j < code->n_locals; ++j) {
-				printf("  %s (%"PRIu32")\n", wasmjit_valtype_repr(code->locals[j].valtype),
+				printf("  %s (%" PRIu32 ")\n",
+				       wasmjit_valtype_repr(code->locals[j].
+							    valtype),
 				       code->locals[i].count);
 			}
 
 			printf("Signature: [");
 			for (j = 0; j < type->n_inputs; ++j) {
-				printf("%s,", wasmjit_valtype_repr(type->input_types[j]));
+				printf("%s,",
+				       wasmjit_valtype_repr(type->
+							    input_types[j]));
 			}
 			printf("] -> [");
 			for (j = 0; j < type->n_outputs; ++j) {
-				printf("%s,", wasmjit_valtype_repr(type->output_types[j]));
+				printf("%s,",
+				       wasmjit_valtype_repr(type->
+							    output_types[j]));
 			}
 			printf("]\n");
 
 			printf("Instructions:\n");
-			dump_instructions(module.code_section.codes[i].instructions,
-					  module.code_section.codes[i].n_instructions, 1);
+			dump_instructions(module.code_section.codes[i].
+					  instructions,
+					  module.code_section.codes[i].
+					  n_instructions, 1);
 			printf("\n");
 		}
 	}
 
 	/* the most basic validation */
-	if (module.code_section.n_codes !=
-	    module.function_section.n_typeidxs) {
-		printf("# Functions != # Codes %"PRIu32" != %"PRIu32"\n",
+	if (module.code_section.n_codes != module.function_section.n_typeidxs) {
+		printf("# Functions != # Codes %" PRIu32 " != %" PRIu32 "\n",
 		       module.function_section.n_typeidxs,
 		       module.code_section.n_codes);
 		return -1;
@@ -120,13 +130,12 @@ int main(int argc, char *argv[])
 	memset(&store, 0, sizeof(store));
 
 	{
-		unsigned inputs[3] = {VALTYPE_I32, VALTYPE_I32, VALTYPE_I32};
-		unsigned outputs[1] = {VALTYPE_I32};
+		unsigned inputs[3] = { VALTYPE_I32, VALTYPE_I32, VALTYPE_I32 };
+		unsigned outputs[1] = { VALTYPE_I32 };
 		if (!wasmjit_import_function(&store,
 					     "env", "write",
 					     write_callback,
-					     3, inputs,
-					     1, outputs))
+					     3, inputs, 1, outputs))
 			return -1;
 	}
 

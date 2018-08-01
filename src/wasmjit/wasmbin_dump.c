@@ -130,7 +130,7 @@ void dump_instruction(const struct Instr *instruction, int indent)
 		break;
 	default:
 		printf("%*sBAD 0x%02" PRIx8 "\n", sps, "", instruction->opcode);
-                break;
+		break;
 	}
 }
 

@@ -35,7 +35,7 @@ void init_instruction(struct Instr *instr)
 
 void free_instruction(struct Instr *instr)
 {
-	(void) instr;
+	(void)instr;
 }
 
 void free_instructions(struct Instr *instructions, size_t n_instructions)

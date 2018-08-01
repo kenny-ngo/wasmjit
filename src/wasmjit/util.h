@@ -64,8 +64,7 @@ static void *wasmjit_copy_buf(void *buf, size_t n_elts, size_t elt_size)
 {
 	void *newbuf;
 	size_t size;
-	if (__builtin_umull_overflow
-	    (n_elts, elt_size, &size)) {
+	if (__builtin_umull_overflow(n_elts, elt_size, &size)) {
 		return NULL;
 	}
 
