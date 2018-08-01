@@ -438,7 +438,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				size_t i;
 				size_t n_movs = 0, n_xmm_movs = 0, n_stack = 0;
 
-				char *movs[] = {
+				static const char *const movs[] = {
 					"\x48\x8b\x7c\x24", /* mov N(%rsp), %rdi */
 					"\x48\x8b\x74\x24", /* mov N(%rsp), %rsi */
 					"\x48\x8b\x54\x24", /* mov N(%rsp), %rdx */
@@ -447,7 +447,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					"\x4c\x8b\x4c\x24", /* mov N(%rsp), %r9 */
 				};
 
-				char *f32_movs[] = {
+				static const char *const f32_movs[] = {
 					"\xf3\x0f\x10\x44\x24", /* movss N(%rsp), %xmm0 */
 					"\xf3\x0f\x10\x4c\x24", /* movss N(%rsp), %xmm1 */
 					"\xf3\x0f\x10\x54\x24", /* movss N(%rsp), %xmm2 */
@@ -458,7 +458,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					"\xf3\x0f\x10\x7c\x24", /* movss N(%rsp), %xmm7 */
 				};
 
-				char *f64_movs[] = {
+				static const char *const f64_movs[] = {
 					"\xf2\x0f\x10\x44\x24", /* movsd N(%rsp), %xmm0 */
 					"\xf2\x0f\x10\x4c\x24", /* movsd N(%rsp), %xmm1 */
 					"\xf2\x0f\x10\x54\x24", /* movsd N(%rsp), %xmm2 */
