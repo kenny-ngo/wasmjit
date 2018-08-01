@@ -963,6 +963,8 @@ char *wasmjit_compile_code(const struct Store *store,
 		for (i = 0; i < branches.n_elts; ++i) {
 			char buf[1 + sizeof(uint32_t)] = { 0xe9 };
 			struct BranchPointElt *branch = &branches.elts[i];
+			/* TODO: handle FUNC_EXIT_CONT */
+			assert(branch->continuation_idx != FUNC_EXIT_CONT);
 			size_t continuation_offset =
 			    labels.elts[branch->continuation_idx];
 			uint32_t rel =
