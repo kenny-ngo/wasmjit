@@ -28,6 +28,7 @@
 #include <wasmjit/wasmbin.h>
 #include <wasmjit/runtime.h>
 #include <wasmjit/instantiate.h>
+#include <wasmjit/execute.h>
 
 #include <assert.h>
 #include <inttypes.h>
@@ -77,6 +78,12 @@ int main(int argc, char *argv[])
 
 	if (!wasmjit_instantiate("env", &module, &store, &startaddr))
 		return -1;
+
+	/* execute module */
+	if (module.start_section.has_start) {
+		if (!wasmjit_execute(&store, startaddr))
+			return -1;
+	}
 
 	return 0;
 }
