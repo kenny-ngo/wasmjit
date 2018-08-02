@@ -269,6 +269,7 @@ int wasmjit_instantiate(const char *module_name,
 			break;
 		}
 
+		assert(export->idx < addrs->n_elts);
 		entry->addr = addrs->elts[export->idx];
 	}
 
