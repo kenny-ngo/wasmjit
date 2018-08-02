@@ -273,6 +273,27 @@ int wasmjit_instantiate(const char *module_name,
 		entry->addr = addrs->elts[export->idx];
 	}
 
+	for (i = 0; i < module->data_section.n_datas; ++i) {
+		struct DataSectionData *data = &module->data_section.datas[i];
+		struct MemInst *meminst =
+		    &store->mems.elts[module_inst->memaddrs.elts[data->memidx]];
+
+		if (data->n_instructions != 1
+		    || data->instructions[0].opcode != OPCODE_I32_CONST) {
+			/* TODO: execute instructions in the future,
+			   rely on validation stage to check for const property */
+			goto error;
+		}
+#if UINT32_MAX > SIZE_MAX
+		if (data->buf_size > SIZE_MAX)
+			goto error;
+#endif
+
+		memcpy(meminst->data +
+		       data->instructions[0].data.i32_const.value, data->buf,
+		       data->buf_size);
+	}
+
 	/* return funcaddr of start_function */
 	if (module->start_section.has_start) {
 		*startaddr =
