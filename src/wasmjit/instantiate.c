@@ -97,10 +97,38 @@ int wasmjit_instantiate(const char *module_name,
 		}
 	}
 
-	if (module->table_section.n_tables) {
-		/* don't currenly handle tables */
-		snprintf(why, sizeof(why), "don't handle tables");
-		goto error;
+	for (i = 0; i < module->table_section.n_tables; ++i) {
+		struct TableSectionTable *table =
+		    &module->table_section.tables[i];
+
+		size_t tableaddr = store->tables.n_elts;
+		struct Addrs *addrs = &module_inst->tableaddrs;
+		struct TableInst *tableinst;
+
+		assert(!table->limits.max
+		       || table->limits.min <= table->limits.max);
+
+		if (!store_tables_grow(&store->tables, 1))
+			goto error;
+
+		tableinst = &store->tables.elts[tableaddr];
+		tableinst->elemtype = table->elemtype;
+		if (table->limits.min) {
+			tableinst->data =
+			    wasmjit_alloc_vector(table->limits.min,
+						 sizeof(tableinst->data[0]),
+						 NULL);
+			if (!tableinst->data)
+				goto error;
+		} else {
+			tableinst->data = NULL;
+		}
+		tableinst->length = table->limits.min;
+		tableinst->max = table->limits.max;
+
+		if (!addrs_grow(addrs, 1))
+			goto error;
+		addrs->elts[addrs->n_elts - 1] = tableaddr;
 	}
 
 	for (i = 0; i < module->memory_section.n_memories; ++i) {

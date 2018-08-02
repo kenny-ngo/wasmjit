@@ -72,6 +72,15 @@ struct Store {
 			struct MemoryReferences memrefs;
 		} *elts;
 	} funcs;
+	struct TableFuncs {
+		size_t n_elts;
+		struct TableInst {
+			void **data;
+			int elemtype;
+			size_t length;
+			size_t max;
+		} *elts;
+	} tables;
 	struct StoreMems {
 		size_t n_elts;
 		struct MemInst {
@@ -86,6 +95,8 @@ __attribute__ ((unused))
 static DEFINE_VECTOR_GROW(store_names, struct Namespace);
 __attribute__ ((unused))
 static DEFINE_VECTOR_GROW(store_funcs, struct StoreFuncs);
+__attribute__ ((unused))
+static DEFINE_VECTOR_GROW(store_tables, struct TableFuncs);
 __attribute__ ((unused))
 static DEFINE_VECTOR_GROW(store_mems, struct StoreMems);
 
