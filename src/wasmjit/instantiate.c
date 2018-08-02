@@ -152,10 +152,6 @@ int wasmjit_instantiate(const char *module_name,
 					    &store->mems.elts[memaddr].max)) {
 			goto error;
 		}
-#if UINT32_MAX > SIZE_MAX
-		if (store->mems.elts[memaddr].size > SIZE_MAX)
-			goto error;
-#endif
 
 		if (store->mems.elts[memaddr].size) {
 			store->mems.elts[memaddr].data =

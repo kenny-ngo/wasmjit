@@ -739,25 +739,20 @@ static int wasmjit_compile_instructions(const struct Store *store,
 			if (4 + instructions[i].data.i32_load.offset != 0) {
 				/* LOGIC: ea += memarg.offset + 4 */
 
-				/* add <VAL>, %esi */
-				OUTS("\x81\xc6");
+				/* add <VAL>, %rsi */
+				OUTS("\x48\x81\xc6");
 				encode_le_uint32_t(4 +
 						   instructions[i].
 						   data.i32_load.offset, buf);
 				if (!output_buf(output, buf, sizeof(uint32_t)))
 					goto error;
-
-				/* jno AFTER_TRAP: */
-				/* int $4 */
-				/* AFTER_TRAP1  */
-				OUTS("\x71\x02\xcd\x04");
 			}
 
 			{
 				/* LOGIC: size = store->mems.elts[maddr].size */
 
-				/* movq (const), %eax */
-				OUTS("\x48\x90\x90\x90\x90\x90\x90\x90\x90");
+				/* movq (const), %rax */
+				OUTS("\x48\xa1\x90\x90\x90\x90\x90\x90\x90\x90");
 
 				/* add reference to max */
 				{
@@ -777,8 +772,8 @@ static int wasmjit_compile_instructions(const struct Store *store,
 
 				/* LOGIC: if ea > size then trap() */
 
-				/* cmp %eax, %esi */
-				OUTS("\x39\xc6");
+				/* cmp %rax, %rsi */
+				OUTS("\x48\x39\xc6");
 
 				/* jle AFTER_TRAP: */
 				/* int $4 */
