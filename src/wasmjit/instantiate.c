@@ -175,6 +175,12 @@ int wasmjit_instantiate(const char *module_name,
 		goto error;
 	}
 
+	if (module->element_section.n_elements) {
+		/* don't currenly handle elements */
+		snprintf(why, sizeof(why), "don't handle elements");
+		goto error;
+	}
+
 	for (i = 0; i < module->code_section.n_codes; ++i) {
 		struct TypeSectionType *type;
 		struct FuncInst *funcinst;
