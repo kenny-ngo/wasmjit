@@ -95,9 +95,17 @@ int wasmjit_instantiate(const char *module_name,
 			case IMPORT_DESC_TYPE_TABLE:
 				addrs = &module_inst->tableaddrs;
 				break;
-			case IMPORT_DESC_TYPE_MEM:
+			case IMPORT_DESC_TYPE_MEM: {
+				assert(entry->addr < store->mems.n_elts);
+				struct MemInst *meminst = &store->mems.elts[entry->addr];
+
+				if (!(meminst->size / WASM_PAGE_SIZE >= import->desc.memtype.min &&
+				      meminst->max / WASM_PAGE_SIZE == import->desc.memtype.max))
+					goto error;
+
 				addrs = &module_inst->memaddrs;
 				break;
+			}
 			case IMPORT_DESC_TYPE_GLOBAL:
 				addrs = &module_inst->globaladdrs;
 				break;
