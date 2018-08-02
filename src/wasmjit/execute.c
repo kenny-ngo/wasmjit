@@ -22,17 +22,31 @@
   SOFTWARE.
  */
 
-#include <wasmjit/runtime.h>
+#include <wasmjit/execute.h>
 
+#include <wasmjit/ast.h>
+#include <wasmjit/runtime.h>
 #include <wasmjit/util.h>
 
 #include <pthread.h>
+
+#include <sys/mman.h>
 
 __attribute__ ((unused))
 static void encode_le_uint64_t(uint64_t val, char *buf)
 {
 	uint64_t le_val = uint64_t_swap_bytes(val);
 	memcpy(buf, &le_val, sizeof(le_val));
+}
+
+int same_input_types(const unsigned *types, const struct Value *args, size_t n_args)
+{
+	size_t i;
+	for (i = 0; i < n_args; ++i) {
+		if (types[i] != args[i].type)
+			return 0;
+	}
+	return 1;
 }
 
 pthread_key_t meminst_key;
@@ -50,14 +64,125 @@ void *wasmjit_get_base_address()
 	return (*mb)->data;
 }
 
-int wasmjit_execute(const struct Store *store, size_t startaddr)
+int wasmjit_execute(const struct Store *store, size_t startaddr, const struct Value *args, size_t n_args, struct Value *ret)
 {
-	(void)store;
-	(void)startaddr;
+	size_t i;
 
-	/* TODO: map all code into memory */
-	/* TODO: resolve all references */
-	/* TODO: execute */
+	struct Meminst *meminst_box;
 
+	if (pthread_setspecific(meminst_key, &meminst_box))
+		goto error;
+
+	assert(startaddr < store->funcs.n_elts);
+	assert(store->funcs.elts[startaddr].type.n_inputs == n_args);
+	assert(same_input_types(store->funcs.elts[startaddr].type.input_types, args, n_args));
+
+	/* map all code in executable memory */
+	for (i = 0; i < store->funcs.n_elts; ++i) {
+		struct FuncInst *funcinst = &store->funcs.elts[i];
+		void *newcode;
+
+		if (funcinst->is_host)
+			continue;
+
+		newcode = mmap(NULL, funcinst->code_size, PROT_READ | PROT_WRITE,
+			       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+		if (newcode == MAP_FAILED)
+			goto error;
+
+		memcpy(newcode, funcinst->code, funcinst->code_size);
+
+		free(funcinst->code);
+		funcinst->code = newcode;
+	}
+
+	/* resolve references */
+	for (i = 0; i < store->funcs.n_elts; ++i) {
+		size_t j;
+		struct FuncInst *funcinst = &store->funcs.elts[i];
+
+		if (funcinst->is_host)
+			continue;
+
+		for (j = 0; j < funcinst->memrefs.n_elts; ++j) {
+			uint64_t val;
+			struct MemoryReferenceElt *melt = &funcinst->memrefs.elts[j];
+
+			assert(sizeof(uint64_t) == sizeof(uintptr_t));
+
+			switch (melt->type) {
+			case MEMREF_CALL:
+				{
+					struct FuncInst *finst = &store->funcs.elts[melt->addr];
+					val = (uintptr_t) finst->code;
+					break;
+				}
+			case MEMREF_MEM:
+			case MEMREF_MEM_ADDR:
+			case MEMREF_MEM_SIZE:
+				{
+					struct MemInst *minst = &store->mems.elts[melt->addr];
+					val =
+						melt->type == MEMREF_MEM_ADDR ? (uintptr_t) &minst->size :
+						melt->type == MEMREF_MEM_SIZE ? (uintptr_t) &minst->data :
+						(uintptr_t) minst;
+					break;
+				}
+			case MEMREF_MEM_BOX:
+				{
+					val = (uintptr_t) &meminst_box;
+
+					break;
+				}
+			default:
+				assert(0);
+				break;
+			}
+
+			encode_le_uint64_t(val, &((char *)funcinst->code)[melt->code_offset]);
+		}
+	}
+
+	/* mark code executable only */
+	for (i = 0; i < store->funcs.n_elts; ++i) {
+		struct FuncInst *funcinst = &store->funcs.elts[i];
+
+		if (funcinst->is_host)
+			continue;
+
+		if (mprotect(funcinst->code, funcinst->code_size, PROT_READ | PROT_EXEC))
+			goto error;
+	}
+
+	/* TODO: make more generic invocation mechanism */
+
+	/* execute function */
+	if (n_args) {
+		goto error;
+	}
+
+	if (store->funcs.elts[startaddr].type.n_outputs == 0) {
+		void (*fptr)() = store->funcs.elts[startaddr].code;
+		fptr();
+	}
+	else if	(store->funcs.elts[startaddr].type.n_outputs == 1 &&
+		 store->funcs.elts[startaddr].type.output_types[0] == VALTYPE_I32) {
+		int (*fptr)() = store->funcs.elts[startaddr].code;
+		uint32_t lret;
+		lret = fptr();
+		if (ret) {
+			ret->type = VALTYPE_I32;
+			ret->data.i32 = lret;
+		}
+	}
+	else {
+		goto error;
+	}
+
+	return 1;
+
+ error:
+	/* TODO: cleanup on error */
+	assert(0);
 	return 0;
 }

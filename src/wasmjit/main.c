@@ -144,7 +144,7 @@ int main(int argc, char *argv[])
 
 	/* execute module */
 	if (module.start_section.has_start) {
-		if (!wasmjit_execute(&store, startaddr))
+		if (!wasmjit_execute(&store, startaddr, NULL, 0, NULL))
 			return -1;
 	}
 
