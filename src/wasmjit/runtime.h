@@ -37,6 +37,8 @@ struct MemoryReferences {
 			MEMREF_CALL,
 			MEMREF_MEM_ADDR,
 			MEMREF_MEM_SIZE,
+			MEMREF_MEM,
+			MEMREF_MEM_BOX,
 		} type;
 		size_t code_offset;
 		size_t addr;
@@ -106,7 +108,5 @@ int wasmjit_import_function(struct Store *store,
 			    size_t n_inputs,
 			    unsigned *input_types,
 			    size_t n_outputs, unsigned *output_types);
-
-void *wasmjit_get_base_address();
 
 #endif

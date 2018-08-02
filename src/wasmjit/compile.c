@@ -515,6 +515,41 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					OUTB(stack_offset);
 				}
 
+				/* set memory base address in known location */
+				/* movq $const, %rax */
+				{
+					size_t memref_idx;
+
+					memref_idx = memrefs->n_elts;
+					if (!memrefs_grow(memrefs, 1))
+						goto error;
+
+					memrefs->elts[memref_idx].type =
+					    MEMREF_MEM;
+					memrefs->elts[memref_idx].code_offset =
+					    output->n_elts + 2;
+					memrefs->elts[memref_idx].addr =
+					    module->memaddrs.elts[0];
+
+					OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
+				}
+
+				/* movq %rax, (const) */
+				{
+					size_t memref_idx;
+
+					memref_idx = memrefs->n_elts;
+					if (!memrefs_grow(memrefs, 1))
+						goto error;
+
+					memrefs->elts[memref_idx].type =
+					    MEMREF_MEM_BOX;
+					memrefs->elts[memref_idx].code_offset =
+					    output->n_elts + 2;
+
+					OUTS("\x48\xa3\x90\x90\x90\x90\x90\x90\x90\x90");
+				}
+
 				/* movq $const, %rax */
 				{
 					size_t memref_idx;

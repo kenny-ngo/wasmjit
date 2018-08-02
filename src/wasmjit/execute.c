@@ -26,11 +26,28 @@
 
 #include <wasmjit/util.h>
 
+#include <pthread.h>
+
 __attribute__ ((unused))
 static void encode_le_uint64_t(uint64_t val, char *buf)
 {
 	uint64_t le_val = uint64_t_swap_bytes(val);
 	memcpy(buf, &le_val, sizeof(le_val));
+}
+
+pthread_key_t meminst_key;
+
+__attribute__((constructor))
+static void init_meminst_key() {
+	if (pthread_key_create(&meminst_key, NULL))
+		abort();
+}
+
+void *wasmjit_get_base_address()
+{
+	struct MemInst **mb = pthread_getspecific(meminst_key);
+	if (!mb) return NULL;
+	return (*mb)->data;
 }
 
 int wasmjit_execute(const struct Store *store, size_t startaddr)

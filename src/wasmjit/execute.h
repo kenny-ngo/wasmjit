@@ -29,4 +29,6 @@
 
 int wasmjit_execute(const struct Store *store, size_t startaddr);
 
+void *wasmjit_get_base_address();
+
 #endif
