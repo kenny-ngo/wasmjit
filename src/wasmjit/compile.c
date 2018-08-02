@@ -515,7 +515,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					OUTB(stack_offset);
 				}
 
-				/* call <addr> */
+				/* movq $const, %rax */
 				{
 					size_t memref_idx;
 
@@ -525,14 +525,15 @@ static int wasmjit_compile_instructions(const struct Store *store,
 
 					memrefs->elts[memref_idx].type =
 					    MEMREF_CALL;
-					memrefs->elts[memref_idx].extra_offset =
-					    4;
 					memrefs->elts[memref_idx].code_offset =
-					    output->n_elts + 1;
+					    output->n_elts + 2;
 					memrefs->elts[memref_idx].addr = faddr;
 
-					OUTS("\xe8\x90\x90\x90\x90");
+					OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
 				}
+
+				/* call *%rax */
+				OUTS("\xff\xd0");
 
 				/* clean up stack */
 				/* add (n_stack + n_inputs) * 8, %rsp */
@@ -688,8 +689,6 @@ static int wasmjit_compile_instructions(const struct Store *store,
 
 					memrefs->elts[memref_idx].type =
 					    MEMREF_MEM_SIZE;
-					memrefs->elts[memref_idx].extra_offset =
-					    0;
 					memrefs->elts[memref_idx].code_offset =
 					    output->n_elts - 8;
 					memrefs->elts[memref_idx].addr =
@@ -722,8 +721,6 @@ static int wasmjit_compile_instructions(const struct Store *store,
 
 					memrefs->elts[memref_idx].type =
 					    MEMREF_MEM_ADDR;
-					memrefs->elts[memref_idx].extra_offset =
-					    0;
 					memrefs->elts[memref_idx].code_offset =
 					    output->n_elts - 8;
 					memrefs->elts[memref_idx].addr =

@@ -38,7 +38,6 @@ struct MemoryReferences {
 			MEMREF_MEM_ADDR,
 			MEMREF_MEM_SIZE,
 		} type;
-		size_t extra_offset;
 		size_t code_offset;
 		size_t addr;
 	} *elts;
