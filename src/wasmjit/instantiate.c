@@ -33,6 +33,16 @@
 
 #define WASM_PAGE_SIZE ((size_t) (64 * 1024))
 
+static int typelist_equal(size_t nelts, unsigned *elts,
+			  size_t onelts, unsigned *oelts) {
+	size_t i;
+	if (nelts != onelts) return 0;
+	for (i = 0; i < nelts; ++i) {
+		if (elts[i] != oelts[i]) return 0;
+	}
+	return 1;
+}
+
 int wasmjit_instantiate(const char *module_name,
 			const struct Module *module,
 			struct Store *store)
@@ -65,9 +75,23 @@ int wasmjit_instantiate(const char *module_name,
 			}
 
 			switch (entry->type) {
-			case IMPORT_DESC_TYPE_FUNC:
+			case IMPORT_DESC_TYPE_FUNC: {
+				assert(entry->addr < store->funcs.n_elts);
+				struct FuncInst *funcinst = &store->funcs.elts[entry->addr];
+				struct TypeSectionType *type = &module->type_section.types[import->desc.typeidx];
+				if (!typelist_equal(type->n_inputs, type->input_types,
+						    funcinst->type.n_inputs,
+						    funcinst->type.input_types))
+					goto error;
+
+				if (!typelist_equal(type->n_outputs, type->output_types,
+						    funcinst->type.n_outputs,
+						    funcinst->type.output_types))
+					goto error;
+
 				addrs = &module_inst->funcaddrs;
 				break;
+			}
 			case IMPORT_DESC_TYPE_TABLE:
 				addrs = &module_inst->tableaddrs;
 				break;
