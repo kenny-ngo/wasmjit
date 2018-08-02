@@ -63,7 +63,7 @@ int wasmjit_instantiate(const char *module_name,
 		/* look for import */
 		for (j = 0; j < store->names.n_elts; ++j) {
 			struct Addrs *addrs;
-			struct NamespaceEntry *entry = &store->names.elts[i];
+			struct NamespaceEntry *entry = &store->names.elts[j];
 			if (strcmp(entry->module_name, import->module) ||
 			    strcmp(entry->name, import->name))
 				continue;
