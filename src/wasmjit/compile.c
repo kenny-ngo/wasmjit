@@ -565,10 +565,10 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				}
 
 				/* set memory base address in known location */
-				/* movq $const, %rax */
-				{
+				if (store->funcs.elts[faddr].is_host) {
 					size_t memref_idx;
 
+					/* movq $const, %rax */
 					memref_idx = memrefs->n_elts;
 					if (!memrefs_grow(memrefs, 1))
 						goto error;
@@ -581,12 +581,8 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					    module->memaddrs.elts[0];
 
 					OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
-				}
 
-				/* movq %rax, (const) */
-				{
-					size_t memref_idx;
-
+					/* movq %rax, (const) */
 					memref_idx = memrefs->n_elts;
 					if (!memrefs_grow(memrefs, 1))
 						goto error;
