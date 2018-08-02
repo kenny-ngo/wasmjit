@@ -35,7 +35,7 @@ int wasmjit_import_function(struct Store *store,
 			    unsigned *input_types,
 			    size_t n_outputs, unsigned *output_types)
 {
-	size_t funcaddr = store->funcs.n_elts - 1;
+	size_t funcaddr = store->funcs.n_elts;
 
 	/* add function to store */
 	if (!store_funcs_grow(&store->funcs, 1))
