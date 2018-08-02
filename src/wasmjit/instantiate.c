@@ -172,53 +172,41 @@ int wasmjit_instantiate(const char *module_name,
 
 	for (i = 0; i < module->code_section.n_codes; ++i) {
 		struct TypeSectionType *type;
-		struct FuncInst *funcinst;
 		size_t funcaddr;
 		struct Addrs *addrs = &module_inst->funcaddrs;
+		void *code;
+		size_t code_size;
+		struct MemoryReferences memrefs = {0, NULL};
 
 		type =
 		    &module->type_section.types[module->
 						function_section.typeidxs[i]];
-		funcaddr = store->funcs.n_elts;
 
-		if (!store_funcs_grow(&store->funcs, 1))
+		code = wasmjit_compile_code(store,
+					    module_inst,
+					    type,
+					    &module->
+					    code_section.codes[i],
+					    &memrefs,
+					    &code_size);
+		if (!code) {
+			snprintf(why, sizeof(why), "compile failed");
 			goto error;
+		}
 
-		funcinst = &store->funcs.elts[funcaddr];
-
-		memset(funcinst, 0, sizeof(*funcinst));
-
-		funcinst->type.n_inputs = type->n_inputs;
-		funcinst->type.input_types =
-		    wasmjit_copy_buf(type->input_types,
-				     type->n_inputs,
-				     sizeof(type->input_types[0]));
-		if (!funcinst->type.input_types)
-			goto error;
-		funcinst->type.n_outputs = type->n_outputs;
-		funcinst->type.output_types =
-		    wasmjit_copy_buf(type->output_types,
-				     type->n_outputs,
-				     sizeof(type->output_types[0]));
-		if (!funcinst->type.output_types)
+		funcaddr = _wasmjit_add_function_to_store(store, code, code_size,
+							  type->n_inputs,
+							  type->input_types,
+							  type->n_outputs,
+							  type->output_types,
+							  memrefs);
+		if (funcaddr == INVALID_ADDR)
 			goto error;
 
 		if (!addrs_grow(addrs, 1))
 			goto error;
 
 		addrs->elts[addrs->n_elts - 1] = funcaddr;
-
-		funcinst->code = wasmjit_compile_code(store,
-						      module_inst,
-						      type,
-						      &module->
-						      code_section.codes[i],
-						      &funcinst->memrefs,
-						      &funcinst->code_size);
-		if (!funcinst->code) {
-			snprintf(why, sizeof(why), "compile failed");
-			goto error;
-		}
 	}
 
 	for (i = 0; i < module->export_section.n_exports; ++i) {

@@ -116,6 +116,12 @@ static DEFINE_VECTOR_GROW(store_mems, struct StoreMems);
 
 wasmjit_addr_t _wasmjit_add_memory_to_store(struct Store *store,
 					    size_t size, size_t max);
+wasmjit_addr_t _wasmjit_add_function_to_store(struct Store *store,
+					      void *code, size_t code_size,
+					      size_t n_inputs,
+					      unsigned *input_types,
+					      size_t n_outputs, unsigned *output_types,
+					      struct MemoryReferences memrefs);
 int _wasmjit_add_to_namespace(struct Store *store,
 			      const char *module_name,
 			      const char *name,

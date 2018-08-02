@@ -62,6 +62,48 @@ wasmjit_addr_t _wasmjit_add_memory_to_store(struct Store *store,
 	return INVALID_ADDR;
 }
 
+wasmjit_addr_t _wasmjit_add_function_to_store(struct Store *store,
+					      void *code, size_t code_size,
+					      size_t n_inputs,
+					      unsigned *input_types,
+					      size_t n_outputs, unsigned *output_types,
+					      struct MemoryReferences memrefs)
+{
+	struct FuncInst *funcinst;
+	wasmjit_addr_t funcaddr = store->funcs.n_elts;
+
+	if (!store_funcs_grow(&store->funcs, 1))
+		goto error;
+
+	funcinst = &store->funcs.elts[funcaddr];
+
+	funcinst->type.n_inputs = n_inputs;
+	funcinst->type.input_types =
+		wasmjit_copy_buf(input_types,
+				 n_inputs,
+				 sizeof(input_types[0]));
+	if (!funcinst->type.input_types)
+		goto error;
+	funcinst->type.n_outputs = n_outputs;
+	funcinst->type.output_types =
+		wasmjit_copy_buf(output_types,
+				 n_outputs,
+				 sizeof(output_types[0]));
+	if (!funcinst->type.output_types)
+		goto error;
+
+	funcinst->code = code;
+	funcinst->code_size = code_size;
+	funcinst->memrefs = memrefs;
+
+	return funcaddr;
+
+ error:
+	/* TODO: implement cleanup */
+	assert(0);
+	return INVALID_ADDR;
+}
+
 int _wasmjit_add_to_namespace(struct Store *store,
 			      const char *module_name,
 			      const char *name,
@@ -124,37 +166,16 @@ int wasmjit_import_function(struct Store *store,
 			    unsigned *input_types,
 			    size_t n_outputs, unsigned *output_types)
 {
-	size_t funcaddr = store->funcs.n_elts;
+	wasmjit_addr_t funcaddr;
+	struct MemoryReferences m = {0, NULL};
 
-	/* add function to store */
-	if (!store_funcs_grow(&store->funcs, 1))
+	funcaddr = _wasmjit_add_function_to_store(store,
+						  funcptr, 0,
+						  n_inputs, input_types,
+						  n_outputs, output_types,
+						  m);
+	if (funcaddr == INVALID_ADDR)
 		goto error;
-
-	{
-		struct FuncInst *funcinst;
-
-		funcinst = &store->funcs.elts[funcaddr];
-
-		memset(funcinst, 0, sizeof(*funcinst));
-
-		funcinst->code_size = 0;
-
-		funcinst->type.n_inputs = n_inputs;
-		funcinst->type.input_types =
-		    wasmjit_copy_buf(input_types,
-				     n_inputs, sizeof(input_types[0]));
-		if (!funcinst->type.input_types)
-			goto error;
-
-		funcinst->type.n_outputs = n_outputs;
-		funcinst->type.output_types =
-		    wasmjit_copy_buf(output_types,
-				     n_outputs, sizeof(output_types[0]));
-		if (!funcinst->type.output_types)
-			goto error;
-
-		funcinst->code = funcptr;
-	}
 
 	/* now add it to namespace */
 	if (!_wasmjit_add_to_namespace(store, module_name, name,
