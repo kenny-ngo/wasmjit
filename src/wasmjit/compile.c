@@ -982,8 +982,13 @@ char *wasmjit_compile_code(const struct Store *store,
 
 	/* output epilogue */
 
-	/* pop %rax */
-	OUTS("\x58");
+	if (type->n_outputs) {
+		assert(type->n_outputs == 1);
+		assert(peek_stack(&sstack) == type->output_types[0]);
+		pop_stack(&sstack);
+		/* pop %rax */
+		OUTS("\x58");
+	}
 
 	/* add $(8 * (n_frame_locals)), %rsp */
 	OUTS("\x48\x83\xc4");
