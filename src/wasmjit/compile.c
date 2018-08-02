@@ -655,12 +655,13 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				goto error;
 			OUTS("\x5e");
 
-			if (instructions[i].data.i32_load.offset) {
-				/* LOGIC: ea += memarg.offset */
+			if (4 + instructions[i].data.i32_load.offset != 0) {
+				/* LOGIC: ea += memarg.offset + 4 */
 
 				/* add <VAL>, %esi */
 				OUTS("\x81\xc6");
-				encode_le_uint32_t(instructions[i].
+				encode_le_uint32_t(4 +
+						   instructions[i].
 						   data.i32_load.offset, buf);
 				if (!output_buf(output, buf, sizeof(uint32_t)))
 					goto error;
@@ -672,10 +673,10 @@ static int wasmjit_compile_instructions(const struct Store *store,
 			}
 
 			{
-				/* LOGIC: max = store->mems.elts[maddr].max - 4 */
+				/* LOGIC: size = store->mems.elts[maddr].size */
 
-				/* movq $const, %edi */
-				OUTS("\x48\xc7\xc7\x90\x90\x90\x90");
+				/* movq (const), %eax */
+				OUTS("\x48\x90\x90\x90\x90\x90\x90\x90\x90");
 
 				/* add reference to max */
 				{
@@ -686,19 +687,19 @@ static int wasmjit_compile_instructions(const struct Store *store,
 						goto error;
 
 					memrefs->elts[memref_idx].type =
-					    MEMREF_MEM_MAX;
+					    MEMREF_MEM_SIZE;
 					memrefs->elts[memref_idx].extra_offset =
 					    0;
 					memrefs->elts[memref_idx].code_offset =
-					    output->n_elts - 4;
+					    output->n_elts - 8;
 					memrefs->elts[memref_idx].addr =
 					    module->memaddrs.elts[0];
 				}
 
-				/* LOGIC: if ea > max then trap() */
+				/* LOGIC: if ea > size then trap() */
 
-				/* cmp %edi, %esi */
-				OUTS("\x39\xfe");
+				/* cmp %eax, %esi */
+				OUTS("\x39\xc6");
 
 				/* jle AFTER_TRAP: */
 				/* int $4 */
@@ -708,8 +709,8 @@ static int wasmjit_compile_instructions(const struct Store *store,
 
 			/* LOGIC: data = store->mems.elts[maddr].data */
 			{
-				/* movq $data, %rdi */
-				OUTS("\x48\xbf\x90\x90\x90\x90\x90\x90\x90\x90");
+				/* movq (const), %eax */
+				OUTS("\x48\x90\x90\x90\x90\x90\x90\x90\x90");
 
 				/* add reference to data */
 				{
@@ -730,13 +731,13 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				}
 			}
 
-			/* LOGIC: push_stack(data[ea]) */
+			/* LOGIC: push_stack(data[ea - 4]) */
 
-			/* movl (%rdi, %rsi), %esi */
-			OUTS("\x8b\x34\x37");
+			/* movl -4(%rax, %rsi), %eax */
+			OUTS("\x8b\x44\x30\xfc");
 
-			/* push %rsi */
-			OUTS("\x56");
+			/* push %rax */
+			OUTS("\x50");
 			if (!push_stack(sstack, STACK_I32))
 				goto error;
 

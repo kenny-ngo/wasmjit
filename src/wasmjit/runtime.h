@@ -36,7 +36,7 @@ struct MemoryReferences {
 		enum {
 			MEMREF_CALL,
 			MEMREF_MEM_ADDR,
-			MEMREF_MEM_MAX,
+			MEMREF_MEM_SIZE,
 		} type;
 		size_t extra_offset;
 		size_t code_offset;
