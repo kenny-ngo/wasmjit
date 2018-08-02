@@ -69,7 +69,7 @@ int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 		struct FuncInst *funcinst = &store->funcs.elts[i];
 		void *newcode;
 
-		if (funcinst->is_host)
+		if (IS_HOST(funcinst))
 			continue;
 
 		newcode = mmap(NULL, funcinst->code_size, PROT_READ | PROT_WRITE,
@@ -88,7 +88,7 @@ int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 		size_t j;
 		struct FuncInst *funcinst = &store->funcs.elts[i];
 
-		if (funcinst->is_host)
+		if (IS_HOST(funcinst))
 			continue;
 
 		for (j = 0; j < funcinst->memrefs.n_elts; ++j) {
@@ -134,7 +134,7 @@ int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 	for (i = 0; i < store->funcs.n_elts; ++i) {
 		struct FuncInst *funcinst = &store->funcs.elts[i];
 
-		if (funcinst->is_host)
+		if (IS_HOST(funcinst))
 			continue;
 
 		if (mprotect(funcinst->code, funcinst->code_size, PROT_READ | PROT_EXEC))

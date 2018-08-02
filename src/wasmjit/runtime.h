@@ -57,6 +57,8 @@ struct MemoryReferences {
 __attribute__ ((unused))
 static DEFINE_VECTOR_GROW(memrefs, struct MemoryReferences);
 
+#define IS_HOST(funcinst) (!(funcinst)->code_size)
+
 struct Store {
 	struct Namespace {
 		size_t n_elts;
@@ -76,7 +78,6 @@ struct Store {
 				size_t n_outputs;
 				unsigned *output_types;
 			} type;
-			int is_host;
 			void *code;
 			size_t code_size;
 			struct MemoryReferences memrefs;

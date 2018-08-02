@@ -565,7 +565,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				}
 
 				/* set memory base address in known location */
-				if (store->funcs.elts[faddr].is_host) {
+				if (IS_HOST(&store->funcs.elts[faddr])) {
 					size_t memref_idx;
 
 					/* movq $const, %rax */

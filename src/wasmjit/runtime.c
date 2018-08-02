@@ -48,7 +48,7 @@ int wasmjit_import_function(struct Store *store,
 
 		memset(funcinst, 0, sizeof(*funcinst));
 
-		funcinst->is_host = 1;
+		funcinst->code_size = 0;
 
 		funcinst->type.n_inputs = n_inputs;
 		funcinst->type.input_types =
