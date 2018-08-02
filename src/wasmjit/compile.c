@@ -111,6 +111,7 @@ static unsigned peek_stack(struct StaticStack *sstack)
 
 static int pop_stack(struct StaticStack *sstack)
 {
+	assert(sstack->n_elts);
 	return stack_truncate(sstack, sstack->n_elts - 1);
 }
 
