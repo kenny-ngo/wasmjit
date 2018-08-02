@@ -36,7 +36,7 @@ void *wasmjit_vector_set_size(void *elts, size_t *n_elts, size_t new_n_elts,
 	}
 
 	newstackelts = realloc(elts, total_elt_size);
-	if (!newstackelts)
+	if (!newstackelts && total_elt_size)
 		goto error;
 
 	*n_elts = new_n_elts;
