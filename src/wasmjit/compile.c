@@ -938,8 +938,10 @@ char *wasmjit_compile_code(const struct Store *store,
 		OUTS("\x48\x89\xe5");
 
 		/* sub $(8 * (n_frame_locals)), %rsp */
-		OUTS("\x48\x83\xec");
-		OUTB(8 * n_frame_locals);
+		if (n_frame_locals) {
+			OUTS("\x48\x83\xec");
+			OUTB(8 * n_frame_locals);
+		}
 
 		/* push args to stack */
 		for (i = 0; i < type->n_inputs; ++i) {
@@ -1025,8 +1027,10 @@ char *wasmjit_compile_code(const struct Store *store,
 	}
 
 	/* add $(8 * (n_frame_locals)), %rsp */
-	OUTS("\x48\x83\xc4");
-	OUTB(8 * n_frame_locals);
+	if (n_frame_locals) {
+		OUTS("\x48\x83\xc4");
+		OUTB(8 * n_frame_locals);
+	}
 
 	/* pop %rbp */
 	OUTS("\x5d");
