@@ -648,13 +648,15 @@ int read_instruction(struct ParseState *pstate, struct Instr *instr,
 		if (!ret)
 			goto error;
 
-		ret =
-		    read_instructions(pstate,
-				      &instr->data.if_.instructions_else,
-				      &instr->data.if_.n_instructions_else, 0,
-				      1);
-		if (!ret)
-			goto error;
+		if (ret == ELSE_TERMINAL) {
+			ret =
+				read_instructions(pstate,
+						  &instr->data.if_.instructions_else,
+						  &instr->data.if_.n_instructions_else, 0,
+						  1);
+			if (!ret)
+				goto error;
+		}
 
 		break;
 	case OPCODE_BR:
@@ -1019,12 +1021,12 @@ int read_instructions(struct ParseState *pstate,
 		      size_t *n_instructions, int allow_else,
 		      int allow_block)
 {
+	int ret = 0;
 	*instructions = NULL;
 
 	assert(!*n_instructions);
 
 	while (1) {
-		int ret;
 		struct Instr instruction, *next_instructions;
 		size_t new_len;
 
@@ -1036,6 +1038,7 @@ int read_instructions(struct ParseState *pstate,
 
 		if (instruction.opcode == BLOCK_TERMINAL
 		    || instruction.opcode == ELSE_TERMINAL) {
+			ret = instruction.opcode;
 			free_instruction(&instruction);
 			break;
 		}
@@ -1060,7 +1063,8 @@ int read_instructions(struct ParseState *pstate,
 		*n_instructions = new_len;
 	}
 
-	return 1;
+	assert(ret);
+	return ret;
 
  error:
 	if (*instructions) {
