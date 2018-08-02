@@ -151,6 +151,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					struct BranchPoints *branches,
 					struct MemoryReferences *memrefs,
 					char *locals_fp_offset,
+					int n_frame_locals,
 					struct StaticStack *sstack)
 {
 	char buf[0x100];
@@ -214,6 +215,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 							     output, labels,
 							     branches, memrefs,
 							     locals_fp_offset,
+							     n_frame_locals,
 							     sstack);
 
 				/* shift stack results over label */
@@ -440,7 +442,8 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				size_t n_inputs =
 				    store->funcs.elts[faddr].type.n_inputs;
 				size_t i;
-				size_t n_movs = 0, n_xmm_movs = 0, n_stack = 0;
+				size_t n_movs, n_xmm_movs, n_stack;
+				int aligned = 0;
 
 				static const char *const movs[] = {
 					"\x48\x8b\x7c\x24",	/* mov N(%rsp), %rdi */
@@ -473,6 +476,52 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					"\xf2\x0f\x10\x7c\x24",	/* movsd N(%rsp), %xmm7 */
 				};
 
+				/* align stack to 16-byte boundary */
+				{
+					size_t cur_stack_depth = n_frame_locals;
+
+					/* add current stack depth */
+					for (i = sstack->n_elts; i;) {
+						i -= 1;
+						if (sstack->elts[i].type != STACK_LABEL) {
+							cur_stack_depth += 1;
+						}
+					}
+
+					/* add stack contribution from spilled arguments */
+					n_movs = 0;
+					n_xmm_movs = 0;
+					for (i = 0; i < n_inputs; ++i) {
+						if ((store->funcs.elts[faddr].type.
+						     input_types[i] == VALTYPE_I32
+						     || store->funcs.elts[faddr].type.
+						     input_types[i] == VALTYPE_I64)
+						    && n_movs < 6) {
+							n_movs += 1;
+						} else if (store->funcs.elts[faddr].
+							   type.input_types[i] ==
+							   VALTYPE_F32
+							   && n_xmm_movs < 8) {
+							n_xmm_movs += 1;
+						} else if (store->funcs.elts[faddr].
+							   type.input_types[i] ==
+							   VALTYPE_F64
+							   && n_xmm_movs < 8) {
+							n_xmm_movs += 1;
+						} else {
+							cur_stack_depth += 1;
+						}
+					}
+
+
+					aligned = cur_stack_depth % 2;
+					if (aligned)
+						OUTS("\x48\x83\xec\x08");
+				}
+
+				n_movs = 0;
+				n_xmm_movs = 0;
+				n_stack = 0;
 				for (i = 0; i < n_inputs; ++i) {
 					intmax_t stack_offset;
 					assert(sstack->
@@ -482,7 +531,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					       input_types[i]);
 
 					stack_offset =
-					    (n_inputs - i - 1 + n_stack) * 8;
+					    (n_inputs - i - 1 + n_stack + aligned) * 8;
 					if (stack_offset > 127
 					    || stack_offset < -128)
 						goto error;
@@ -571,9 +620,9 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				OUTS("\xff\xd0");
 
 				/* clean up stack */
-				/* add (n_stack + n_inputs) * 8, %rsp */
+				/* add (n_stack + n_inputs + aligned) * 8, %rsp */
 				OUTS("\x48\x81\xc4");
-				encode_le_uint32_t((n_stack + n_inputs) * 8,
+				encode_le_uint32_t((n_stack + n_inputs + aligned) * 8,
 						   buf);
 				if (!output_buf(output, buf, sizeof(uint32_t)))
 					goto error;
@@ -995,7 +1044,7 @@ char *wasmjit_compile_code(const struct Store *store,
 	wasmjit_compile_instructions(store, module, type, code,
 				     code->instructions, code->n_instructions,
 				     output, &labels, &branches, memrefs,
-				     locals_fp_offset, &sstack);
+				     locals_fp_offset, n_frame_locals, &sstack);
 
 	/* fix branch points */
 	{
