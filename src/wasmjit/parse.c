@@ -594,9 +594,10 @@ int read_memory_section(struct ParseState *pstate,
 	return 0;
 }
 
-struct Instr *read_instructions(struct ParseState *pstate,
-				size_t *n_instructions, int allow_else,
-				int allow_block);
+int read_instructions(struct ParseState *pstate,
+		      struct Instr **instructions,
+		      size_t *n_instructions, int allow_else,
+		      int allow_block);
 
 int read_instruction(struct ParseState *pstate, struct Instr *instr,
 		     int allow_else, int allow_block)
@@ -628,9 +629,9 @@ int read_instruction(struct ParseState *pstate, struct Instr *instr,
 		if (!ret)
 			goto error;
 
-		block->instructions =
-		    read_instructions(pstate, &block->n_instructions, 0, 1);
-		if (!block->instructions)
+		ret = read_instructions(pstate, &block->instructions,
+					&block->n_instructions, 0, 1);
+		if (!ret)
 			goto error;
 
 		break;
@@ -639,18 +640,20 @@ int read_instruction(struct ParseState *pstate, struct Instr *instr,
 		if (!ret)
 			goto error;
 
-		instr->data.if_.instructions_then =
+		ret =
 		    read_instructions(pstate,
+				      &instr->data.if_.instructions_then,
 				      &instr->data.if_.n_instructions_then, 1,
 				      1);
-		if (!instr->data.if_.instructions_then)
+		if (!ret)
 			goto error;
 
-		instr->data.if_.instructions_else =
+		ret =
 		    read_instructions(pstate,
+				      &instr->data.if_.instructions_else,
 				      &instr->data.if_.n_instructions_else, 0,
 				      1);
-		if (!instr->data.if_.instructions_else)
+		if (!ret)
 			goto error;
 
 		break;
@@ -1011,11 +1014,12 @@ int read_instruction(struct ParseState *pstate, struct Instr *instr,
 	return 0;
 }
 
-struct Instr *read_instructions(struct ParseState *pstate,
-				size_t *n_instructions, int allow_else,
-				int allow_block)
+int read_instructions(struct ParseState *pstate,
+		      struct Instr **instructions,
+		      size_t *n_instructions, int allow_else,
+		      int allow_block)
 {
-	struct Instr *instructions = NULL;
+	*instructions = NULL;
 
 	assert(!*n_instructions);
 
@@ -1044,7 +1048,7 @@ struct Instr *read_instructions(struct ParseState *pstate,
 			goto error;
 		}
 
-		next_instructions = realloc(instructions, size);
+		next_instructions = realloc(*instructions, size);
 		if (!next_instructions) {
 			free_instruction(&instruction);
 			goto error;
@@ -1052,17 +1056,17 @@ struct Instr *read_instructions(struct ParseState *pstate,
 
 		next_instructions[new_len - 1] = instruction;
 
-		instructions = next_instructions;
+		*instructions = next_instructions;
 		*n_instructions = new_len;
 	}
 
-	return instructions;
+	return 1;
 
  error:
-	if (instructions) {
-		free_instructions(instructions, *n_instructions);
+	if (*instructions) {
+		free_instructions(*instructions, *n_instructions);
 	}
-	return NULL;
+	return 0;
 }
 
 int read_global_section(struct ParseState *pstate,
@@ -1093,11 +1097,12 @@ int read_global_section(struct ParseState *pstate,
 			if (!ret)
 				goto error;
 
-			global->instructions = read_instructions(pstate,
-								 &global->
-								 n_instructions,
-								 0, 1);
-			if (!global->instructions) {
+			ret = read_instructions(pstate,
+						&global->instructions,
+						&global->
+						n_instructions,
+						0, 1);
+			if (!ret) {
 				goto error;
 			}
 		}
@@ -1199,10 +1204,11 @@ int read_element_section(struct ParseState *pstate,
 			if (!ret)
 				goto error;
 
-			element->instructions =
+			ret =
 			    read_instructions(pstate,
+					      &element->instructions,
 					      &element->n_instructions, 0, 1);
-			if (!element->instructions)
+			if (!ret)
 				goto error;
 
 			ret = read_uleb_uint32_t(pstate, &element->n_funcidxs);
@@ -1312,10 +1318,11 @@ int read_code_section(struct ParseState *pstate,
 				}
 			}
 
-			code->instructions =
+			ret =
 			    read_instructions(pstate,
+					      &code->instructions,
 					      &code->n_instructions, 0, 1);
-			if (!code->instructions)
+			if (!ret)
 				goto error;
 		}
 	}
@@ -1369,10 +1376,11 @@ int read_data_section(struct ParseState *pstate,
 			if (!ret)
 				goto error;
 
-			data->instructions =
+			ret =
 			    read_instructions(pstate,
+					      &data->instructions,
 					      &data->n_instructions, 0, 1);
-			if (!data->instructions)
+			if (!ret)
 				goto error;
 
 			data->buf = read_buffer(pstate, &data->buf_size);
