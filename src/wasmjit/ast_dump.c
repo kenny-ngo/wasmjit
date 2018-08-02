@@ -96,6 +96,9 @@ void dump_instruction(const struct Instr *instruction, int indent)
 		printf("%*scall 0x%" PRIx32 "\n", sps, "",
 		       instruction->data.call.funcidx);
 		break;
+	case OPCODE_DROP:
+		printf("%*sdrop\n", sps, "");
+		break;
 	case OPCODE_GET_LOCAL:
 		printf("%*sget_local 0x%" PRIx32 "\n", sps, "",
 		       instruction->data.get_local.localidx);

@@ -564,6 +564,10 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					   output_types[0]);
 			}
 			break;
+		case OPCODE_DROP:
+			/* add $8, %rsp */
+			OUTS("\x48\x83\xc4\x08");
+			break;
 		case OPCODE_GET_LOCAL:
 			if (instructions[i].data.get_local.localidx <
 			    type->n_inputs) {
