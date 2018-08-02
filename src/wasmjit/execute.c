@@ -54,9 +54,10 @@ void *wasmjit_get_base_address()
 	return (*mb)->data;
 }
 
-int wasmjit_execute(const struct Store *store)
+int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 {
 	size_t i;
+	int ret;
 
 	struct Meminst *meminst_box;
 
@@ -152,7 +153,41 @@ int wasmjit_execute(const struct Store *store)
 		fptr();
 	}
 
-	return 0;
+	/* find main function */
+	for (i = 0; i < store->names.n_elts; ++i) {
+		struct FuncInst *funcinst;
+		struct NamespaceEntry *entry = &store->names.elts[i];
+
+		if (strcmp("env", entry->module_name) ||
+		    strcmp("main", entry->name) ||
+		    entry->type != IMPORT_DESC_TYPE_FUNC)
+			continue;
+
+		funcinst = &store->funcs.elts[entry->addr];
+		if (funcinst->type.n_outputs == 1 &&
+		    funcinst->type.output_types[0] == VALTYPE_I32) {
+			if (funcinst->type.n_inputs == 0) {
+				int (*fptr)() = funcinst->code;
+				ret = fptr();
+			} else if (funcinst->type.n_inputs == 2 &&
+				   funcinst->type.input_types[0] == VALTYPE_I32 &&
+				   funcinst->type.input_types[1] == VALTYPE_I32) {
+				int (*fptr)(int, int) = funcinst->code;
+				/* TODO: map argv into memory module of function */
+				(void) argc;
+				(void) argv;
+				ret = fptr(0, 0);
+			} else {
+				continue;
+			}
+			break;
+		}
+	}
+
+	if (i == store->names.n_elts)
+		goto error;
+
+	return ret;
 
  error:
 	/* TODO: cleanup on error */

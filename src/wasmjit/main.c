@@ -153,5 +153,6 @@ int main(int argc, char *argv[])
 	if (!wasmjit_instantiate("env", &module, &store))
 		return -1;
 
-	return wasmjit_execute(&store);
+	/* go to entry point */
+	return wasmjit_execute(&store, optind + 1, &argv[optind + 1]);
 }
