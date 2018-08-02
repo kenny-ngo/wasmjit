@@ -27,13 +27,6 @@
 #include <wasmjit/ast.h>
 #include <wasmjit/util.h>
 
-void *wasmjit_get_base_address()
-{
-	void *ret;
- asm("\t mov %%rbx,%0":"=r"(ret));
-	return ret;
-}
-
 int wasmjit_import_function(struct Store *store,
 			    const char *module_name,
 			    const char *name,
