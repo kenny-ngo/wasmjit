@@ -53,7 +53,6 @@ int main(int argc, char *argv[])
 	struct ParseState pstate;
 	struct Module module;
 	struct Store store;
-	size_t startaddr;
 	int dump_module, opt;
 
 	dump_module =  0;
@@ -151,14 +150,8 @@ int main(int argc, char *argv[])
 			return -1;
 	}
 
-	if (!wasmjit_instantiate("env", &module, &store, &startaddr))
+	if (!wasmjit_instantiate("env", &module, &store))
 		return -1;
 
-	/* execute module */
-	if (module.start_section.has_start) {
-		if (!wasmjit_execute(&store, startaddr, NULL, 0, NULL))
-			return -1;
-	}
-
-	return 0;
+	return wasmjit_execute(&store);
 }

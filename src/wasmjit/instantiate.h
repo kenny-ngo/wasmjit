@@ -30,6 +30,6 @@
 
 int wasmjit_instantiate(const char *module_name,
 			const struct Module *module,
-			struct Store *store, size_t *startaddr);
+			struct Store *store);
 
 #endif

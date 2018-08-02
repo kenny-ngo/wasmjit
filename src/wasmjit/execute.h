@@ -27,18 +27,8 @@
 
 #include <wasmjit/runtime.h>
 
-struct Value {
-	unsigned type;
-	union {
-		uint32_t i32;
-		uint64_t i64;
-		float f32;
-		double f64;
-	} data;
-};
-
 void *wasmjit_get_base_address();
 
-int wasmjit_execute(const struct Store *store, size_t startaddr, const struct Value *args, size_t n_args, struct Value *ret);
+int wasmjit_execute(const struct Store *store);
 
 #endif

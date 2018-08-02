@@ -30,6 +30,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
+
+struct Addrs {
+	size_t n_elts;
+	size_t *elts;
+};
+
+__attribute__ ((unused))
+static DEFINE_VECTOR_GROW(addrs, struct Addrs);
+
 struct MemoryReferences {
 	size_t n_elts;
 	struct MemoryReferenceElt {
@@ -90,6 +99,7 @@ struct Store {
 			uint32_t max; /* max of 0 means no max */
 		} *elts;
 	} mems;
+	struct Addrs startfuncs;
 };
 
 __attribute__ ((unused))

@@ -35,7 +35,7 @@
 
 int wasmjit_instantiate(const char *module_name,
 			const struct Module *module,
-			struct Store *store, size_t *startaddr)
+			struct Store *store)
 {
 	char why[0x100];
 	uint32_t i;
@@ -294,10 +294,13 @@ int wasmjit_instantiate(const char *module_name,
 		       data->buf_size);
 	}
 
-	/* return funcaddr of start_function */
+	/* add start function */
 	if (module->start_section.has_start) {
-		*startaddr =
-		    module_inst->funcaddrs.elts[module->start_section.funcidx];
+		if (!addrs_grow(&store->startfuncs, 1))
+			goto error;
+
+		store->startfuncs.elts[store->startfuncs.n_elts - 1] =
+			module_inst->funcaddrs.elts[module->start_section.funcidx];
 	}
 
 	return 1;

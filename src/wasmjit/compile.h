@@ -30,20 +30,12 @@
 
 #include <stddef.h>
 
-struct Addrs {
-	size_t n_elts;
-	size_t *elts;
-};
-
 struct ModuleInst {
 	struct Addrs funcaddrs;
 	struct Addrs tableaddrs;
 	struct Addrs memaddrs;
 	struct Addrs globaladdrs;
 };
-
-__attribute__ ((unused))
-static DEFINE_VECTOR_GROW(addrs, struct Addrs);
 
 char *wasmjit_compile_code(const struct Store *store,
 			   const struct ModuleInst *module,

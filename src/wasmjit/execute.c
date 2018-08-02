@@ -39,16 +39,6 @@ static void encode_le_uint64_t(uint64_t val, char *buf)
 	memcpy(buf, &le_val, sizeof(le_val));
 }
 
-int same_input_types(const unsigned *types, const struct Value *args, size_t n_args)
-{
-	size_t i;
-	for (i = 0; i < n_args; ++i) {
-		if (types[i] != args[i].type)
-			return 0;
-	}
-	return 1;
-}
-
 pthread_key_t meminst_key;
 
 __attribute__((constructor))
@@ -64,7 +54,7 @@ void *wasmjit_get_base_address()
 	return (*mb)->data;
 }
 
-int wasmjit_execute(const struct Store *store, size_t startaddr, const struct Value *args, size_t n_args, struct Value *ret)
+int wasmjit_execute(const struct Store *store)
 {
 	size_t i;
 
@@ -72,10 +62,6 @@ int wasmjit_execute(const struct Store *store, size_t startaddr, const struct Va
 
 	if (pthread_setspecific(meminst_key, &meminst_box))
 		goto error;
-
-	assert(startaddr < store->funcs.n_elts);
-	assert(store->funcs.elts[startaddr].type.n_inputs == n_args);
-	assert(same_input_types(store->funcs.elts[startaddr].type.input_types, args, n_args));
 
 	/* map all code in executable memory */
 	for (i = 0; i < store->funcs.n_elts; ++i) {
@@ -154,35 +140,22 @@ int wasmjit_execute(const struct Store *store, size_t startaddr, const struct Va
 			goto error;
 	}
 
-	/* TODO: make more generic invocation mechanism */
+	/* execute start functions */
+	for (i = 0; i < store->startfuncs.n_elts; ++i) {
+		size_t startaddr = store->startfuncs.elts[i];
 
-	/* execute function */
-	if (n_args) {
-		goto error;
-	}
+		if (store->funcs.elts[startaddr].type.n_outputs ||
+		    store->funcs.elts[startaddr].type.n_inputs)
+			goto error;
 
-	if (store->funcs.elts[startaddr].type.n_outputs == 0) {
 		void (*fptr)() = store->funcs.elts[startaddr].code;
 		fptr();
 	}
-	else if	(store->funcs.elts[startaddr].type.n_outputs == 1 &&
-		 store->funcs.elts[startaddr].type.output_types[0] == VALTYPE_I32) {
-		int (*fptr)() = store->funcs.elts[startaddr].code;
-		uint32_t lret;
-		lret = fptr();
-		if (ret) {
-			ret->type = VALTYPE_I32;
-			ret->data.i32 = lret;
-		}
-	}
-	else {
-		goto error;
-	}
 
-	return 1;
+	return 0;
 
  error:
 	/* TODO: cleanup on error */
 	assert(0);
-	return 0;
+	return -1;
 }
