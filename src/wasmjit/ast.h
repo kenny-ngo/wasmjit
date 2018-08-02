@@ -260,7 +260,6 @@ struct GlobalType {
 
 struct Limits {
 	uint32_t min, max;
-	int has_max;
 };
 
 struct Instr {

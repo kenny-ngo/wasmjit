@@ -368,13 +368,14 @@ int read_limits(struct ParseState *pstate, struct Limits *limits)
 	if (!ret)
 		return ret;
 
-	limits->has_max = byt;
-
 	switch (byt) {
 	case 0x0:
 		ret = read_uleb_uint32_t(pstate, &limits->min);
 		if (!ret)
 			return ret;
+
+		limits->max = 0;
+
 		break;
 	case 0x1:
 		ret = read_uleb_uint32_t(pstate, &limits->min);

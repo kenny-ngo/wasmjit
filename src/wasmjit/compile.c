@@ -666,7 +666,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				OUTS("\x71\x02\xcd\x04");
 			}
 
-			if (store->mems.elts[module->memaddrs.elts[0]].has_max) {
+			{
 				/* LOGIC: max = store->mems.elts[maddr].max - 4 */
 
 				/* movq $const, %edi */

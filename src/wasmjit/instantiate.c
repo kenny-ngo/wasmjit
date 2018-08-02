@@ -31,6 +31,8 @@
 
 #include <stdio.h>
 
+#define WASM_PAGE_SIZE ((size_t) (64 * 1024))
+
 int wasmjit_instantiate(const char *module_name,
 			const struct Module *module,
 			struct Store *store, size_t *startaddr)
@@ -110,12 +112,29 @@ int wasmjit_instantiate(const char *module_name,
 		if (!store_mems_grow(&store->mems, 1))
 			goto error;
 
-		/* TODO: what to do with memory->memtype.min? */
+		assert(!memory->memtype.max
+		       || memory->memtype.min <= memory->memtype.max);
 
-		store->mems.elts[memaddr].data =
-		    (char *)(intptr_t) (0xdeadbeef);
-		store->mems.elts[memaddr].max = memory->memtype.max;
-		store->mems.elts[memaddr].has_max = memory->memtype.has_max;
+		if (__builtin_umul_overflow(memory->memtype.min, WASM_PAGE_SIZE,
+					    &store->mems.elts[memaddr].size)) {
+			goto error;
+		}
+
+		if (__builtin_umul_overflow(memory->memtype.max, WASM_PAGE_SIZE,
+					    &store->mems.elts[memaddr].max)) {
+			goto error;
+		}
+#if UINT32_MAX > SIZE_MAX
+		if (store->mems.elts[memaddr].size > SIZE_MAX)
+			goto error;
+#endif
+
+		if (store->mems.elts[memaddr].size) {
+			store->mems.elts[memaddr].data =
+			    malloc(store->mems.elts[memaddr].size);
+			if (!store->mems.elts[memaddr].data)
+				goto error;
+		}
 
 		if (!addrs_grow(addrs, 1))
 			goto error;
