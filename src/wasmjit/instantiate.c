@@ -134,31 +134,24 @@ int wasmjit_instantiate(const char *module_name,
 	for (i = 0; i < module->memory_section.n_memories; ++i) {
 		struct MemorySectionMemory *memory =
 		    &module->memory_section.memories[i];
-		size_t memaddr = store->mems.n_elts;
 		struct Addrs *addrs = &module_inst->memaddrs;
-
-		if (!store_mems_grow(&store->mems, 1))
-			goto error;
+		wasmjit_addr_t memaddr;
+		size_t size, max;
 
 		assert(!memory->memtype.max
 		       || memory->memtype.min <= memory->memtype.max);
 
-		if (__builtin_umul_overflow(memory->memtype.min, WASM_PAGE_SIZE,
-					    &store->mems.elts[memaddr].size)) {
+		if (__builtin_umull_overflow(memory->memtype.min, WASM_PAGE_SIZE,
+					     &size)) {
 			goto error;
 		}
 
-		if (__builtin_umul_overflow(memory->memtype.max, WASM_PAGE_SIZE,
-					    &store->mems.elts[memaddr].max)) {
+		if (__builtin_umull_overflow(memory->memtype.max, WASM_PAGE_SIZE,
+					     &max)) {
 			goto error;
 		}
 
-		if (store->mems.elts[memaddr].size) {
-			store->mems.elts[memaddr].data =
-			    malloc(store->mems.elts[memaddr].size);
-			if (!store->mems.elts[memaddr].data)
-				goto error;
-		}
+		memaddr = _wasmjit_add_memory_to_store(store, size, max);
 
 		if (!addrs_grow(addrs, 1))
 			goto error;
@@ -231,23 +224,9 @@ int wasmjit_instantiate(const char *module_name,
 	for (i = 0; i < module->export_section.n_exports; ++i) {
 		struct ExportSectionExport *export =
 		    &module->export_section.exports[i];
-		struct NamespaceEntry *entry;
 		struct Addrs *addrs;
 
-		if (!store_names_grow(&store->names, 1))
-			goto error;
-
-		entry = &store->names.elts[store->names.n_elts - 1];
-
-		entry->module_name = strdup(module_name);
-		if (!entry->module_name)
-			goto error;
-		entry->name = strdup(export->name);
-		if (!entry->name)
-			goto error;
-		entry->type = export->idx_type;
-
-		switch (entry->type) {
+		switch (export->idx_type) {
 		case IMPORT_DESC_TYPE_FUNC:
 			addrs = &module_inst->funcaddrs;
 			break;
@@ -266,7 +245,11 @@ int wasmjit_instantiate(const char *module_name,
 		}
 
 		assert(export->idx < addrs->n_elts);
-		entry->addr = addrs->elts[export->idx];
+		if (!_wasmjit_add_to_namespace(store, module_name,
+					       export->name,
+					       export->idx_type,
+					       addrs->elts[export->idx]))
+		    goto error;
 	}
 
 	for (i = 0; i < module->data_section.n_datas; ++i) {

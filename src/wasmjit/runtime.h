@@ -30,10 +30,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+typedef size_t wasmjit_addr_t;
+#define INVALID_ADDR ((wasmjit_addr_t) -1)
 
 struct Addrs {
 	size_t n_elts;
-	size_t *elts;
+	wasmjit_addr_t *elts;
 };
 
 __attribute__ ((unused))
@@ -66,11 +68,11 @@ struct Store {
 			char *module_name;
 			char *name;
 			unsigned type;
-			size_t addr;
+			wasmjit_addr_t addr;
 		} *elts;
 	} names;
 	struct StoreFuncs {
-		size_t n_elts;
+		wasmjit_addr_t n_elts;
 		struct FuncInst {
 			struct FuncInstType {
 				size_t n_inputs;
@@ -84,7 +86,7 @@ struct Store {
 		} *elts;
 	} funcs;
 	struct TableFuncs {
-		size_t n_elts;
+		wasmjit_addr_t n_elts;
 		struct TableInst {
 			void **data;
 			int elemtype;
@@ -93,7 +95,7 @@ struct Store {
 		} *elts;
 	} tables;
 	struct StoreMems {
-		size_t n_elts;
+		wasmjit_addr_t n_elts;
 		struct MemInst {
 			char *data;
 			size_t size;
@@ -112,6 +114,14 @@ static DEFINE_VECTOR_GROW(store_tables, struct TableFuncs);
 __attribute__ ((unused))
 static DEFINE_VECTOR_GROW(store_mems, struct StoreMems);
 
+wasmjit_addr_t _wasmjit_add_memory_to_store(struct Store *store,
+					    size_t size, size_t max);
+int _wasmjit_add_to_namespace(struct Store *store,
+			      const char *module_name,
+			      const char *name,
+			      unsigned type,
+			      wasmjit_addr_t addr);
+
 int wasmjit_import_function(struct Store *store,
 			    const char *module_name,
 			    const char *name,
@@ -119,5 +129,10 @@ int wasmjit_import_function(struct Store *store,
 			    size_t n_inputs,
 			    unsigned *input_types,
 			    size_t n_outputs, unsigned *output_types);
+
+int wasmjit_import_memory(struct Store *store,
+			  const char *module_name,
+			  const char *name,
+			  size_t size, size_t max);
 
 #endif

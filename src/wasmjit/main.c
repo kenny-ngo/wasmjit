@@ -143,6 +143,7 @@ int main(int argc, char *argv[])
 	{
 		unsigned inputs[3] = { VALTYPE_I32, VALTYPE_I32, VALTYPE_I32 };
 		unsigned outputs[1] = { VALTYPE_I32 };
+
 		if (!wasmjit_import_function(&store,
 					     "env", "write",
 					     write_callback,
