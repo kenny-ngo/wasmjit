@@ -54,13 +54,25 @@ int main(int argc, char *argv[])
 	struct Module module;
 	struct Store store;
 	size_t startaddr;
+	int dump_module, opt;
 
-	if (argc < 2) {
+	dump_module =  0;
+	while ((opt = getopt(argc, argv, "d")) != -1) {
+		switch (opt) {
+		case 'd':
+			dump_module = 1;
+			break;
+		default:
+			return -1;
+		}
+	}
+
+	if (optind >= argc) {
 		printf("Need an input file\n");
 		return -1;
 	}
 
-	ret = init_pstate(&pstate, argv[1]);
+	ret = init_pstate(&pstate, argv[optind]);
 	if (!ret) {
 		printf("Error loading file %s\n", strerror(errno));
 		return -1;
@@ -72,7 +84,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	if (1) {
+	if (dump_module) {
 		uint32_t i;
 
 		for (i = 0; i < module.code_section.n_codes; ++i) {
