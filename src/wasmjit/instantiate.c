@@ -185,7 +185,7 @@ int wasmjit_instantiate(const char *module_name,
 		struct TypeSectionType *type;
 		struct FuncInst *funcinst;
 		size_t funcaddr;
-		struct Addrs *addrs = &module_inst->memaddrs;
+		struct Addrs *addrs = &module_inst->funcaddrs;
 
 		type =
 		    &module->type_section.types[module->
