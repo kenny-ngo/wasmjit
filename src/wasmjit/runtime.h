@@ -114,6 +114,9 @@ static DEFINE_VECTOR_GROW(store_tables, struct TableFuncs);
 __attribute__ ((unused))
 static DEFINE_VECTOR_GROW(store_mems, struct StoreMems);
 
+void *wasmjit_get_base_address();
+int _wasmjit_set_base_meminst_ptr_ptr(struct MemInst **meminst_box);
+
 wasmjit_addr_t _wasmjit_add_memory_to_store(struct Store *store,
 					    size_t size, size_t max);
 wasmjit_addr_t _wasmjit_add_function_to_store(struct Store *store,

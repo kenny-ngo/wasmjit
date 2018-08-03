@@ -27,8 +27,6 @@
 
 #include <wasmjit/runtime.h>
 
-void *wasmjit_get_base_address();
-
 int wasmjit_execute(const struct Store *store, int argc, char *argv[]);
 
 #endif

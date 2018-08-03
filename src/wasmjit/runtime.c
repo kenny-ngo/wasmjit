@@ -27,7 +27,27 @@
 #include <wasmjit/ast.h>
 #include <wasmjit/util.h>
 
+#include <pthread.h>
 #include <assert.h>
+
+pthread_key_t meminst_key;
+
+__attribute__((constructor))
+static void init_meminst_key() {
+	if (pthread_key_create(&meminst_key, NULL))
+		abort();
+}
+
+void *wasmjit_get_base_address()
+{
+	struct MemInst **mb = pthread_getspecific(meminst_key);
+	if (!mb) return NULL;
+	return (*mb)->data;
+}
+
+int _wasmjit_set_base_meminst_ptr_ptr(struct MemInst **meminst_box) {
+	return !pthread_setspecific(meminst_key, &meminst_box);
+}
 
 wasmjit_addr_t _wasmjit_add_memory_to_store(struct Store *store,
 					    size_t size,

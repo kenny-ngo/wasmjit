@@ -28,8 +28,6 @@
 #include <wasmjit/runtime.h>
 #include <wasmjit/util.h>
 
-#include <pthread.h>
-
 #include <sys/mman.h>
 
 __attribute__ ((unused))
@@ -39,30 +37,14 @@ static void encode_le_uint64_t(uint64_t val, char *buf)
 	memcpy(buf, &le_val, sizeof(le_val));
 }
 
-pthread_key_t meminst_key;
-
-__attribute__((constructor))
-static void init_meminst_key() {
-	if (pthread_key_create(&meminst_key, NULL))
-		abort();
-}
-
-void *wasmjit_get_base_address()
-{
-	struct MemInst **mb = pthread_getspecific(meminst_key);
-	if (!mb) return NULL;
-	return (*mb)->data;
-}
-
 int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 {
 	size_t i;
 	int ret;
 
-	struct Meminst *meminst_box;
+	struct MemInst *meminst_box;
 
-	if (pthread_setspecific(meminst_key, &meminst_box))
-		goto error;
+	_wasmjit_set_base_meminst_ptr_ptr(&meminst_box);
 
 	/* map all code in executable memory */
 	for (i = 0; i < store->funcs.n_elts; ++i) {
