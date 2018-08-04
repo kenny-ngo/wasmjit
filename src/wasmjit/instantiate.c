@@ -31,8 +31,6 @@
 
 #include <stdio.h>
 
-#define WASM_PAGE_SIZE ((size_t) (64 * 1024))
-
 static int typelist_equal(size_t nelts, unsigned *elts,
 			  size_t onelts, unsigned *oelts) {
 	size_t i;

@@ -133,6 +133,8 @@ static DEFINE_VECTOR_GROW(store_mems, struct StoreMems);
 __attribute__ ((unused))
 static DEFINE_VECTOR_GROW(store_globals, struct StoreGlobals);
 
+#define WASM_PAGE_SIZE ((size_t) (64 * 1024))
+
 void *wasmjit_get_base_address();
 int _wasmjit_set_base_meminst_ptr_ptr(struct MemInst **meminst_box);
 
