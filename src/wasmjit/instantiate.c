@@ -29,6 +29,7 @@
 #include <wasmjit/compile.h>
 #include <wasmjit/util.h>
 
+#include <inttypes.h>
 #include <stdio.h>
 
 static int typelist_equal(size_t nelts, unsigned *elts,
