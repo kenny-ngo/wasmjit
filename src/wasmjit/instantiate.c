@@ -450,11 +450,34 @@ int wasmjit_instantiate(const char *module_name,
 			module_inst->funcaddrs.elts[module->start_section.funcidx];
 	}
 
-	if (module->element_section.n_elements) {
-		/* don't currenly handle elements */
-		if (why)
-			snprintf(why, why_size, "don't handle elements");
-		goto error;
+	for (i = 0; i < module->element_section.n_elements; ++i) {
+		struct ElementSectionElement *element = &module->element_section.elements[i];
+		wasmjit_addr_t tableaddr;
+		struct TableInst *tableinst;
+		int rrr;
+		struct Value value;
+		size_t j;
+
+		rrr = read_constant_expression(store, module_inst,
+					       VALTYPE_I32, &value,
+					       element->n_instructions,
+					       element->instructions);
+		if (!rrr)
+			goto error;
+
+		assert(element->tableidx < module_inst->tableaddrs.n_elts);
+		tableaddr = module_inst->tableaddrs.elts[element->tableidx];
+
+		assert(tableaddr < store->tables.n_elts);
+		tableinst = &store->tables.elts[tableaddr];
+
+		if (value.data.i32 + element->n_funcidxs > tableinst->length)
+			goto error;
+
+		for (j = 0; j < element->n_funcidxs; ++j) {
+			assert(element->funcidxs[j] < module_inst->funcaddrs.n_elts);
+			tableinst->data[value.data.i32 + j] = module_inst->funcaddrs.elts[element->funcidxs[j]];
+		}
 	}
 
 	for (i = 0; i < module->code_section.n_codes; ++i) {

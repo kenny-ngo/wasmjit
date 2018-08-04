@@ -99,7 +99,7 @@ struct Store {
 	struct TableFuncs {
 		wasmjit_addr_t n_elts;
 		struct TableInst {
-			void **data;
+			wasmjit_addr_t *data;
 			unsigned elemtype;
 			size_t length;
 			size_t max;
