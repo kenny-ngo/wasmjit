@@ -53,11 +53,32 @@ static struct Addrs *addrs_for_section(struct ModuleInst *module_inst, unsigned 
 	}
 }
 
+static int func_sig_repr(char *why, size_t why_size,
+			 size_t n_inputs, unsigned *input_types,
+			 size_t n_outputs, unsigned *output_types) {
+	int ret ;
+	size_t k;
+
+	ret = snprintf(why, why_size, "[");
+	for (k = 0; k < n_inputs; ++k) {
+		ret += snprintf(why + ret, why_size - ret, "%s,",
+				wasmjit_valtype_repr(input_types[k]));
+	}
+	ret += snprintf(why + ret, why_size - ret, "] -> [");
+	for (k = 0; k < n_outputs; ++k) {
+		ret += snprintf(why + ret, why_size - ret, "%s,",
+				wasmjit_valtype_repr(output_types[k]));
+	}
+	ret += snprintf(why + ret, why_size - ret, "]");
+
+	return ret;
+}
+
 int wasmjit_instantiate(const char *module_name,
 			const struct Module *module,
-			struct Store *store)
+			struct Store *store,
+			char *why, size_t why_size)
 {
-	char why[0x100];
 	uint32_t i;
 	struct ModuleInst module_inst_v;
 	struct ModuleInst *module_inst = &module_inst_v;
@@ -80,7 +101,8 @@ int wasmjit_instantiate(const char *module_name,
 
 			if (entry->type != import->desc_type) {
 				/* bad import type */
-				snprintf(why, sizeof(why), "bad import type");
+				if (why)
+					snprintf(why, why_size, "bad import type");
 				goto error;
 			}
 
@@ -130,9 +152,50 @@ int wasmjit_instantiate(const char *module_name,
 
 		if (j == store->names.n_elts) {
 			/* couldn't find import */
-			snprintf(why, sizeof(why),
-				 "couldn't find import: %s.%s", import->module,
-				 import->name);
+			if (why)
+				switch (import->desc_type) {
+				case IMPORT_DESC_TYPE_FUNC: {
+					int ret;
+					struct TypeSectionType *type = &module->type_section.types[import->desc.typeidx];
+					ret = snprintf(why, why_size,
+						       "couldn't find func import: %s.%s ",
+						       import->module,
+						       import->name);
+
+					func_sig_repr(why + ret, why_size - ret,
+						      type->n_inputs,
+						      type->input_types,
+						      type->n_outputs,
+						      type->output_types);
+
+					break;
+				}
+				case IMPORT_DESC_TYPE_TABLE:
+					snprintf(why, why_size,
+						 "couldn't find table import: %s.%s",
+						 import->module,
+						 import->name);
+					break;
+				case IMPORT_DESC_TYPE_MEM:
+					snprintf(why, why_size,
+						 "couldn't find memory import: %s.%s "
+						 "{%" PRIu32 ", %" PRIu32 "}",
+						 import->module, import->name,
+						 import->desc.memtype.min,
+						 import->desc.memtype.max);
+					break;
+				case IMPORT_DESC_TYPE_GLOBAL:
+					snprintf(why, why_size,
+						 "couldn't find global import: %s.%s %s%s",
+						 import->module, import->name,
+						 wasmjit_valtype_repr(import->desc.globaltype.valtype),
+						 import->desc.globaltype.mut
+						 ? " mut" : "");
+					break;
+				default:
+					assert(0);
+					break;
+				}
 			goto error;
 		}
 	}
@@ -193,7 +256,8 @@ int wasmjit_instantiate(const char *module_name,
 
 	if (module->element_section.n_elements) {
 		/* don't currenly handle elements */
-		snprintf(why, sizeof(why), "don't handle elements");
+		if (why)
+			snprintf(why, why_size, "don't handle elements");
 		goto error;
 	}
 
@@ -217,7 +281,8 @@ int wasmjit_instantiate(const char *module_name,
 					    &memrefs,
 					    &code_size);
 		if (!code) {
-			snprintf(why, sizeof(why), "compile failed");
+			if (why)
+				snprintf(why, why_size, "compile failed");
 			goto error;
 		}
 
@@ -283,7 +348,6 @@ int wasmjit_instantiate(const char *module_name,
 	return 1;
 
  error:
-	fprintf(stderr, "%s\n", why);
 	/* cleanup module_inst */
 	for (i = 0; i < IMPORT_DESC_TYPE_LAST; ++i) {
 		addrs = addrs_for_section(module_inst, i);

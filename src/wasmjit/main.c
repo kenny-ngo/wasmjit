@@ -54,6 +54,7 @@ int main(int argc, char *argv[])
 	struct Module module;
 	struct Store store;
 	int dump_module, opt;
+	char error_buffer[0x1000];
 
 	dump_module =  0;
 	while ((opt = getopt(argc, argv, "d")) != -1) {
@@ -151,8 +152,10 @@ int main(int argc, char *argv[])
 			return -1;
 	}
 
-	if (!wasmjit_instantiate("env", &module, &store))
+	if (!wasmjit_instantiate("env", &module, &store, error_buffer, sizeof(error_buffer))) {
+		printf("Error instantiating: %s\n", error_buffer);
 		return -1;
+	}
 
 	/* go to entry point */
 	return wasmjit_execute(&store, optind + 1, &argv[optind + 1]);
