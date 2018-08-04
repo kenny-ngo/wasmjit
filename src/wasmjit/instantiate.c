@@ -78,7 +78,7 @@ int wasmjit_instantiate(const char *module_name,
 			    strcmp(entry->name, import->name))
 				continue;
 
-			if (entry->type != (unsigned)import->desc_type) {
+			if (entry->type != import->desc_type) {
 				/* bad import type */
 				snprintf(why, sizeof(why), "bad import type");
 				goto error;

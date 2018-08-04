@@ -344,7 +344,7 @@ struct ImportSection {
 	struct ImportSectionImport {
 		char *module;
 		char *name;
-		int desc_type;
+		unsigned desc_type;
 		union {
 			uint32_t typeidx;
 			struct Limits tabletype;
@@ -362,7 +362,7 @@ struct FunctionSection {
 struct TableSection {
 	uint32_t n_tables;
 	struct TableSectionTable {
-		int elemtype;
+		unsigned elemtype;
 		struct Limits limits;
 	} *tables;
 };
