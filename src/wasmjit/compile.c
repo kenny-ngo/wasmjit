@@ -30,6 +30,7 @@
 #include <wasmjit/runtime.h>
 
 #include <assert.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -727,6 +728,51 @@ static int wasmjit_compile_instructions(const struct Store *store,
 			OUTB(locals_fp_offset
 			     [instructions[i].data.tee_local.localidx]);
 			break;
+		case OPCODE_GET_GLOBAL: {
+			wasmjit_addr_t globaladdr;
+			unsigned type;
+
+			assert(instructions[i].data.get_global.globalidx < module->globaladdrs.n_elts);
+			globaladdr = module->globaladdrs.elts[instructions[i].data.get_global.globalidx];
+
+			type = store->globals.elts[globaladdr].value.type;
+			switch (type) {
+			case VALTYPE_I32:
+			case VALTYPE_F32:
+				/* mov (const), %eax */
+				OUTS("\xa1\x90\x90\x90\x90\x90\x90\x90\x90");
+				break;
+			case VALTYPE_I64:
+			case VALTYPE_F64:
+				/* mov (const), %rax */
+				OUTS("\x48\xa1\x90\x90\x90\x90\x90\x90\x90\x90");
+				break;
+			default:
+				assert(0);
+				break;
+			}
+
+			{
+				size_t memref_idx;
+
+				memref_idx = memrefs->n_elts;
+				if (!memrefs_grow(memrefs, 1))
+					goto error;
+
+				memrefs->elts[memref_idx].type =
+					MEMREF_GLOBAL_ADDR;
+				memrefs->elts[memref_idx].code_offset =
+					output->n_elts - 8;
+				memrefs->elts[memref_idx].addr =
+					globaladdr;
+			}
+
+			/* push %rax*/
+			OUTS("\x50");
+			push_stack(sstack, type);
+
+			break;
+		}
 		case OPCODE_I32_LOAD:
 			/* LOGIC: ea = pop_stack() */
 

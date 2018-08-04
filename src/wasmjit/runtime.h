@@ -60,6 +60,7 @@ struct MemoryReferences {
 			MEMREF_MEM_SIZE,
 			MEMREF_MEM,
 			MEMREF_MEM_BOX,
+			MEMREF_GLOBAL_ADDR,
 		} type;
 		size_t code_offset;
 		size_t addr;

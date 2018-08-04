@@ -103,6 +103,28 @@ int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 
 					break;
 				}
+			case MEMREF_GLOBAL_ADDR:
+				{
+					struct GlobalInst *ginst = &store->globals.elts[melt->addr];
+					switch (ginst->value.type) {
+					case VALTYPE_I32:
+						val = (uintptr_t) &ginst->value.data.i32;
+						break;
+					case VALTYPE_I64:
+						val = (uintptr_t) &ginst->value.data.i64;
+						break;
+					case VALTYPE_F32:
+						val = (uintptr_t) &ginst->value.data.f32;
+						break;
+					case VALTYPE_F64:
+						val = (uintptr_t) &ginst->value.data.f64;
+						break;
+					default:
+						assert(0);
+						break;
+					}
+				}
+				break;
 			default:
 				assert(0);
 				break;
