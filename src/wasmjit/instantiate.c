@@ -141,6 +141,7 @@ int wasmjit_instantiate(const char *module_name,
 	struct ModuleInst module_inst_v;
 	struct ModuleInst *module_inst = &module_inst_v;
 	struct Addrs *addrs;
+	size_t internal_func_idx;
 
 	memset(module_inst, 0, sizeof(module_inst_v));
 
@@ -325,6 +326,32 @@ int wasmjit_instantiate(const char *module_name,
 		}
 	}
 
+	internal_func_idx = module_inst->funcaddrs.n_elts;
+	for (i = 0; i < module->function_section.n_typeidxs; ++i) {
+		struct TypeSectionType *type;
+		size_t funcaddr;
+		struct MemoryReferences memrefs = {0, NULL};
+
+		addrs = &module_inst->funcaddrs;
+
+		type =
+		    &module->type_section.types[module->
+						function_section.typeidxs[i]];
+		funcaddr = _wasmjit_add_function_to_store(store, NULL, 0,
+							  type->n_inputs,
+							  type->input_types,
+							  type->n_outputs,
+							  type->output_types,
+							  memrefs);
+		if (funcaddr == INVALID_ADDR)
+			goto error;
+
+		if (!addrs_grow(addrs, 1))
+			goto error;
+
+		addrs->elts[addrs->n_elts - 1] = funcaddr;
+	}
+
 	for (i = 0; i < module->table_section.n_tables; ++i) {
 		struct TableSectionTable *table =
 		    &module->table_section.tables[i];
@@ -399,52 +426,6 @@ int wasmjit_instantiate(const char *module_name,
 		}
 	}
 
-	if (module->element_section.n_elements) {
-		/* don't currenly handle elements */
-		if (why)
-			snprintf(why, why_size, "don't handle elements");
-		goto error;
-	}
-
-	for (i = 0; i < module->code_section.n_codes; ++i) {
-		struct TypeSectionType *type;
-		size_t funcaddr;
-		addrs = &module_inst->funcaddrs;
-		void *code;
-		size_t code_size;
-		struct MemoryReferences memrefs = {0, NULL};
-
-		type =
-		    &module->type_section.types[module->
-						function_section.typeidxs[i]];
-
-		code = wasmjit_compile_code(store,
-					    module_inst,
-					    type,
-					    &module->
-					    code_section.codes[i],
-					    &memrefs,
-					    &code_size);
-		if (!code) {
-			if (why)
-				snprintf(why, why_size, "compile failed");
-			goto error;
-		}
-
-		funcaddr = _wasmjit_add_function_to_store(store, code, code_size,
-							  type->n_inputs,
-							  type->input_types,
-							  type->n_outputs,
-							  type->output_types,
-							  memrefs);
-		if (funcaddr == INVALID_ADDR)
-			goto error;
-
-		if (!addrs_grow(addrs, 1))
-			goto error;
-
-		addrs->elts[addrs->n_elts - 1] = funcaddr;
-	}
 
 	for (i = 0; i < module->export_section.n_exports; ++i) {
 		struct ExportSectionExport *export =
@@ -458,6 +439,46 @@ int wasmjit_instantiate(const char *module_name,
 					       export->idx_type,
 					       addrs->elts[export->idx]))
 		    goto error;
+	}
+
+	/* add start function */
+	if (module->start_section.has_start) {
+		if (!addrs_grow(&store->startfuncs, 1))
+			goto error;
+
+		store->startfuncs.elts[store->startfuncs.n_elts - 1] =
+			module_inst->funcaddrs.elts[module->start_section.funcidx];
+	}
+
+	if (module->element_section.n_elements) {
+		/* don't currenly handle elements */
+		if (why)
+			snprintf(why, why_size, "don't handle elements");
+		goto error;
+	}
+
+	for (i = 0; i < module->code_section.n_codes; ++i) {
+		struct TypeSectionType *type;
+		struct FuncInst *funcinst;
+
+		type =
+		    &module->type_section.types[module->
+						function_section.typeidxs[i]];
+
+		funcinst = &store->funcs.elts[module_inst->funcaddrs.elts[i + internal_func_idx]];
+
+		funcinst->code = wasmjit_compile_code(store,
+						      module_inst,
+						      type,
+						      &module->
+						      code_section.codes[i],
+						      &funcinst->memrefs,
+						      &funcinst->code_size);
+		if (!funcinst->code) {
+			if (why)
+				snprintf(why, why_size, "compile failed");
+			goto error;
+		}
 	}
 
 	for (i = 0; i < module->data_section.n_datas; ++i) {
@@ -482,15 +503,6 @@ int wasmjit_instantiate(const char *module_name,
 		memcpy(meminst->data +
 		       value.data.i32, data->buf,
 		       data->buf_size);
-	}
-
-	/* add start function */
-	if (module->start_section.has_start) {
-		if (!addrs_grow(&store->startfuncs, 1))
-			goto error;
-
-		store->startfuncs.elts[store->startfuncs.n_elts - 1] =
-			module_inst->funcaddrs.elts[module->start_section.funcidx];
 	}
 
 	return 1;
