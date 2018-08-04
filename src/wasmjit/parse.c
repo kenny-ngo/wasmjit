@@ -42,7 +42,6 @@
 #define ELSE_TERMINAL 0x05
 #define WASM_MAGIC 0x6d736100
 #define VERSION 0x1
-#define TABLE_TYPE_ELEM_TYPE 0x70
 
 enum {
 	SECTION_ID_CUSTOM,
@@ -443,10 +442,12 @@ int read_import_section(struct ParseState *pstate,
 			ret = read_uint8_t(pstate, &ft);
 			if (!ret)
 				goto error;
-			if (ft != TABLE_TYPE_ELEM_TYPE)
+			if (ft != ELEMTYPE_ANYFUNC)
 				goto error;
 
-			ret = read_limits(pstate, &import->desc.tabletype);
+			import->desc.tabletype.elemtype = ELEMTYPE_ANYFUNC;
+
+			ret = read_limits(pstate, &import->desc.tabletype.limits);
 			if (!ret)
 				goto error;
 

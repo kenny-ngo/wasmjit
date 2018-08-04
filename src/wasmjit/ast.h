@@ -347,7 +347,10 @@ struct ImportSection {
 		unsigned desc_type;
 		union {
 			uint32_t typeidx;
-			struct Limits tabletype;
+			struct {
+				unsigned elemtype;
+				struct Limits limits;
+			} tabletype;
 			struct Limits memtype;
 			struct GlobalType globaltype;
 		} desc;
