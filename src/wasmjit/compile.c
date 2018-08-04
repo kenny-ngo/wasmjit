@@ -829,8 +829,8 @@ static int wasmjit_compile_instructions(const struct Store *store,
 
 			/* LOGIC: data = store->mems.elts[maddr].data */
 			{
-				/* movq (const), %eax */
-				OUTS("\x48\x90\x90\x90\x90\x90\x90\x90\x90");
+				/* movq (const), %rax */
+				OUTS("\x48\xa1\x90\x90\x90\x90\x90\x90\x90\x90");
 
 				/* add reference to data */
 				{
