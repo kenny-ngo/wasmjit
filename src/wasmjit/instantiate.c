@@ -32,7 +32,8 @@
 #include <stdio.h>
 
 static int typelist_equal(size_t nelts, unsigned *elts,
-			  size_t onelts, unsigned *oelts) {
+			  size_t onelts, unsigned *oelts)
+{
 	size_t i;
 	if (nelts != onelts) return 0;
 	for (i = 0; i < nelts; ++i) {
