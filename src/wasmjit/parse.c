@@ -351,8 +351,17 @@ int read_global_type(struct ParseState *pstate, struct GlobalType *globaltype)
 	if (!ret)
 		return 0;
 
+	if (globaltype->valtype != VALTYPE_I32 &&
+	    globaltype->valtype != VALTYPE_I64 &&
+	    globaltype->valtype != VALTYPE_F32 &&
+	    globaltype->valtype != VALTYPE_F64)
+		return 0;
+
 	ret = read_uint8_t(pstate, &globaltype->mut);
 	if (!ret)
+		return 0;
+
+	if (globaltype->mut != 0 && globaltype->mut != 1)
 		return 0;
 
 	return 1;

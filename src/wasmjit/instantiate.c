@@ -74,6 +74,64 @@ static int func_sig_repr(char *why, size_t why_size,
 	return ret;
 }
 
+static int read_constant_expression(struct Store *store,
+				    struct ModuleInst *module_inst,
+				    unsigned valtype, struct Value *value,
+				    size_t n_instructions, struct Instr *instructions)
+{
+	if (n_instructions != 1)
+		goto error;
+
+	if (instructions[0].opcode == OPCODE_GET_GLOBAL) {
+		wasmjit_addr_t globaladdr =
+			module_inst->globaladdrs.elts[instructions[0].data.get_global.globalidx];
+		struct GlobalInst *global =
+			&store->globals.elts[globaladdr];
+
+		if (global->mut)
+			goto error;
+
+		if (global->value.type != valtype)
+			goto error;
+
+		*value = global->value;
+
+		return 1;
+	}
+
+	value->type = valtype;
+	switch (valtype) {
+	case VALTYPE_I32:
+		if (instructions[0].opcode != OPCODE_I32_CONST)
+			goto error;
+		value->data.i32 = instructions[0].data.i32_const.value;
+		break;
+	case VALTYPE_I64:
+		if (instructions[0].opcode != OPCODE_I64_CONST)
+			goto error;
+		value->data.i64 = instructions[0].data.i64_const.value;
+		break;
+	case VALTYPE_F32:
+		if (instructions[0].opcode != OPCODE_F32_CONST)
+			goto error;
+		value->data.f32 = instructions[0].data.f32_const.value;
+		break;
+	case VALTYPE_F64:
+		if (instructions[0].opcode != OPCODE_F64_CONST)
+			goto error;
+		value->data.f64 = instructions[0].data.f64_const.value;
+		break;
+	default:
+		assert(0);
+		break;
+	}
+
+	return 1;
+
+ error:
+	return 0;
+}
+
 int wasmjit_instantiate(const char *module_name,
 			const struct Module *module,
 			struct Store *store,
@@ -248,10 +306,30 @@ int wasmjit_instantiate(const char *module_name,
 		addrs->elts[addrs->n_elts - 1] = memaddr;
 	}
 
-	if (module->global_section.n_globals) {
-		/* don't currenly handle globals */
-		snprintf(why, sizeof(why), "don't handle globals");
-		goto error;
+	for (i = 0; i < module->global_section.n_globals; ++i) {
+		struct GlobalSectionGlobal *global =
+			&module->global_section.globals[i];
+		wasmjit_addr_t globaladdr;
+		struct Value value;
+		int rrr;
+
+		rrr = read_constant_expression(store,
+					       module_inst,
+					       global->type.valtype, &value,
+					       global->n_instructions,
+					       global->instructions);
+		if (!rrr)
+			goto error;
+		globaladdr = _wasmjit_add_global_to_store(store,
+							  value,
+							  global->type.mut);
+
+		{
+			struct Addrs *addrs = &module_inst->globaladdrs;
+			if (!addrs_grow(addrs, 1))
+				goto error;
+			addrs->elts[addrs->n_elts - 1] = globaladdr;
+		}
 	}
 
 	if (module->element_section.n_elements) {
@@ -319,20 +397,23 @@ int wasmjit_instantiate(const char *module_name,
 		struct DataSectionData *data = &module->data_section.datas[i];
 		struct MemInst *meminst =
 		    &store->mems.elts[module_inst->memaddrs.elts[data->memidx]];
+		struct Value value;
+		int rrr;
 
-		if (data->n_instructions != 1
-		    || data->instructions[0].opcode != OPCODE_I32_CONST) {
-			/* TODO: execute instructions in the future,
-			   rely on validation stage to check for const property */
+		rrr = read_constant_expression(store, module_inst,
+					       VALTYPE_I32, &value,
+					       data->n_instructions,
+					       data->instructions);
+		if (!rrr)
 			goto error;
-		}
+
 #if UINT32_MAX > SIZE_MAX
 		if (data->buf_size > SIZE_MAX)
 			goto error;
 #endif
 
 		memcpy(meminst->data +
-		       data->instructions[0].data.i32_const.value, data->buf,
+		       value.data.i32, data->buf,
 		       data->buf_size);
 	}
 

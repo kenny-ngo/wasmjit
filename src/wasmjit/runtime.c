@@ -163,6 +163,32 @@ wasmjit_addr_t _wasmjit_add_table_to_store(struct Store *store,
 	return INVALID_ADDR;
 }
 
+wasmjit_addr_t _wasmjit_add_global_to_store(struct Store *store,
+					    struct Value value,
+					    unsigned mut)
+{
+	struct GlobalInst *globalinst;
+	wasmjit_addr_t globaladdr = store->globals.n_elts;
+
+	assert(value.type == VALTYPE_I32 ||
+	       value.type == VALTYPE_I64 ||
+	       value.type == VALTYPE_F32 ||
+	       value.type == VALTYPE_F64);
+
+	if (!store_globals_grow(&store->globals, 1))
+		goto error;
+
+	globalinst = &store->globals.elts[globaladdr];
+
+	globalinst->value = value;
+	globalinst->mut = mut;
+
+	return globaladdr;
+
+ error:
+	return INVALID_ADDR;
+}
+
 int _wasmjit_add_to_namespace(struct Store *store,
 			      const char *module_name,
 			      const char *name,

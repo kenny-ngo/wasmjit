@@ -41,6 +41,16 @@ struct Addrs {
 __attribute__ ((unused))
 static DEFINE_VECTOR_GROW(addrs, struct Addrs);
 
+struct Value {
+	unsigned type;
+	union {
+		uint32_t i32;
+		uint64_t i64;
+		float f32;
+		double f64;
+	} data;
+};
+
 struct MemoryReferences {
 	size_t n_elts;
 	struct MemoryReferenceElt {
@@ -102,6 +112,13 @@ struct Store {
 			size_t max; /* max of 0 means no max */
 		} *elts;
 	} mems;
+	struct StoreGlobals {
+		wasmjit_addr_t n_elts;
+		struct GlobalInst {
+			struct Value value;
+			unsigned mut;
+		} *elts;
+	} globals;
 	struct Addrs startfuncs;
 };
 
@@ -113,6 +130,8 @@ __attribute__ ((unused))
 static DEFINE_VECTOR_GROW(store_tables, struct TableFuncs);
 __attribute__ ((unused))
 static DEFINE_VECTOR_GROW(store_mems, struct StoreMems);
+__attribute__ ((unused))
+static DEFINE_VECTOR_GROW(store_globals, struct StoreGlobals);
 
 void *wasmjit_get_base_address();
 int _wasmjit_set_base_meminst_ptr_ptr(struct MemInst **meminst_box);
@@ -129,6 +148,9 @@ wasmjit_addr_t _wasmjit_add_table_to_store(struct Store *store,
 					   unsigned elemtype,
 					   size_t length,
 					   size_t max);
+wasmjit_addr_t _wasmjit_add_global_to_store(struct Store *store,
+					    struct Value value,
+					    unsigned mut);
 int _wasmjit_add_to_namespace(struct Store *store,
 			      const char *module_name,
 			      const char *name,
