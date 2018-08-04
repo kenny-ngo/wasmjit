@@ -500,6 +500,9 @@ int wasmjit_instantiate(const char *module_name,
 			goto error;
 #endif
 
+		if (data->buf_size + value.data.i32 > meminst->size)
+			goto error;
+
 		memcpy(meminst->data +
 		       value.data.i32, data->buf,
 		       data->buf_size);

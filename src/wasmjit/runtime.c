@@ -68,7 +68,7 @@ wasmjit_addr_t _wasmjit_add_memory_to_store(struct Store *store,
 	meminst->max = max;
 
 	if (size) {
-		meminst->data = malloc(size);
+		meminst->data = calloc(size, 1);
 		if (!meminst->data)
 			goto error;
 	}
@@ -147,9 +147,7 @@ wasmjit_addr_t _wasmjit_add_table_to_store(struct Store *store,
 	tableinst->max = max;
 
 	if (length) {
-		tableinst->data = wasmjit_alloc_vector(length,
-						       sizeof(void *),
-						       NULL);
+		tableinst->data = calloc(length, sizeof(void *));
 		if (!tableinst->data)
 			goto error;
 	}
