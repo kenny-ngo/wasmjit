@@ -537,6 +537,8 @@ int read_table_section(struct ParseState *pstate,
 			ret = read_uint8_t(pstate, &elemtype);
 			if (!ret)
 				goto error;
+			if (elemtype != ELEMTYPE_ANYFUNC)
+				goto error;
 			table->elemtype = elemtype;
 
 			ret = read_limits(pstate, &table->limits);

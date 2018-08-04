@@ -254,6 +254,10 @@ enum {
 	IMPORT_DESC_TYPE_LAST,
 };
 
+enum {
+	ELEMTYPE_ANYFUNC = 0x70,
+};
+
 struct GlobalType {
 	uint8_t valtype;
 	uint8_t mut;

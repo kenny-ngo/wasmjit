@@ -125,6 +125,10 @@ wasmjit_addr_t _wasmjit_add_function_to_store(struct Store *store,
 					      unsigned *input_types,
 					      size_t n_outputs, unsigned *output_types,
 					      struct MemoryReferences memrefs);
+wasmjit_addr_t _wasmjit_add_table_to_store(struct Store *store,
+					   unsigned elemtype,
+					   size_t length,
+					   size_t max);
 int _wasmjit_add_to_namespace(struct Store *store,
 			      const char *module_name,
 			      const char *name,
@@ -143,5 +147,12 @@ int wasmjit_import_memory(struct Store *store,
 			  const char *module_name,
 			  const char *name,
 			  size_t size, size_t max);
+
+int wasmjit_import_table(struct Store *store,
+			 const char *module_name,
+			 const char *name,
+			 unsigned elemtype,
+			 size_t length,
+			 size_t max);
 
 #endif

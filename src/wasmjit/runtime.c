@@ -124,6 +124,45 @@ wasmjit_addr_t _wasmjit_add_function_to_store(struct Store *store,
 	return INVALID_ADDR;
 }
 
+wasmjit_addr_t _wasmjit_add_table_to_store(struct Store *store,
+					   unsigned elemtype,
+					   size_t length,
+					   size_t max)
+{
+	struct TableInst *tableinst;
+	wasmjit_addr_t tableaddr = store->tables.n_elts;
+
+	assert(elemtype == ELEMTYPE_ANYFUNC);
+
+	if (!store_tables_grow(&store->tables, 1))
+		goto error;
+
+	tableinst = &store->tables.elts[tableaddr];
+
+	tableinst->elemtype = elemtype;
+	tableinst->length = length;
+	tableinst->max = max;
+
+	if (length) {
+		tableinst->data = wasmjit_alloc_vector(length,
+						       sizeof(void *),
+						       NULL);
+		if (!tableinst->data)
+			goto error;
+	}
+	else {
+		tableinst->data = NULL;
+	}
+
+
+	return tableaddr;
+
+ error:
+	/* TODO: implement cleanup */
+	assert(0);
+	return INVALID_ADDR;
+}
+
 int _wasmjit_add_to_namespace(struct Store *store,
 			      const char *module_name,
 			      const char *name,
@@ -209,4 +248,32 @@ int wasmjit_import_function(struct Store *store,
 	assert(0);
 	return 0;
 
+}
+
+int wasmjit_import_table(struct Store *store,
+			 const char *module_name,
+			 const char *name,
+			 unsigned elemtype,
+			 size_t length,
+			 size_t max)
+{
+	wasmjit_addr_t tableaddr;
+
+	tableaddr = _wasmjit_add_table_to_store(store,
+						elemtype,
+						length,
+						max);
+	if (tableaddr == INVALID_ADDR)
+		goto error;
+
+	if (!_wasmjit_add_to_namespace(store, module_name, name,
+				       IMPORT_DESC_TYPE_TABLE, tableaddr))
+	    goto error;
+
+	return 1;
+
+ error:
+	/* TODO: cleanup */
+	assert(0);
+	return 0;
 }

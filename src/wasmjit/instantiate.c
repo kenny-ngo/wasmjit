@@ -141,30 +141,17 @@ int wasmjit_instantiate(const char *module_name,
 		struct TableSectionTable *table =
 		    &module->table_section.tables[i];
 
-		size_t tableaddr = store->tables.n_elts;
+		size_t tableaddr;
 		addrs = &module_inst->tableaddrs;
-		struct TableInst *tableinst;
 
 		assert(!table->limits.max
 		       || table->limits.min <= table->limits.max);
 
-		if (!store_tables_grow(&store->tables, 1))
-			goto error;
-
-		tableinst = &store->tables.elts[tableaddr];
-		tableinst->elemtype = table->elemtype;
-		if (table->limits.min) {
-			tableinst->data =
-			    wasmjit_alloc_vector(table->limits.min,
-						 sizeof(tableinst->data[0]),
-						 NULL);
-			if (!tableinst->data)
-				goto error;
-		} else {
-			tableinst->data = NULL;
-		}
-		tableinst->length = table->limits.min;
-		tableinst->max = table->limits.max;
+		tableaddr =
+			_wasmjit_add_table_to_store(store,
+						    table->elemtype,
+						    table->limits.min,
+						    table->limits.max);
 
 		if (!addrs_grow(addrs, 1))
 			goto error;
