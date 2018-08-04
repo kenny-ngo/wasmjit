@@ -99,7 +99,7 @@ struct Store {
 		wasmjit_addr_t n_elts;
 		struct TableInst {
 			void **data;
-			int elemtype;
+			unsigned elemtype;
 			size_t length;
 			size_t max;
 		} *elts;

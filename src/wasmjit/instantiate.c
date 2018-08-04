@@ -171,30 +171,97 @@ int wasmjit_instantiate(const char *module_name,
 				struct TypeSectionType *type = &module->type_section.types[import->desc.typeidx];
 				if (!typelist_equal(type->n_inputs, type->input_types,
 						    funcinst->type.n_inputs,
-						    funcinst->type.input_types))
-					goto error;
-
-				if (!typelist_equal(type->n_outputs, type->output_types,
+						    funcinst->type.input_types) ||
+				    !typelist_equal(type->n_outputs, type->output_types,
 						    funcinst->type.n_outputs,
-						    funcinst->type.output_types))
+						    funcinst->type.output_types)) {
+					int ret;
+					ret = snprintf(why, why_size,
+						       "Mismatched types for %s.%s: ",
+						       import->module,
+						       import->name);
+					ret += func_sig_repr(why + ret, why_size - ret,
+							     funcinst->type.n_inputs,
+							     funcinst->type.input_types,
+							     funcinst->type.n_outputs,
+							     funcinst->type.output_types);
+					ret += snprintf(why + ret, why_size - ret,
+							" vs ");
+					ret += func_sig_repr(why + ret, why_size - ret,
+							     type->n_inputs,
+							     type->input_types,
+							     type->n_outputs,
+							     type->output_types);
 					goto error;
+				}
 				break;
 			}
 			case IMPORT_DESC_TYPE_TABLE:
-				addrs = &module_inst->tableaddrs;
+				assert(entry->addr < store->tables.n_elts);
+				struct TableInst *tableinst = &store->tables.elts[entry->addr];
+
+				if (!(tableinst->elemtype == import->desc.tabletype.elemtype &&
+				      tableinst->length >= import->desc.tabletype.limits.min &&
+				      (!import->desc.tabletype.limits.max ||
+				       (import->desc.tabletype.limits.max && tableinst->max &&
+					tableinst->max <= import->desc.tabletype.limits.max)))) {
+					if (why)
+						snprintf(why, why_size,
+							 "Mismatched table import for import "
+							 "%s.%s: {%u, %zu,%zu} vs {%u, %" PRIu32 ",%" PRIu32 "}",
+							 entry->module_name, entry->name,
+							 tableinst->elemtype,
+							 tableinst->length,
+							 tableinst->max,
+							 import->desc.tabletype.elemtype,
+							 import->desc.tabletype.limits.min,
+							 import->desc.tabletype.limits.max);
+					goto error;
+				}
 				break;
 			case IMPORT_DESC_TYPE_MEM: {
 				assert(entry->addr < store->mems.n_elts);
 				struct MemInst *meminst = &store->mems.elts[entry->addr];
+				size_t msize = meminst->size / WASM_PAGE_SIZE;
+				size_t mmax = meminst->max / WASM_PAGE_SIZE;
 
-				if (!(meminst->size / WASM_PAGE_SIZE >= import->desc.memtype.min &&
-				      meminst->max / WASM_PAGE_SIZE == import->desc.memtype.max))
+				if (!(msize >= import->desc.memtype.min &&
+				      (!import->desc.memtype.max ||
+				       (import->desc.memtype.max && mmax &&
+					mmax <= import->desc.memtype.max)))) {
+					if (why)
+						snprintf(why, why_size,
+							 "Mismatched memory size for import "
+							 "%s.%s: {%zu,%zu} vs {%" PRIu32 ",%" PRIu32 "}",
+							 entry->module_name, entry->name,
+							 meminst->size / WASM_PAGE_SIZE,
+							 meminst->max / WASM_PAGE_SIZE,
+							 import->desc.memtype.min,
+							 import->desc.memtype.max);
 					goto error;
+				}
 				break;
 			}
-			case IMPORT_DESC_TYPE_GLOBAL:
-				addrs = &module_inst->globaladdrs;
+			case IMPORT_DESC_TYPE_GLOBAL: {
+				assert(entry->addr < store->globals.n_elts);
+				struct GlobalInst *globalinst = &store->globals.elts[entry->addr];
+
+				if (globalinst->value.type != import->desc.globaltype.valtype ||
+				    globalinst->mut != import->desc.globaltype.mut) {
+					if (why)
+						snprintf(why, why_size,
+							 "Mismatched global for import "
+							 "%s.%s: %s%s vs %s%s",
+							 entry->module_name,
+							 entry->name,
+							 wasmjit_valtype_repr(globalinst->value.type),
+							 globalinst->mut ? " mut" : "",
+							 wasmjit_valtype_repr(import->desc.globaltype.valtype),
+							 import->desc.globaltype.mut ? " mut" : "");
+					goto error;
+				}
 				break;
+			}
 			default:
 				assert(0);
 				break;
