@@ -43,6 +43,16 @@ static int typelist_equal(size_t nelts, unsigned *elts,
 	return 1;
 }
 
+static struct Addrs *addrs_for_section(struct ModuleInst *module_inst, unsigned section) {
+	switch (section) {
+	case IMPORT_DESC_TYPE_FUNC: return &module_inst->funcaddrs;
+	case IMPORT_DESC_TYPE_TABLE: return &module_inst->tableaddrs;
+	case IMPORT_DESC_TYPE_MEM: return &module_inst->memaddrs;
+	case IMPORT_DESC_TYPE_GLOBAL: return &module_inst->globaladdrs;
+	default: assert(0); return NULL;
+	}
+}
+
 int wasmjit_instantiate(const char *module_name,
 			const struct Module *module,
 			struct Store *store)
@@ -51,6 +61,7 @@ int wasmjit_instantiate(const char *module_name,
 	uint32_t i;
 	struct ModuleInst module_inst_v;
 	struct ModuleInst *module_inst = &module_inst_v;
+	struct Addrs *addrs;
 
 	memset(module_inst, 0, sizeof(module_inst_v));
 
@@ -62,7 +73,6 @@ int wasmjit_instantiate(const char *module_name,
 
 		/* look for import */
 		for (j = 0; j < store->names.n_elts; ++j) {
-			struct Addrs *addrs;
 			struct NamespaceEntry *entry = &store->names.elts[j];
 			if (strcmp(entry->module_name, import->module) ||
 			    strcmp(entry->name, import->name))
@@ -88,8 +98,6 @@ int wasmjit_instantiate(const char *module_name,
 						    funcinst->type.n_outputs,
 						    funcinst->type.output_types))
 					goto error;
-
-				addrs = &module_inst->funcaddrs;
 				break;
 			}
 			case IMPORT_DESC_TYPE_TABLE:
@@ -102,8 +110,6 @@ int wasmjit_instantiate(const char *module_name,
 				if (!(meminst->size / WASM_PAGE_SIZE >= import->desc.memtype.min &&
 				      meminst->max / WASM_PAGE_SIZE == import->desc.memtype.max))
 					goto error;
-
-				addrs = &module_inst->memaddrs;
 				break;
 			}
 			case IMPORT_DESC_TYPE_GLOBAL:
@@ -113,6 +119,8 @@ int wasmjit_instantiate(const char *module_name,
 				assert(0);
 				break;
 			}
+
+			addrs = addrs_for_section(module_inst, entry->type);
 
 			if (!addrs_grow(addrs, 1))
 				goto error;
@@ -134,7 +142,7 @@ int wasmjit_instantiate(const char *module_name,
 		    &module->table_section.tables[i];
 
 		size_t tableaddr = store->tables.n_elts;
-		struct Addrs *addrs = &module_inst->tableaddrs;
+		addrs = &module_inst->tableaddrs;
 		struct TableInst *tableinst;
 
 		assert(!table->limits.max
@@ -166,7 +174,7 @@ int wasmjit_instantiate(const char *module_name,
 	for (i = 0; i < module->memory_section.n_memories; ++i) {
 		struct MemorySectionMemory *memory =
 		    &module->memory_section.memories[i];
-		struct Addrs *addrs = &module_inst->memaddrs;
+		addrs = &module_inst->memaddrs;
 		wasmjit_addr_t memaddr;
 		size_t size, max;
 
@@ -205,7 +213,7 @@ int wasmjit_instantiate(const char *module_name,
 	for (i = 0; i < module->code_section.n_codes; ++i) {
 		struct TypeSectionType *type;
 		size_t funcaddr;
-		struct Addrs *addrs = &module_inst->funcaddrs;
+		addrs = &module_inst->funcaddrs;
 		void *code;
 		size_t code_size;
 		struct MemoryReferences memrefs = {0, NULL};
@@ -244,25 +252,8 @@ int wasmjit_instantiate(const char *module_name,
 	for (i = 0; i < module->export_section.n_exports; ++i) {
 		struct ExportSectionExport *export =
 		    &module->export_section.exports[i];
-		struct Addrs *addrs;
 
-		switch (export->idx_type) {
-		case IMPORT_DESC_TYPE_FUNC:
-			addrs = &module_inst->funcaddrs;
-			break;
-		case IMPORT_DESC_TYPE_TABLE:
-			addrs = &module_inst->tableaddrs;
-			break;
-		case IMPORT_DESC_TYPE_MEM:
-			addrs = &module_inst->memaddrs;
-			break;
-		case IMPORT_DESC_TYPE_GLOBAL:
-			addrs = &module_inst->globaladdrs;
-			break;
-		default:
-			assert(0);
-			break;
-		}
+		addrs = addrs_for_section(module_inst, export->idx_type);
 
 		assert(export->idx < addrs->n_elts);
 		if (!_wasmjit_add_to_namespace(store, module_name,
@@ -305,8 +296,12 @@ int wasmjit_instantiate(const char *module_name,
 	return 1;
 
  error:
-	/* TODO: cleanup isn't currently implemented */
 	fprintf(stderr, "%s\n", why);
-	assert(0);
+	/* cleanup module_inst */
+	for (i = 0; i < IMPORT_DESC_TYPE_LAST; ++i) {
+		addrs = addrs_for_section(module_inst, i);
+		free(addrs->elts);
+	}
+
 	return 0;
 }
