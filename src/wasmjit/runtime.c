@@ -306,3 +306,29 @@ int wasmjit_import_table(struct Store *store,
 	assert(0);
 	return 0;
 }
+
+int wasmjit_import_global(struct Store *store,
+			  const char *module_name,
+			  const char *name,
+			  struct Value value,
+			  unsigned mut)
+{
+	wasmjit_addr_t globaladdr;
+
+	globaladdr = _wasmjit_add_global_to_store(store,
+						  value,
+						  mut);
+	if (globaladdr == INVALID_ADDR)
+		goto error;
+
+	if (!_wasmjit_add_to_namespace(store, module_name, name,
+				       IMPORT_DESC_TYPE_GLOBAL, globaladdr))
+	    goto error;
+
+	return 1;
+
+ error:
+	/* TODO: cleanup */
+	assert(0);
+	return 0;
+}

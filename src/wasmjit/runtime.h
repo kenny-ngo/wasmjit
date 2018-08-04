@@ -177,4 +177,10 @@ int wasmjit_import_table(struct Store *store,
 			 size_t length,
 			 size_t max);
 
+int wasmjit_import_global(struct Store *store,
+			  const char *module_name,
+			  const char *name,
+			  struct Value value,
+			  unsigned mut);
+
 #endif
