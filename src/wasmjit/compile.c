@@ -898,6 +898,46 @@ static int wasmjit_compile_instructions(const struct Store *store,
 			break;
 		}
 		case OPCODE_I32_LOAD:
+		case OPCODE_I64_LOAD:
+		case OPCODE_I32_LOAD8_S:
+		case OPCODE_I32_STORE:
+		case OPCODE_I64_STORE:
+		case OPCODE_I32_STORE8: {
+			const struct LoadStoreExtra *extra;
+
+			switch (instructions[i].opcode) {
+			case OPCODE_I32_LOAD:
+				extra = &instructions[i].data.i32_load;
+				break;
+			case OPCODE_I64_LOAD:
+				extra = &instructions[i].data.i64_load;
+				break;
+			case OPCODE_I32_LOAD8_S:
+				extra = &instructions[i].data.i32_load8_s;
+				break;
+			case OPCODE_I32_STORE:
+				assert(peek_stack(sstack) == STACK_I32);
+				extra = &instructions[i].data.i32_store;
+				goto after;
+			case OPCODE_I32_STORE8:
+				assert(peek_stack(sstack) == STACK_I32);
+				extra = &instructions[i].data.i32_store8;
+				goto after;
+			case OPCODE_I64_STORE:
+				assert(peek_stack(sstack) == STACK_I64);
+				extra = &instructions[i].data.i64_store;
+			after:
+				if (!pop_stack(sstack))
+					goto error;
+
+				/* pop rdi */
+				OUTS("\x5f");
+				break;
+			default:
+				assert(0);
+				break;
+			}
+
 			/* LOGIC: ea = pop_stack() */
 
 			/* pop %rsi */
@@ -912,8 +952,7 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				/* add <VAL>, %rsi */
 				OUTS("\x48\x81\xc6");
 				encode_le_uint32_t(4 +
-						   instructions[i].
-						   data.i32_load.offset, buf);
+						   extra->offset, buf);
 				if (!output_buf(output, buf, sizeof(uint32_t)))
 					goto error;
 			}
@@ -973,17 +1012,64 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				}
 			}
 
-			/* LOGIC: push_stack(data[ea - 4]) */
 
-			/* movl -4(%rax, %rsi), %eax */
-			OUTS("\x8b\x44\x30\xfc");
+			switch (instructions[i].opcode) {
+			case OPCODE_I32_LOAD:
+			case OPCODE_I32_LOAD8_S:
+			case OPCODE_I64_LOAD: {
+				unsigned valtype;
 
-			/* push %rax */
-			OUTS("\x50");
-			if (!push_stack(sstack, STACK_I32))
-				goto error;
+				/* LOGIC: push_stack(data[ea - 4]) */
+				switch (instructions[i].opcode) {
+				case OPCODE_I32_LOAD8_S:
+					/* movsbl -4(%rax, %rsi), %eax */
+					OUTS("\x0f\xbe\x44\x30\xfc");
+					valtype = STACK_I32;
+					break;
+				case OPCODE_I32_LOAD:
+					/* movl -4(%rax, %rsi), %eax */
+					OUTS("\x8b\x44\x30\xfc");
+					valtype = STACK_I32;
+					break;
+				case OPCODE_I64_LOAD:
+					/* movq -4(%rax, %rsi), %rax */
+					OUTS("\x48\x8b\x44\x30\xfc");
+					valtype = STACK_I64;
+					break;
+				default:
+					assert(0);
+					break;
+				}
+
+				/* push %rax */
+				OUTS("\x50");
+				if (!push_stack(sstack, valtype))
+					goto error;
+
+				break;
+			}
+			case OPCODE_I32_STORE:
+				/* LOGIC: data[ea - 4] = pop_stack() */
+				/* movl %edi, -4(%rax, %rsi) */
+				OUTS("\x89\x7c\x30\xfc");
+				break;
+			case OPCODE_I32_STORE8:
+				/* LOGIC: data[ea - 4] = pop_stack() */
+				/* movb %dil, -4(%rax, %rsi) */
+				OUTS("\x40\x88\x7c\x30\xfc");
+				break;
+			case OPCODE_I64_STORE:
+				/* LOGIC: data[ea - 4] = pop_stack() */
+				/* movq %rdi, -4(%rax, %rsi) */
+				OUTS("\x48\x89\x7c\x30\xfc");
+				break;
+			default:
+				assert(0);
+				break;
+			}
 
 			break;
+		}
 		case OPCODE_I32_CONST:
 			/* push $value */
 			OUTS("\x68");
