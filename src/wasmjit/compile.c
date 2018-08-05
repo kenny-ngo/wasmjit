@@ -1440,6 +1440,7 @@ char *wasmjit_compile_code(const struct Store *store,
 
 	if (type->n_outputs) {
 		assert(type->n_outputs == 1);
+		assert(sstack.n_elts == 1);
 		assert(peek_stack(&sstack) == type->output_types[0]);
 		pop_stack(&sstack);
 		/* pop %rax */
