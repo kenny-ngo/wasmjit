@@ -267,8 +267,8 @@ static int wasmjit_compile_instruction(const struct Store *store,
 		OUTS("\x58");
 
 		/* if not true jump to else case */
-		/* cmp $0, %eax */
-		OUTS("\x83\xf8\x00");
+		/* test %eax, %eax */
+		OUTS("\x85\xc0");
 
 		jump_to_else_offset = output->n_elts + 2;
 		/* je else_offset */
