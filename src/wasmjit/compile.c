@@ -1079,24 +1079,61 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				goto error;
 			push_stack(sstack, STACK_I32);
 			break;
+		case OPCODE_I32_EQ:
+		case OPCODE_I32_NE:
 		case OPCODE_I32_LT_S:
+		case OPCODE_I32_LT_U:
+		case OPCODE_I32_GT_S:
+		case OPCODE_I32_GT_U:
+		case OPCODE_I32_LE_U:
+		case OPCODE_I32_GE_S:
 			/* popq %rdi */
 			assert(peek_stack(sstack) == STACK_I32);
 			pop_stack(sstack);
 			OUTS("\x5f");
-			/* popq %rsi */
 			assert(peek_stack(sstack) == STACK_I32);
-			pop_stack(sstack);
-			OUTS("\x5e");
-			/* xor %rax, %rax */
-			OUTS("\x48\x31\xc0");
-			/* cmpl %edi, %esi */
-			OUTS("\x39\xfe");
-			/* setl %al */
-			OUTS("\x0f\x9c\xc0");
-			/* push %rax */
-			OUTS("\x50");
-			push_stack(sstack, STACK_I32);
+			/* xor %eax, %eax */
+			OUTS("\x31\xc0");
+			/* cmpl %edi, (%rsp) */
+			OUTS("\x39\x3c\x24");
+			switch (instructions[i].opcode) {
+			case OPCODE_I32_EQ:
+				/* sete %al */
+				OUTS("\x0f\x94\xc0");
+				break;
+			case OPCODE_I32_NE:
+				OUTS("\x0f\x95\xc0");
+				break;
+			case OPCODE_I32_LT_S:
+				/* setl %al */
+				OUTS("\x0f\x9c\xc0");
+				break;
+			case OPCODE_I32_LT_U:
+				/* setb %al */
+				OUTS("\x0f\x92\xc0");
+				break;
+			case OPCODE_I32_GT_S:
+				/* setg %al */
+				OUTS("\x0f\x9f\xc0");
+				break;
+			case OPCODE_I32_GT_U:
+				/* seta %al */
+				OUTS("\x0f\x97\xc0");
+				break;
+			case OPCODE_I32_LE_U:
+				/* setbe %al */
+				OUTS("\x0f\x96\xc0");
+				break;
+			case OPCODE_I32_GE_S:
+				/* setge %al */
+				OUTS("\x0f\x9d\xc0");
+				break;
+			default:
+				assert(0);
+				break;
+			}
+			/* mov %eax, (%rsp) */
+			OUTS("\x89\x04\x24");
 			break;
 		case OPCODE_I32_ADD:
 			/* popq %rdi */
