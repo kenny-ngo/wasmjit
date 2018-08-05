@@ -27,14 +27,79 @@
 #include <wasmjit/ast.h>
 #include <wasmjit/runtime.h>
 #include <wasmjit/util.h>
+#include <wasmjit/tls.h>
 
 #include <sys/mman.h>
+
+__attribute__((noreturn))
+static void trap()
+{
+	asm("int $4");
+	__builtin_unreachable();
+}
+
+wasmjit_tls_key_t store_key;
+
+__attribute__((constructor))
+static void init_store_key()
+{
+	if (!wasmjit_init_tls_key(&store_key, NULL))
+		abort();
+}
+
+static const struct Store *_get_store()
+{
+	const struct Store *store;
+	if (!wasmjit_get_tls_key(store_key, &store))
+		return NULL;
+	return store;
+}
+
+static int _set_store(const struct Store *store)
+{
+	return wasmjit_set_tls_key(store_key, store);
+}
+
+void *_resolve_indirect_call(struct ModuleInst *module,
+			     uint32_t idx,
+			     uint32_t typeidx)
+{
+	const struct Store *store = _get_store();
+	wasmjit_addr_t taddr = module->tableaddrs.elts[0];
+	assert(taddr < store->tables.n_elts);
+	struct TableInst *tableinst = &store->tables.elts[taddr];
+	struct FuncType *expected_type = &module->types.elts[typeidx];
+	struct FuncInst *funcinst;
+	wasmjit_addr_t faddr;
+
+	if (idx >= tableinst->length)
+		trap();
+
+	faddr = tableinst->data[idx];
+	if (!faddr)
+		trap();
+
+	funcinst = &store->funcs.elts[faddr];
+
+	if (!wasmjit_typelist_equal(funcinst->type.n_inputs,
+				    funcinst->type.input_types,
+				    expected_type->n_inputs,
+				    expected_type->input_types) ||
+	    !wasmjit_typelist_equal(funcinst->type.n_outputs,
+				    funcinst->type.output_types,
+				    expected_type->n_outputs,
+				    expected_type->output_types))
+		trap();
+
+	return funcinst->code;
+}
 
 int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 {
 	size_t i;
 	int ret;
 
+	_set_store(store);
 
 	/* map all code in executable memory */
 	for (i = 0; i < store->funcs.n_elts; ++i) {
@@ -107,17 +172,11 @@ int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 					}
 				}
 				break;
-			case MEMREF_TABLE_LENGTH_ADDR:
-			case MEMREF_TABLE_DATA_ADDR:
-				{
-					struct TableInst *tinst = &store->tables.elts[melt->addr];
-					val = melt->type == MEMREF_TABLE_LENGTH_ADDR
-						? (uintptr_t) &tinst->length
-						: (uintptr_t) &tinst->data;
-				}
+			case MEMREF_FUNC_MODULE_INSTANCE:
+				val = (uintptr_t) funcinst->module_inst;
 				break;
-			case MEMREF_FUNC_INST_BASE:
-				val = (uintptr_t) &store->funcs.elts[0];
+			case MEMREF_RESOLVE_INDIRECT_CALL:
+				val = (uintptr_t) &_resolve_indirect_call;
 				break;
 			default:
 				assert(0);

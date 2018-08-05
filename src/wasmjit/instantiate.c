@@ -32,17 +32,6 @@
 #include <inttypes.h>
 #include <stdio.h>
 
-static int typelist_equal(size_t nelts, unsigned *elts,
-			  size_t onelts, unsigned *oelts)
-{
-	size_t i;
-	if (nelts != onelts) return 0;
-	for (i = 0; i < nelts; ++i) {
-		if (elts[i] != oelts[i]) return 0;
-	}
-	return 1;
-}
-
 static struct Addrs *addrs_for_section(struct ModuleInst *module_inst, unsigned section) {
 	switch (section) {
 	case IMPORT_DESC_TYPE_FUNC: return &module_inst->funcaddrs;
@@ -193,10 +182,10 @@ int wasmjit_instantiate(const char *module_name,
 				assert(entry->addr < store->funcs.n_elts);
 				struct FuncInst *funcinst = &store->funcs.elts[entry->addr];
 				struct TypeSectionType *type = &module->type_section.types[import->desc.typeidx];
-				if (!typelist_equal(type->n_inputs, type->input_types,
+				if (!wasmjit_typelist_equal(type->n_inputs, type->input_types,
 						    funcinst->type.n_inputs,
 						    funcinst->type.input_types) ||
-				    !typelist_equal(type->n_outputs, type->output_types,
+				    !wasmjit_typelist_equal(type->n_outputs, type->output_types,
 						    funcinst->type.n_outputs,
 						    funcinst->type.output_types)) {
 					int ret;

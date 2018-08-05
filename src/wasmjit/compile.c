@@ -560,83 +560,39 @@ static int wasmjit_compile_instruction(const struct Store *store,
 		struct FuncType *ft;
 
 		if (instruction->opcode == OPCODE_CALL_INDIRECT) {
-			size_t taddr;
-			assert(module->tableaddrs.n_elts >= 1);
-			taddr = module->tableaddrs.elts[0];
 			assert(instruction->data.call_indirect.typeidx < module->types.n_elts);
 			ft = &module->types.elts[instruction->data.call_indirect.typeidx];
 			assert(peek_stack(sstack) == STACK_I32);
 			if (!pop_stack(sstack))
 				goto error;
 
-			/* pop %rdi */
+			/* mov $const, %rdi */
+			OUTS("\x48\xbf\x90\x90\x90\x90\x90\x90\x90\x90");
+			// address of module_instance
+			{
+				size_t memref_idx;
+				memref_idx = memrefs->n_elts;
+				if (!memrefs_grow(memrefs, 1))
+					goto error;
+
+				memrefs->elts[memref_idx].type =
+					MEMREF_FUNC_MODULE_INSTANCE;
+				memrefs->elts[memref_idx].code_offset =
+					output->n_elts - 8;
+			}
+
+			/* pop %rsi */
 			OUTS("\x58");
 
-			/* mov (const), %rax */
-			OUTS("\x48\xa1\x90\x90\x90\x90\x90\x90\x90\x90");
-			// address of store->tables.elts[taddr].length
-			{
-				size_t memref_idx;
-				memref_idx = memrefs->n_elts;
-				if (!memrefs_grow(memrefs, 1))
-					goto error;
-
-				memrefs->elts[memref_idx].type =
-					MEMREF_TABLE_LENGTH_ADDR;
-				memrefs->elts[memref_idx].code_offset =
-					output->n_elts - 8;
-				memrefs->elts[memref_idx].addr =
-					taddr;
-			}
-
-			/* check if table idx is smaller than table */
-			/* cmp %rax, %rdi */
-			OUTS("\x48\x39\xc7");
-			/* jl $0x2 */
-			OUTS("\x7c\x02");
-			/* int $4 */
-			OUTS("\xcd\x04");
-
-			/* mov (const), %rax */
-			OUTS("\x48\xai\x90\x90\x90\x90\x90\x90\x90\x90");
-			// address of store->tables.elts[taddr].data
-			{
-				size_t memref_idx;
-				memref_idx = memrefs->n_elts;
-				if (!memrefs_grow(memrefs, 1))
-					goto error;
-
-				memrefs->elts[memref_idx].type =
-					MEMREF_TABLE_DATA_ADDR;
-				memrefs->elts[memref_idx].code_offset =
-					output->n_elts - 8;
-				memrefs->elts[memref_idx].addr =
-					taddr;
-			}
-
-			/* mov (%rax,%rdi,8), %rax */
-			OUTS("\x48\x8b\x04\xf8");
-
-			/* check if table entry is initialized */
-			/* test %rax, %rax */
-			OUTS("\x48\x85\xc0");
-			/* jne $0x2 */
-			OUTS("\x75\x02");
-			/* int $4 */
-			OUTS("\xcd\x04");
-
-			/* mov $const, %rdi */
-			OUTS("\x48\xc7\xc7");
-			encode_le_uint32_t(sizeof(struct FuncInst), buf);
+			/* mov $const, %rdx */
+			OUTS("\x48\xc7\xc2");
+			encode_le_uint32_t(instruction->data.call_indirect.typeidx, buf);
 			if (!output_buf(output, buf, sizeof(uint32_t)))
 				goto error;
 
-			/* mul %rdi */
-			OUTS("\x48\xf7\xe7");
-
-			/* mov $const, %rdi */
-			OUTS("\x48\xbf\x90\x90\x90\x90\x90\x90\x90\x90");
-			// address of store->funcs.elts[0]
+			/* mov $const, %rax */
+			OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
+			// address of _resolve_indirect_call
 			{
 				size_t memref_idx;
 				memref_idx = memrefs->n_elts;
@@ -644,16 +600,14 @@ static int wasmjit_compile_instruction(const struct Store *store,
 					goto error;
 
 				memrefs->elts[memref_idx].type =
-					MEMREF_FUNC_INST_BASE;
+					MEMREF_RESOLVE_INDIRECT_CALL;
 				memrefs->elts[memref_idx].code_offset =
 					output->n_elts - 8;
-				memrefs->elts[memref_idx].addr =
-					taddr;
 			}
 
-			/* mov code_offset(%rdi, %rax), %rax */
-			OUTS("\x48\x8b\x44\x07");
-			OUTB(offsetof(struct FuncInst, code));
+
+			/* call *%rax */
+			OUTS("\xff\xd0");
 		} else {
 			uint32_t fidx =
 				instruction->data.call.funcidx;

@@ -92,4 +92,16 @@ static void *wasmjit_copy_buf(void *buf, size_t n_elts, size_t elt_size)
 	return newbuf;
 }
 
+__attribute__ ((unused))
+static int wasmjit_typelist_equal(size_t nelts, unsigned *elts,
+				  size_t onelts, unsigned *oelts)
+{
+	size_t i;
+	if (nelts != onelts) return 0;
+	for (i = 0; i < nelts; ++i) {
+		if (elts[i] != oelts[i]) return 0;
+	}
+	return 1;
+}
+
 #endif
