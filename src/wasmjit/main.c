@@ -99,7 +99,7 @@ int main(int argc, char *argv[])
 				printf("  %s (%" PRIu32 ")\n",
 				       wasmjit_valtype_repr(code->locals[j].
 							    valtype),
-				       code->locals[i].count);
+				       code->locals[j].count);
 			}
 
 			printf("Signature: [");
