@@ -85,6 +85,19 @@ void dump_instruction(const struct Instr *instruction, int indent)
 				  instruction->data.loop.n_instructions,
 				  indent + 1);
 		break;
+	case OPCODE_IF:
+		printf("%*sif 0x%02" PRIx8 "\n", sps, "",
+		       instruction->data.if_.blocktype);
+		dump_instructions(instruction->data.if_.instructions_then,
+				  instruction->data.if_.n_instructions_then,
+				  indent + 1);
+		if (instruction->data.if_.n_instructions_else) {
+			printf("%*selse\n", sps, "");
+			dump_instructions(instruction->data.if_.instructions_else,
+					  instruction->data.if_.n_instructions_else,
+					  indent + 1);
+		}
+		break;
 	case OPCODE_BR_IF:
 		printf("%*sbr_if 0x%" PRIx32 "\n", sps, "",
 		       instruction->data.br_if.labelidx);
@@ -111,6 +124,14 @@ void dump_instruction(const struct Instr *instruction, int indent)
 		printf("%*stee_local 0x%" PRIx32 "\n", sps, "",
 		       instruction->data.tee_local.localidx);
 		break;
+	case OPCODE_GET_GLOBAL:
+		printf("%*sget_global 0x%" PRIx32 "\n", sps, "",
+		       instruction->data.get_global.globalidx);
+		break;
+	case OPCODE_SET_GLOBAL:
+		printf("%*sset_global 0x%" PRIx32 "\n", sps, "",
+		       instruction->data.set_global.globalidx);
+		break;
 	case OPCODE_I32_LOAD:
 		name = "i32.load";
 		printf("%*s%s align: 0x%" PRIx32 " offset: 0x%" PRIx32
@@ -125,11 +146,17 @@ void dump_instruction(const struct Instr *instruction, int indent)
 	case OPCODE_I32_LT_S:
 		printf("%*si32.lt_s\n", sps, "");
 		break;
+	case OPCODE_I32_GE_S:
+		printf("%*si32.ge_s\n", sps, "");
+		break;
 	case OPCODE_I32_ADD:
 		printf("%*si32.add\n", sps, "");
 		break;
 	case OPCODE_I32_MUL:
 		printf("%*si32.mul\n", sps, "");
+		break;
+	case OPCODE_I32_AND:
+		printf("%*si32.and\n", sps, "");
 		break;
 	default:
 		printf("%*sBAD 0x%02" PRIx8 "\n", sps, "", instruction->opcode);
