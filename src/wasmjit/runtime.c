@@ -52,6 +52,35 @@ int _wasmjit_set_base_meminst_ptr_ptr(struct MemInst **meminst_box)
 	return wasmjit_set_tls_key(meminst_key, meminst_box);
 }
 
+int _wasmjit_create_func_type(struct FuncType *ft,
+			      size_t n_inputs,
+			      unsigned *input_types,
+			      size_t n_outputs,
+			      unsigned *output_types)
+{
+	memset(ft, 0, sizeof(*ft));
+
+	ft->n_inputs = n_inputs;
+	ft->input_types =
+		wasmjit_copy_buf(input_types,
+				 n_inputs,
+				 sizeof(input_types[0]));
+	if (!ft->input_types)
+		goto error;
+	ft->n_outputs = n_outputs;
+	ft->output_types =
+		wasmjit_copy_buf(output_types,
+				 n_outputs,
+				 sizeof(output_types[0]));
+	if (!ft->output_types)
+		goto error;
+
+	return 1;
+
+ error:
+	return 0;
+}
+
 wasmjit_addr_t _wasmjit_add_memory_to_store(struct Store *store,
 					    size_t size,
 					    size_t max)
@@ -100,19 +129,9 @@ wasmjit_addr_t _wasmjit_add_function_to_store(struct Store *store,
 
 	funcinst = &store->funcs.elts[funcaddr];
 
-	funcinst->type.n_inputs = n_inputs;
-	funcinst->type.input_types =
-		wasmjit_copy_buf(input_types,
-				 n_inputs,
-				 sizeof(input_types[0]));
-	if (!funcinst->type.input_types)
-		goto error;
-	funcinst->type.n_outputs = n_outputs;
-	funcinst->type.output_types =
-		wasmjit_copy_buf(output_types,
-				 n_outputs,
-				 sizeof(output_types[0]));
-	if (!funcinst->type.output_types)
+	if (!_wasmjit_create_func_type(&funcinst->type,
+				       n_inputs, input_types,
+				       n_outputs, output_types))
 		goto error;
 
 	funcinst->code = code;

@@ -30,13 +30,6 @@
 
 #include <stddef.h>
 
-struct ModuleInst {
-	struct Addrs funcaddrs;
-	struct Addrs tableaddrs;
-	struct Addrs memaddrs;
-	struct Addrs globaladdrs;
-};
-
 char *wasmjit_compile_code(const struct Store *store,
 			   const struct ModuleInst *module,
 			   const struct TypeSectionType *type,

@@ -41,6 +41,27 @@ struct Addrs {
 __attribute__ ((unused))
 static DEFINE_VECTOR_GROW(addrs, struct Addrs);
 
+struct FuncType {
+	size_t n_inputs;
+	unsigned *input_types;
+	size_t n_outputs;
+	unsigned *output_types;
+};
+
+struct ModuleInst {
+	struct FuncTypeVector {
+		size_t n_elts;
+		struct FuncType *elts;
+	} types;
+	struct Addrs funcaddrs;
+	struct Addrs tableaddrs;
+	struct Addrs memaddrs;
+	struct Addrs globaladdrs;
+};
+
+__attribute__ ((unused))
+static DEFINE_VECTOR_GROW(func_types, struct FuncTypeVector);
+
 struct Value {
 	unsigned type;
 	union {
@@ -85,12 +106,7 @@ struct Store {
 	struct StoreFuncs {
 		wasmjit_addr_t n_elts;
 		struct FuncInst {
-			struct FuncInstType {
-				size_t n_inputs;
-				unsigned *input_types;
-				size_t n_outputs;
-				unsigned *output_types;
-			} type;
+			struct FuncType type;
 			void *code;
 			size_t code_size;
 			struct MemoryReferences memrefs;
@@ -138,6 +154,11 @@ static DEFINE_VECTOR_GROW(store_globals, struct StoreGlobals);
 
 void *wasmjit_get_base_address();
 int _wasmjit_set_base_meminst_ptr_ptr(struct MemInst **meminst_box);
+
+int _wasmjit_create_func_type(struct FuncType *ft,
+			      size_t n_inputs,
+			      unsigned *input_types,
+			      size_t n_outputs, unsigned *output_types);
 
 wasmjit_addr_t _wasmjit_add_memory_to_store(struct Store *store,
 					    size_t size, size_t max);

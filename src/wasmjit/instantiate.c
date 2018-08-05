@@ -145,6 +145,25 @@ int wasmjit_instantiate(const char *module_name,
 
 	memset(module_inst, 0, sizeof(module_inst_v));
 
+	for (i = 0; i < module->type_section.n_types; ++i) {
+		struct TypeSectionType *type;
+		struct FuncTypeVector *types;
+		struct FuncType *ft;
+
+		type = &module->type_section.types[i];
+
+		types = &module_inst->types;
+		if (!func_types_grow(types, 1))
+			goto error;
+
+		ft = &types->elts[types->n_elts - 1];
+
+		if (!_wasmjit_create_func_type(ft,
+					       type->n_inputs, type->input_types,
+					       type->n_outputs, type->output_types))
+			goto error;
+	}
+
 	/* load imports */
 	for (i = 0; i < module->import_section.n_imports; ++i) {
 		size_t j;
