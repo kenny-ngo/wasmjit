@@ -92,9 +92,13 @@ struct MemoryReferences {
 __attribute__ ((unused))
 static DEFINE_VECTOR_GROW(memrefs, struct MemoryReferences);
 
-#define IS_HOST(funcinst) (!(funcinst)->code_size)
+#define IS_HOST(funcinst) (!(funcinst)->module_inst)
 
 struct Store {
+	struct ModuleInstances {
+		size_t n_elts;
+		struct ModuleInst *elts;
+	} modules;
 	struct Namespace {
 		size_t n_elts;
 		struct NamespaceEntry {
@@ -107,6 +111,7 @@ struct Store {
 	struct StoreFuncs {
 		wasmjit_addr_t n_elts;
 		struct FuncInst {
+			struct ModuleInst *module_inst;
 			struct FuncType type;
 			void *code;
 			size_t code_size;
@@ -141,6 +146,8 @@ struct Store {
 };
 
 __attribute__ ((unused))
+static DEFINE_VECTOR_GROW(store_module_insts, struct ModuleInstances);
+__attribute__ ((unused))
 static DEFINE_VECTOR_GROW(store_names, struct Namespace);
 __attribute__ ((unused))
 static DEFINE_VECTOR_GROW(store_funcs, struct StoreFuncs);
@@ -161,6 +168,7 @@ int _wasmjit_create_func_type(struct FuncType *ft,
 wasmjit_addr_t _wasmjit_add_memory_to_store(struct Store *store,
 					    size_t size, size_t max);
 wasmjit_addr_t _wasmjit_add_function_to_store(struct Store *store,
+					      struct ModuleInst *module_inst,
 					      void *code, size_t code_size,
 					      size_t n_inputs,
 					      unsigned *input_types,

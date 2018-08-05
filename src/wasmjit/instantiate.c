@@ -138,12 +138,16 @@ int wasmjit_instantiate(const char *module_name,
 			char *why, size_t why_size)
 {
 	uint32_t i;
-	struct ModuleInst module_inst_v;
-	struct ModuleInst *module_inst = &module_inst_v;
+	struct ModuleInst *module_inst;
 	struct Addrs *addrs;
 	size_t internal_func_idx;
 
-	memset(module_inst, 0, sizeof(module_inst_v));
+	if (!store_module_insts_grow(&store->modules, 1))
+		goto error;
+
+	module_inst = &store->modules.elts[store->modules.n_elts - 1];
+
+	memset(module_inst, 0, sizeof(*module_inst));
 
 	for (i = 0; i < module->type_section.n_types; ++i) {
 		struct TypeSectionType *type;
@@ -356,7 +360,9 @@ int wasmjit_instantiate(const char *module_name,
 		type =
 		    &module->type_section.types[module->
 						function_section.typeidxs[i]];
-		funcaddr = _wasmjit_add_function_to_store(store, NULL, 0,
+		funcaddr = _wasmjit_add_function_to_store(store,
+							  module_inst,
+							  NULL, 0,
 							  type->n_inputs,
 							  type->input_types,
 							  type->n_outputs,

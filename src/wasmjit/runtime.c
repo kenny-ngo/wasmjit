@@ -92,6 +92,7 @@ wasmjit_addr_t _wasmjit_add_memory_to_store(struct Store *store,
 }
 
 wasmjit_addr_t _wasmjit_add_function_to_store(struct Store *store,
+					      struct ModuleInst *module_inst,
 					      void *code, size_t code_size,
 					      size_t n_inputs,
 					      unsigned *input_types,
@@ -111,6 +112,7 @@ wasmjit_addr_t _wasmjit_add_function_to_store(struct Store *store,
 				       n_outputs, output_types))
 		goto error;
 
+	funcinst->module_inst = module_inst;
 	funcinst->code = code;
 	funcinst->code_size = code_size;
 	funcinst->memrefs = memrefs;
@@ -252,6 +254,7 @@ int wasmjit_import_function(struct Store *store,
 	struct MemoryReferences m = {0, NULL};
 
 	funcaddr = _wasmjit_add_function_to_store(store,
+						  NULL,
 						  funcptr, 0,
 						  n_inputs, input_types,
 						  n_outputs, output_types,
