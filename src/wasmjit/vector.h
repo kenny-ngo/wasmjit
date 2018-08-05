@@ -37,7 +37,7 @@ void *wasmjit_vector_set_size(void *, size_t *, size_t, size_t);
 						&sstack->n_elts,	\
 						(sstack->n_elts + n_elts), \
 						sizeof(sstack->elts[0])); \
-		return sstack->elts ? 1 : 0;				\
+		return sstack->elts || !(sstack->n_elts + n_elts) ? 1 : 0; \
 	}
 
 #define DEFINE_VECTOR_TRUNCATE(name, _type)				\
@@ -49,7 +49,7 @@ void *wasmjit_vector_set_size(void *, size_t *, size_t, size_t);
 						&sstack->n_elts,	\
 						amt,			\
 						sizeof(sstack->elts[0])); \
-		return sstack->elts ? 1 : 0;				\
+		return sstack->elts || !amt ? 1 : 0;			\
 	}
 
 #endif
