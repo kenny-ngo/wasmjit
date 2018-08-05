@@ -766,6 +766,8 @@ static int wasmjit_compile_instructions(const struct Store *store,
 		case OPCODE_DROP:
 			/* add $8, %rsp */
 			OUTS("\x48\x83\xc4\x08");
+			if (!pop_stack(sstack))
+				goto error;
 			break;
 		case OPCODE_GET_LOCAL:
 			assert(instructions[i].data.get_local.localidx < n_locals);
