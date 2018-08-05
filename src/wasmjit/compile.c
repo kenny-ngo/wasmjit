@@ -559,38 +559,6 @@ static int wasmjit_compile_instruction(const struct Store *store,
 		int aligned = 0;
 		struct FuncType *ft;
 
-		/* set memory base address in known location */
-		if (instruction->opcode == OPCODE_CALL_INDIRECT ||
-		    IS_HOST(&store->funcs.elts[module->funcaddrs.elts[instruction->data.call.funcidx]])) {
-			size_t memref_idx;
-
-			/* movq $const, %rax */
-			memref_idx = memrefs->n_elts;
-			if (!memrefs_grow(memrefs, 1))
-				goto error;
-
-			memrefs->elts[memref_idx].type =
-				MEMREF_MEM;
-			memrefs->elts[memref_idx].code_offset =
-				output->n_elts + 2;
-			memrefs->elts[memref_idx].addr =
-				module->memaddrs.elts[0];
-
-			OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
-
-			/* movq %rax, (const) */
-			memref_idx = memrefs->n_elts;
-			if (!memrefs_grow(memrefs, 1))
-				goto error;
-
-			memrefs->elts[memref_idx].type =
-				MEMREF_MEM_BOX;
-			memrefs->elts[memref_idx].code_offset =
-				output->n_elts + 2;
-
-			OUTS("\x48\xa3\x90\x90\x90\x90\x90\x90\x90\x90");
-		}
-
 		if (instruction->opcode == OPCODE_CALL_INDIRECT) {
 			size_t taddr;
 			assert(module->tableaddrs.n_elts >= 1);

@@ -25,6 +25,7 @@
 #include <wasmjit/ast.h>
 #include <wasmjit/runtime.h>
 #include <wasmjit/util.h>
+#include <wasmjit/tls.h>
 
 #include <math.h>
 #include <stdlib.h>
@@ -34,10 +35,26 @@
 
 #include <sys/uio.h>
 
-uint32_t write_callback(uint32_t fd_arg, uint32_t buf_arg, uint32_t count)
+wasmjit_tls_key_t baseaddr_key;
+
+__attribute__((constructor))
+static void init_baseaddr_key()
 {
-	char *base_address = wasmjit_get_base_address();
-	return write(fd_arg, base_address + buf_arg, count);
+	if (!wasmjit_init_tls_key(&baseaddr_key, NULL))
+		abort();
+}
+
+static void *wasmjit_get_base_address()
+{
+	void *addr;
+	if (!wasmjit_get_tls_key(baseaddr_key, &addr))
+		return NULL;
+	return addr;
+}
+
+static int _wasmjit_set_base_address(void *addr)
+{
+	return wasmjit_set_tls_key(baseaddr_key, addr);
 }
 
 __attribute__((noreturn))
@@ -235,6 +252,7 @@ static uint32_t alignMemory(uint32_t size, uint32_t factor) {
 
 int wasmjit_add_emscripten_runtime(struct Store *store)
 {
+	wasmjit_addr_t memaddr;
 	uint32_t TOTAL_STACK = 5242880;
 	uint32_t STACK_ALIGN = 16;
 	uint32_t GLOBAL_BASE = 1024;
@@ -252,9 +270,11 @@ int wasmjit_add_emscripten_runtime(struct Store *store)
 
 	assert(tempDoublePtr % 8 == 0);
 
-	if (!wasmjit_import_memory(store, "env", "memory",
-				   256 * WASM_PAGE_SIZE, 256 * WASM_PAGE_SIZE))
+	memaddr = wasmjit_import_memory(store, "env", "memory",
+					256 * WASM_PAGE_SIZE, 256 * WASM_PAGE_SIZE);
+	if (memaddr == INVALID_ADDR)
 		goto error;
+	_wasmjit_set_base_address(store->mems.elts[memaddr].data);
 
 	if (!wasmjit_import_table(store, "env", "table",
 				  ELEMTYPE_ANYFUNC,

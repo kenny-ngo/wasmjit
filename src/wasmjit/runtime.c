@@ -26,31 +26,8 @@
 
 #include <wasmjit/ast.h>
 #include <wasmjit/util.h>
-#include <wasmjit/tls.h>
 
 #include <assert.h>
-
-wasmjit_tls_key_t meminst_key;
-
-__attribute__((constructor))
-static void init_meminst_key()
-{
-	if (!wasmjit_init_tls_key(&meminst_key, NULL))
-		abort();
-}
-
-void *wasmjit_get_base_address()
-{
-	struct MemInst **mb;
-	if (!wasmjit_get_tls_key(meminst_key, &mb))
-		return NULL;
-	return (*mb)->data;
-}
-
-int _wasmjit_set_base_meminst_ptr_ptr(struct MemInst **meminst_box)
-{
-	return wasmjit_set_tls_key(meminst_key, meminst_box);
-}
 
 int _wasmjit_create_func_type(struct FuncType *ft,
 			      size_t n_inputs,
@@ -239,10 +216,10 @@ int _wasmjit_add_to_namespace(struct Store *store,
 	return 0;
 }
 
-int wasmjit_import_memory(struct Store *store,
-			  const char *module_name,
-			  const char *name,
-			  size_t size, size_t max)
+wasmjit_addr_t wasmjit_import_memory(struct Store *store,
+				     const char *module_name,
+				     const char *name,
+				     size_t size, size_t max)
 {
 	wasmjit_addr_t memaddr =
 		_wasmjit_add_memory_to_store(store, size, max);
@@ -255,12 +232,12 @@ int wasmjit_import_memory(struct Store *store,
 				       IMPORT_DESC_TYPE_MEM, memaddr))
 	    goto error;
 
-	return 1;
+	return memaddr;
 
  error:
 	/* TODO: implement cleanup */
 	assert(0);
-	return 0;
+	return INVALID_ADDR;
 }
 
 int wasmjit_import_function(struct Store *store,

@@ -79,8 +79,6 @@ struct MemoryReferences {
 			MEMREF_CALL,
 			MEMREF_MEM_ADDR,
 			MEMREF_MEM_SIZE,
-			MEMREF_MEM,
-			MEMREF_MEM_BOX,
 			MEMREF_GLOBAL_ADDR,
 			MEMREF_TABLE_LENGTH_ADDR,
 			MEMREF_TABLE_DATA_ADDR,
@@ -155,9 +153,6 @@ static DEFINE_VECTOR_GROW(store_globals, struct StoreGlobals);
 
 #define WASM_PAGE_SIZE ((size_t) (64 * 1024))
 
-void *wasmjit_get_base_address();
-int _wasmjit_set_base_meminst_ptr_ptr(struct MemInst **meminst_box);
-
 int _wasmjit_create_func_type(struct FuncType *ft,
 			      size_t n_inputs,
 			      unsigned *input_types,
@@ -192,10 +187,10 @@ int wasmjit_import_function(struct Store *store,
 			    unsigned *input_types,
 			    size_t n_outputs, unsigned *output_types);
 
-int wasmjit_import_memory(struct Store *store,
-			  const char *module_name,
-			  const char *name,
-			  size_t size, size_t max);
+wasmjit_addr_t wasmjit_import_memory(struct Store *store,
+				     const char *module_name,
+				     const char *name,
+				     size_t size, size_t max);
 
 int wasmjit_import_table(struct Store *store,
 			 const char *module_name,

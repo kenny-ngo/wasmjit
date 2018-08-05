@@ -35,9 +35,6 @@ int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 	size_t i;
 	int ret;
 
-	struct MemInst *meminst_box;
-
-	_wasmjit_set_base_meminst_ptr_ptr(&meminst_box);
 
 	/* map all code in executable memory */
 	for (i = 0; i < store->funcs.n_elts; ++i) {
@@ -79,21 +76,13 @@ int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 					val = (uintptr_t) finst->code;
 					break;
 				}
-			case MEMREF_MEM:
 			case MEMREF_MEM_ADDR:
 			case MEMREF_MEM_SIZE:
 				{
 					struct MemInst *minst = &store->mems.elts[melt->addr];
 					val =
 						melt->type == MEMREF_MEM_ADDR ? (uintptr_t) &minst->size :
-						melt->type == MEMREF_MEM_SIZE ? (uintptr_t) &minst->data :
-						(uintptr_t) minst;
-					break;
-				}
-			case MEMREF_MEM_BOX:
-				{
-					val = (uintptr_t) &meminst_box;
-
+						(uintptr_t) &minst->data;
 					break;
 				}
 			case MEMREF_GLOBAL_ADDR:
