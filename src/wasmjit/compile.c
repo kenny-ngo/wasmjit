@@ -1079,6 +1079,19 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				goto error;
 			push_stack(sstack, STACK_I32);
 			break;
+		case OPCODE_I64_CONST:
+			/* movq $value, %rax */
+			OUTS("\x48\xb8");
+			encode_le_uint64_t(instructions[i].data.i64_const.value,
+					   buf);
+			if (!output_buf(output, buf, sizeof(uint64_t)))
+				goto error;
+
+			/* push %rax */
+			OUTS("\x50");
+
+			push_stack(sstack, STACK_I64);
+			break;
 		case OPCODE_I32_EQ:
 		case OPCODE_I32_NE:
 		case OPCODE_I32_LT_S:

@@ -60,6 +60,13 @@ static uint64_t uint64_t_swap_bytes(uint64_t data)
 }
 
 __attribute__ ((unused))
+static void encode_le_uint64_t(uint64_t val, char *buf)
+{
+	uint64_t le_val = uint64_t_swap_bytes(val);
+	memcpy(buf, &le_val, sizeof(le_val));
+}
+
+__attribute__ ((unused))
 static void *wasmjit_alloc_vector(size_t n_elts, size_t elt_size, size_t *alloced) {
 	size_t size;
 	if (__builtin_umull_overflow(n_elts, elt_size, &size)) {

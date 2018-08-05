@@ -30,13 +30,6 @@
 
 #include <sys/mman.h>
 
-__attribute__ ((unused))
-static void encode_le_uint64_t(uint64_t val, char *buf)
-{
-	uint64_t le_val = uint64_t_swap_bytes(val);
-	memcpy(buf, &le_val, sizeof(le_val));
-}
-
 int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 {
 	size_t i;
