@@ -82,6 +82,9 @@ struct MemoryReferences {
 			MEMREF_MEM,
 			MEMREF_MEM_BOX,
 			MEMREF_GLOBAL_ADDR,
+			MEMREF_TABLE_LENGTH_ADDR,
+			MEMREF_TABLE_DATA_ADDR,
+			MEMREF_FUNC_INST_BASE,
 		} type;
 		size_t code_offset;
 		size_t addr;

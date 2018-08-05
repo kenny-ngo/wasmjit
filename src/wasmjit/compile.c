@@ -552,15 +552,163 @@ static int wasmjit_compile_instruction(const struct Store *store,
 		}
 
 		break;
-	case OPCODE_CALL: {
-		uint32_t fidx =
-			instruction->data.call.funcidx;
-		size_t faddr = module->funcaddrs.elts[fidx];
-		size_t n_inputs =
-			store->funcs.elts[faddr].type.n_inputs;
+	case OPCODE_CALL:
+	case OPCODE_CALL_INDIRECT: {
 		size_t i;
 		size_t n_movs, n_xmm_movs, n_stack;
 		int aligned = 0;
+		struct FuncType *ft;
+
+		/* set memory base address in known location */
+		if (instruction->opcode == OPCODE_CALL_INDIRECT ||
+		    IS_HOST(&store->funcs.elts[module->funcaddrs.elts[instruction->data.call.funcidx]])) {
+			size_t memref_idx;
+
+			/* movq $const, %rax */
+			memref_idx = memrefs->n_elts;
+			if (!memrefs_grow(memrefs, 1))
+				goto error;
+
+			memrefs->elts[memref_idx].type =
+				MEMREF_MEM;
+			memrefs->elts[memref_idx].code_offset =
+				output->n_elts + 2;
+			memrefs->elts[memref_idx].addr =
+				module->memaddrs.elts[0];
+
+			OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
+
+			/* movq %rax, (const) */
+			memref_idx = memrefs->n_elts;
+			if (!memrefs_grow(memrefs, 1))
+				goto error;
+
+			memrefs->elts[memref_idx].type =
+				MEMREF_MEM_BOX;
+			memrefs->elts[memref_idx].code_offset =
+				output->n_elts + 2;
+
+			OUTS("\x48\xa3\x90\x90\x90\x90\x90\x90\x90\x90");
+		}
+
+		if (instruction->opcode == OPCODE_CALL_INDIRECT) {
+			size_t taddr;
+			assert(module->tableaddrs.n_elts >= 1);
+			taddr = module->tableaddrs.elts[0];
+			assert(instruction->data.call_indirect.typeidx < module->types.n_elts);
+			ft = &module->types.elts[instruction->data.call_indirect.typeidx];
+			assert(peek_stack(sstack) == STACK_I32);
+			if (!pop_stack(sstack))
+				goto error;
+
+			/* pop %rdi */
+			OUTS("\x58");
+
+			/* mov (const), %rax */
+			OUTS("\x48\xa1\x90\x90\x90\x90\x90\x90\x90\x90");
+			// address of store->tables.elts[taddr].length
+			{
+				size_t memref_idx;
+				memref_idx = memrefs->n_elts;
+				if (!memrefs_grow(memrefs, 1))
+					goto error;
+
+				memrefs->elts[memref_idx].type =
+					MEMREF_TABLE_LENGTH_ADDR;
+				memrefs->elts[memref_idx].code_offset =
+					output->n_elts - 8;
+				memrefs->elts[memref_idx].addr =
+					taddr;
+			}
+
+			/* check if table idx is smaller than table */
+			/* cmp %rax, %rdi */
+			OUTS("\x48\x39\xc7");
+			/* jl $0x2 */
+			OUTS("\x7c\x02");
+			/* int $4 */
+			OUTS("\xcd\x04");
+
+			/* mov (const), %rax */
+			OUTS("\x48\xai\x90\x90\x90\x90\x90\x90\x90\x90");
+			// address of store->tables.elts[taddr].data
+			{
+				size_t memref_idx;
+				memref_idx = memrefs->n_elts;
+				if (!memrefs_grow(memrefs, 1))
+					goto error;
+
+				memrefs->elts[memref_idx].type =
+					MEMREF_TABLE_DATA_ADDR;
+				memrefs->elts[memref_idx].code_offset =
+					output->n_elts - 8;
+				memrefs->elts[memref_idx].addr =
+					taddr;
+			}
+
+			/* mov (%rax,%rdi,8), %rax */
+			OUTS("\x48\x8b\x04\xf8");
+
+			/* check if table entry is initialized */
+			/* test %rax, %rax */
+			OUTS("\x48\x85\xc0");
+			/* jne $0x2 */
+			OUTS("\x75\x02");
+			/* int $4 */
+			OUTS("\xcd\x04");
+
+			/* mov $const, %rdi */
+			OUTS("\x48\xc7\xc7");
+			encode_le_uint32_t(sizeof(struct FuncInst), buf);
+			if (!output_buf(output, buf, sizeof(uint32_t)))
+				goto error;
+
+			/* mul %rdi */
+			OUTS("\x48\xf7\xe7");
+
+			/* mov $const, %rdi */
+			OUTS("\x48\xbf\x90\x90\x90\x90\x90\x90\x90\x90");
+			// address of store->funcs.elts[0]
+			{
+				size_t memref_idx;
+				memref_idx = memrefs->n_elts;
+				if (!memrefs_grow(memrefs, 1))
+					goto error;
+
+				memrefs->elts[memref_idx].type =
+					MEMREF_FUNC_INST_BASE;
+				memrefs->elts[memref_idx].code_offset =
+					output->n_elts - 8;
+				memrefs->elts[memref_idx].addr =
+					taddr;
+			}
+
+			/* mov code_offset(%rdi, %rax), %rax */
+			OUTS("\x48\x8b\x44\x07");
+			OUTB(offsetof(struct FuncInst, code));
+		} else {
+			uint32_t fidx =
+				instruction->data.call.funcidx;
+			size_t faddr = module->funcaddrs.elts[fidx];
+			ft = &store->funcs.elts[faddr].type;
+
+			/* movq $const, %rax */
+			{
+				size_t memref_idx;
+
+				memref_idx = memrefs->n_elts;
+				if (!memrefs_grow(memrefs, 1))
+					goto error;
+
+				memrefs->elts[memref_idx].type =
+					MEMREF_CALL;
+				memrefs->elts[memref_idx].code_offset =
+					output->n_elts + 2;
+				memrefs->elts[memref_idx].addr = faddr;
+
+				OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
+			}
+		}
 
 		static const char *const movs[] = {
 			"\x48\x8b\x7c\x24",	/* mov N(%rsp), %rdi */
@@ -608,20 +756,16 @@ static int wasmjit_compile_instruction(const struct Store *store,
 			/* add stack contribution from spilled arguments */
 			n_movs = 0;
 			n_xmm_movs = 0;
-			for (i = 0; i < n_inputs; ++i) {
-				if ((store->funcs.elts[faddr].type.
-				     input_types[i] == VALTYPE_I32
-				     || store->funcs.elts[faddr].type.
-				     input_types[i] == VALTYPE_I64)
+			for (i = 0; i < ft->n_inputs; ++i) {
+				if ((ft->input_types[i] == VALTYPE_I32 ||
+				     ft->input_types[i] == VALTYPE_I64)
 				    && n_movs < 6) {
 					n_movs += 1;
-				} else if (store->funcs.elts[faddr].
-					   type.input_types[i] ==
+				} else if (ft->input_types[i] ==
 					   VALTYPE_F32
 					   && n_xmm_movs < 8) {
 					n_xmm_movs += 1;
-				} else if (store->funcs.elts[faddr].
-					   type.input_types[i] ==
+				} else if (ft->input_types[i] ==
 					   VALTYPE_F64
 					   && n_xmm_movs < 8) {
 					n_xmm_movs += 1;
@@ -639,36 +783,31 @@ static int wasmjit_compile_instruction(const struct Store *store,
 		n_movs = 0;
 		n_xmm_movs = 0;
 		n_stack = 0;
-		for (i = 0; i < n_inputs; ++i) {
+		for (i = 0; i < ft->n_inputs; ++i) {
 			intmax_t stack_offset;
 			assert(sstack->
-			       elts[sstack->n_elts - n_inputs +
+			       elts[sstack->n_elts - ft->n_inputs +
 				    i].type ==
-			       store->funcs.elts[faddr].type.
-			       input_types[i]);
+			       ft->input_types[i]);
 
 			stack_offset =
-				(n_inputs - i - 1 + n_stack + aligned) * 8;
+				(ft->n_inputs - i - 1 + n_stack + aligned) * 8;
 			if (stack_offset > 127
 			    || stack_offset < -128)
 				goto error;
 
 			/* mov -n_inputs + i(%rsp), %rdi */
-			if ((store->funcs.elts[faddr].type.
-			     input_types[i] == VALTYPE_I32
-			     || store->funcs.elts[faddr].type.
-			     input_types[i] == VALTYPE_I64)
+			if ((ft->input_types[i] == VALTYPE_I32 ||
+			     ft->input_types[i] == VALTYPE_I64)
 			    && n_movs < 6) {
 				OUTS(movs[n_movs]);
 				n_movs += 1;
-			} else if (store->funcs.elts[faddr].
-				   type.input_types[i] ==
+			} else if (ft->input_types[i] ==
 				   VALTYPE_F32
 				   && n_xmm_movs < 8) {
 				OUTS(f32_movs[n_xmm_movs]);
 				n_xmm_movs += 1;
-			} else if (store->funcs.elts[faddr].
-				   type.input_types[i] ==
+			} else if (ft->input_types[i] ==
 				   VALTYPE_F64
 				   && n_xmm_movs < 8) {
 				OUTS(f64_movs[n_xmm_movs]);
@@ -681,87 +820,33 @@ static int wasmjit_compile_instruction(const struct Store *store,
 			OUTB(stack_offset);
 		}
 
-		/* set memory base address in known location */
-		if (IS_HOST(&store->funcs.elts[faddr])) {
-			size_t memref_idx;
-
-			/* movq $const, %rax */
-			memref_idx = memrefs->n_elts;
-			if (!memrefs_grow(memrefs, 1))
-				goto error;
-
-			memrefs->elts[memref_idx].type =
-				MEMREF_MEM;
-			memrefs->elts[memref_idx].code_offset =
-				output->n_elts + 2;
-			memrefs->elts[memref_idx].addr =
-				module->memaddrs.elts[0];
-
-			OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
-
-			/* movq %rax, (const) */
-			memref_idx = memrefs->n_elts;
-			if (!memrefs_grow(memrefs, 1))
-				goto error;
-
-			memrefs->elts[memref_idx].type =
-				MEMREF_MEM_BOX;
-			memrefs->elts[memref_idx].code_offset =
-				output->n_elts + 2;
-
-			OUTS("\x48\xa3\x90\x90\x90\x90\x90\x90\x90\x90");
-		}
-
-		/* movq $const, %rax */
-		{
-			size_t memref_idx;
-
-			memref_idx = memrefs->n_elts;
-			if (!memrefs_grow(memrefs, 1))
-				goto error;
-
-			memrefs->elts[memref_idx].type =
-				MEMREF_CALL;
-			memrefs->elts[memref_idx].code_offset =
-				output->n_elts + 2;
-			memrefs->elts[memref_idx].addr = faddr;
-
-			OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
-		}
-
 		/* call *%rax */
 		OUTS("\xff\xd0");
 
 		/* clean up stack */
 		/* add (n_stack + n_inputs + aligned) * 8, %rsp */
 		OUTS("\x48\x81\xc4");
-		encode_le_uint32_t((n_stack + n_inputs + aligned) * 8,
+		encode_le_uint32_t((n_stack + ft->n_inputs + aligned) * 8,
 				   buf);
 		if (!output_buf(output, buf, sizeof(uint32_t)))
 			goto error;
 
 		if (!stack_truncate(sstack,
 				    sstack->n_elts -
-				    store->funcs.elts[faddr].type.
-				    n_inputs))
+				    ft->n_inputs))
 			goto error;
 
-		if (store->funcs.elts[faddr].type.n_outputs) {
-			assert(store->funcs.elts[faddr].type.
-			       n_outputs == 1);
-			if (store->funcs.elts[faddr].type.
-			    output_types[0] == VALTYPE_F32
-			    || store->funcs.elts[faddr].type.
-			    output_types[0] == VALTYPE_F64) {
+		if (ft->n_outputs) {
+			assert(ft->n_outputs == 1);
+			if (ft->output_types[0] == VALTYPE_F32 ||
+			    ft->output_types[0] == VALTYPE_F64) {
 				/* movq %xmm0, %rax */
 				OUTS("\x66\x48\x0f\x7e\xc0");
 			}
 			/* push %rax */
 			OUTS("\x50");
 
-			if (!push_stack(sstack,
-					store->funcs.elts[faddr].type.
-					output_types[0]))
+			if (!push_stack(sstack, ft->output_types[0]))
 				goto error;
 		}
 		break;

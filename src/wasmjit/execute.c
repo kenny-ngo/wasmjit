@@ -118,6 +118,18 @@ int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 					}
 				}
 				break;
+			case MEMREF_TABLE_LENGTH_ADDR:
+			case MEMREF_TABLE_DATA_ADDR:
+				{
+					struct TableInst *tinst = &store->tables.elts[melt->addr];
+					val = melt->type == MEMREF_TABLE_LENGTH_ADDR
+						? (uintptr_t) &tinst->length
+						: (uintptr_t) &tinst->data;
+				}
+				break;
+			case MEMREF_FUNC_INST_BASE:
+				val = (uintptr_t) &store->funcs.elts[0];
+				break;
 			default:
 				assert(0);
 				break;
