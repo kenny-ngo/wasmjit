@@ -851,6 +851,52 @@ static int wasmjit_compile_instructions(const struct Store *store,
 
 			break;
 		}
+		case OPCODE_SET_GLOBAL: {
+			wasmjit_addr_t globaladdr;
+
+			assert(instructions[i].data.get_global.globalidx < module->globaladdrs.n_elts);
+			globaladdr = module->globaladdrs.elts[instructions[i].data.get_global.globalidx];
+
+			/* pop %rax */
+			OUTS("\x58");
+
+			assert(peek_stack(sstack) == store->globals.elts[globaladdr].value.type);
+			if (!pop_stack(sstack))
+				goto error;
+
+			switch (store->globals.elts[globaladdr].value.type) {
+			case VALTYPE_I32:
+			case VALTYPE_F32:
+				/* movl %eax, (const) */
+				OUTS("\xa3\x90\x90\x90\x90\x90\x90\x90\x90");
+				break;
+			case VALTYPE_I64:
+			case VALTYPE_F64:
+				/* movq %rax, (const) */
+				OUTS("\x48\xa3\x90\x90\x90\x90\x90\x90\x90\x90");
+				break;
+			default:
+				assert(0);
+				break;
+			}
+
+			{
+				size_t memref_idx;
+
+				memref_idx = memrefs->n_elts;
+				if (!memrefs_grow(memrefs, 1))
+					goto error;
+
+				memrefs->elts[memref_idx].type =
+					MEMREF_GLOBAL_ADDR;
+				memrefs->elts[memref_idx].code_offset =
+					output->n_elts - 8;
+				memrefs->elts[memref_idx].addr =
+					globaladdr;
+			}
+
+			break;
+		}
 		case OPCODE_I32_LOAD:
 			/* LOGIC: ea = pop_stack() */
 
