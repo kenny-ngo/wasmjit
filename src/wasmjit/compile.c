@@ -159,10 +159,23 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					struct LocalsMD *locals_md,
 					size_t n_locals,
 					int n_frame_locals,
-					struct StaticStack *sstack)
+					struct StaticStack *sstack);
+
+static int wasmjit_compile_instruction(const struct Store *store,
+				       const struct ModuleInst *module,
+				       const struct TypeSectionType *type,
+				       const struct CodeSectionCode *code,
+				       const struct Instr *instruction,
+				       struct SizedBuffer *output,
+				       struct LabelContinuations *labels,
+				       struct BranchPoints *branches,
+				       struct MemoryReferences *memrefs,
+				       struct LocalsMD *locals_md,
+				       size_t n_locals,
+				       int n_frame_locals,
+				       struct StaticStack *sstack)
 {
 	char buf[0x100];
-	size_t i;
 
 #define BUFFMT(...)						\
 	do {							\
@@ -182,763 +195,176 @@ static int wasmjit_compile_instructions(const struct Store *store,
 	}					\
 	while (0)
 
-	for (i = 0; i < n_instructions; ++i) {
-		switch (instructions[i].opcode) {
-		case OPCODE_UNREACHABLE:
-			break;
+	switch (instruction->opcode) {
+	case OPCODE_UNREACHABLE:
+		break;
+	case OPCODE_BLOCK:
+	case OPCODE_LOOP: {
+		int arity;
+		size_t label_idx, stack_idx, output_idx;
+		struct StackElt *elt;
+
+		arity =
+			instruction->data.block.blocktype !=
+			VALTYPE_NULL ? 1 : 0;
+
+		label_idx = labels->n_elts;
+		INC_LABELS();
+
+		stack_idx = sstack->n_elts;
+		if (!stack_grow(sstack, 1))
+			goto error;
+		elt = &sstack->elts[stack_idx];
+		elt->type = STACK_LABEL;
+		elt->data.label.arity = arity;
+		elt->data.label.continuation_idx = label_idx;
+
+		output_idx = output->n_elts;
+		wasmjit_compile_instructions(store,
+					     module,
+					     type,
+					     code,
+					     instruction->data.
+					     block.instructions,
+					     instruction->data.
+					     block.n_instructions,
+					     output, labels,
+					     branches, memrefs,
+					     locals_md, n_locals,
+					     n_frame_locals,
+					     sstack);
+
+		/* shift stack results over label */
+		memmove(&sstack->elts[stack_idx],
+			&sstack->elts[sstack->n_elts - arity],
+			arity * sizeof(sstack->elts[0]));
+		if (!stack_truncate(sstack, stack_idx + arity))
+			goto error;
+
+		switch (instruction->opcode) {
 		case OPCODE_BLOCK:
-		case OPCODE_LOOP:
-			{
-				int arity;
-				size_t label_idx, stack_idx, output_idx;
-				struct StackElt *elt;
-
-				arity =
-				    instructions[i].data.block.blocktype !=
-				    VALTYPE_NULL ? 1 : 0;
-
-				label_idx = labels->n_elts;
-				INC_LABELS();
-
-				stack_idx = sstack->n_elts;
-				if (!stack_grow(sstack, 1))
-					goto error;
-				elt = &sstack->elts[stack_idx];
-				elt->type = STACK_LABEL;
-				elt->data.label.arity = arity;
-				elt->data.label.continuation_idx = label_idx;
-
-				output_idx = output->n_elts;
-				wasmjit_compile_instructions(store,
-							     module,
-							     type,
-							     code,
-							     instructions
-							     [i].data.
-							     block.instructions,
-							     instructions
-							     [i].data.
-							     block.n_instructions,
-							     output, labels,
-							     branches, memrefs,
-							     locals_md, n_locals,
-							     n_frame_locals,
-							     sstack);
-
-				/* shift stack results over label */
-				memmove(&sstack->elts[stack_idx],
-					&sstack->elts[sstack->n_elts - arity],
-					arity * sizeof(sstack->elts[0]));
-				if (!stack_truncate(sstack, stack_idx + arity))
-					goto error;
-
-				switch (instructions[i].opcode) {
-				case OPCODE_BLOCK:
-					labels->elts[label_idx] =
-					    output->n_elts;
-					break;
-				case OPCODE_LOOP:
-					labels->elts[label_idx] = output_idx;
-					break;
-				default:
-					assert(0);
-					break;
-				}
-			}
+			labels->elts[label_idx] =
+				output->n_elts;
 			break;
-		case OPCODE_IF: {
-			int arity;
-			size_t jump_to_else_offset, jump_to_after_else_offset,
-				stack_idx, label_idx;
+		case OPCODE_LOOP:
+			labels->elts[label_idx] = output_idx;
+			break;
+		default:
+			assert(0);
+			break;
+		}
+		break;
+	}
+	case OPCODE_IF: {
+		int arity;
+		size_t jump_to_else_offset, jump_to_after_else_offset,
+			stack_idx, label_idx;
 
-			/* test top of stack */
-			assert(peek_stack(sstack) == STACK_I32);
-			pop_stack(sstack);
-			/* pop %rax */
-			OUTS("\x58");
+		/* test top of stack */
+		assert(peek_stack(sstack) == STACK_I32);
+		pop_stack(sstack);
+		/* pop %rax */
+		OUTS("\x58");
 
-			/* if not true jump to else case */
-			/* cmp $0, %eax */
-			OUTS("\x83\xf8\x00");
+		/* if not true jump to else case */
+		/* cmp $0, %eax */
+		OUTS("\x83\xf8\x00");
 
-			jump_to_else_offset = output->n_elts + 2;
-			/* je else_offset */
-			OUTS("\x0f\x8f\x90\x90\x90\x90");
+		jump_to_else_offset = output->n_elts + 2;
+		/* je else_offset */
+		OUTS("\x0f\x8f\x90\x90\x90\x90");
 
-			/* output then case */
-			label_idx = labels->n_elts;
-			INC_LABELS();
+		/* output then case */
+		label_idx = labels->n_elts;
+		INC_LABELS();
 
-			arity =
-				instructions[i].data.if_.blocktype !=
-				VALTYPE_NULL ? 1 : 0;
-			{
-				struct StackElt *elt;
-				stack_idx = sstack->n_elts;
-				if (!stack_grow(sstack, 1))
-					goto error;
-				elt = &sstack->elts[stack_idx];
-				elt->type = STACK_LABEL;
-				elt->data.label.arity = arity;
-				elt->data.label.continuation_idx = label_idx;
-			}
+		arity =
+			instruction->data.if_.blocktype !=
+			VALTYPE_NULL ? 1 : 0;
+		{
+			struct StackElt *elt;
+			stack_idx = sstack->n_elts;
+			if (!stack_grow(sstack, 1))
+				goto error;
+			elt = &sstack->elts[stack_idx];
+			elt->type = STACK_LABEL;
+			elt->data.label.arity = arity;
+			elt->data.label.continuation_idx = label_idx;
+		}
 
+		wasmjit_compile_instructions(store,
+					     module,
+					     type,
+					     code,
+					     instruction->data.
+					     if_.instructions_then,
+					     instruction->data.
+					     if_.n_instructions_then,
+					     output, labels,
+					     branches, memrefs,
+					     locals_md, n_locals,
+					     n_frame_locals,
+					     sstack);
+
+		/* if (else_exist) {
+		   jump after else
+		   }
+		*/
+		if (instruction->data.if_.n_instructions_else) {
+			jump_to_after_else_offset = output->n_elts + 1;
+			/* jmp after_else_offset */
+			OUTS("\xe9\x90\x90\x90\x90");
+		}
+
+		/* fix up jump_to_else_offset */
+		jump_to_else_offset = output->n_elts - jump_to_else_offset;
+		encode_le_uint32_t(jump_to_else_offset - 4,
+				   &output->elts[output->n_elts - jump_to_else_offset]);
+
+		/* if (else_exist) {
+		   output else case
+		   }
+		*/
+		if (instruction->data.if_.n_instructions_else) {
 			wasmjit_compile_instructions(store,
 						     module,
 						     type,
 						     code,
-						     instructions
-						     [i].data.
-						     if_.instructions_then,
-						     instructions
-						     [i].data.
-						     if_.n_instructions_then,
+						     instruction->data.
+						     if_.instructions_else,
+						     instruction->data.
+						     if_.n_instructions_else,
 						     output, labels,
 						     branches, memrefs,
 						     locals_md, n_locals,
 						     n_frame_locals,
 						     sstack);
 
-			/* if (else_exist) {
-			   jump after else
-			   }
-			*/
-			if (instructions[i].data.if_.n_instructions_else) {
-				jump_to_after_else_offset = output->n_elts + 1;
-				/* jmp after_else_offset */
-				OUTS("\xe9\x90\x90\x90\x90");
-			}
-
-			/* fix up jump_to_else_offset */
-			jump_to_else_offset = output->n_elts - jump_to_else_offset;
-			encode_le_uint32_t(jump_to_else_offset - 4,
-					   &output->elts[output->n_elts - jump_to_else_offset]);
-
-			/* if (else_exist) {
-			   output else case
-			   }
-			*/
-			if (instructions[i].data.if_.n_instructions_else) {
-				wasmjit_compile_instructions(store,
-							     module,
-							     type,
-							     code,
-							     instructions
-							     [i].data.
-							     if_.instructions_else,
-							     instructions
-							     [i].data.
-							     if_.n_instructions_else,
-							     output, labels,
-							     branches, memrefs,
-							     locals_md, n_locals,
-							     n_frame_locals,
-							     sstack);
-
-				/* fix up jump_to_after_else_offset */
-				jump_to_after_else_offset = output->n_elts - jump_to_after_else_offset;
-				encode_le_uint32_t(jump_to_after_else_offset - 4,
-						   &output->elts[output->n_elts - jump_to_after_else_offset]);
-			}
-
-			/* fix up static stack */
-			/* shift stack results over label */
-			memmove(&sstack->elts[stack_idx],
-				&sstack->elts[sstack->n_elts - arity],
-				arity * sizeof(sstack->elts[0]));
-			if (!stack_truncate(sstack, stack_idx + arity))
-				goto error;
-
-			/* set labels position */
-			labels->elts[label_idx] = output->n_elts;;
-			break;
+			/* fix up jump_to_after_else_offset */
+			jump_to_after_else_offset = output->n_elts - jump_to_after_else_offset;
+			encode_le_uint32_t(jump_to_after_else_offset - 4,
+					   &output->elts[output->n_elts - jump_to_after_else_offset]);
 		}
-		case OPCODE_BR_IF:
-		case OPCODE_BR:
-			{
-				uint32_t labelidx, arity, stack_shift;
-				size_t je_offset, je_offset_2, j;
 
-				if (instructions[i].opcode == OPCODE_BR_IF) {
-					/* LOGIC: v = pop_stack() */
-
-					/* pop %rsi */
-					assert(peek_stack(sstack) == STACK_I32);
-					if (!pop_stack(sstack))
-						goto error;
-					OUTS("\x5e");
-
-					/* LOGIC: if (v) br(); */
-
-					/* testl %esi, %esi */
-					OUTS("\x85\xf6");
-
-					/* je AFTER_BR */
-					je_offset = output->n_elts;
-					OUTS("\x74\x01");
-				}
-
-				/* find out bottom of stack to L */
-				j = sstack->n_elts;
-				labelidx = instructions[i].data.br.labelidx;
-				while (j) {
-					j -= 1;
-					if (sstack->elts[j].type == STACK_LABEL) {
-						if (!labelidx) {
-							break;
-						}
-						labelidx--;
-					}
-				}
-
-				arity = sstack->elts[j].data.label.arity;
-				stack_shift =
-				    sstack->n_elts - j - (labelidx + 1) - arity;
-
-				if (arity) {
-					/* move top <arity> values for Lth label to
-					   bottom of stack where Lth label is */
-
-					/* LOGIC: memmove(sp + stack_shift * 8, sp, arity * 8); */
-
-					/* mov %rsp, %rsi */
-					OUTS("\x48\x89\xe6");
-
-					if (arity - 1) {
-						/* add <(arity - 1) * 8>, %rsi */
-						assert((arity - 1) * 8 <=
-						       INT_MAX);
-						OUTS("\x48\x03\x34\x25");
-						encode_le_uint32_t((arity -
-								    1) * 8,
-								   buf);
-						if (!output_buf
-						    (output, buf,
-						     sizeof(uint32_t)))
-							goto error;
-					}
-
-					/* mov %rsp, %rdi */
-					OUTS("\x48\x89\xe7");
-
-					/* add <(arity - 1 + stack_shift) * 8>, %rdi */
-					if (arity - 1 + stack_shift) {
-						assert((arity - 1 +
-							stack_shift) * 8 <=
-						       INT_MAX);
-						OUTS("\x48\x81\xc7");
-						encode_le_uint32_t((arity - 1 +
-								    stack_shift)
-								   * 8, buf);
-						if (!output_buf
-						    (output, buf,
-						     sizeof(uint32_t)))
-							goto error;
-					}
-
-					/* mov <arity>, %rcx */
-					OUTS("\x48\xc7\xc1");
-					assert(arity <= INT_MAX);
-					encode_le_uint32_t(arity, buf);
-					if (!output_buf
-					    (output, buf, sizeof(uint32_t)))
-						goto error;
-
-					/* std */
-					OUTS("\xfd");
-
-					/* rep movsq */
-					OUTS("\x48\xa5");
-				}
-
-				/* increment esp to Lth label (simulating pop) */
-				/* add <stack_shift * 8>, %rsp */
-				if (stack_shift) {
-					OUTS("\x48\x81\xc4");
-					assert(stack_shift * 8 <= INT_MAX);
-					encode_le_uint32_t(stack_shift * 8,
-							   buf);
-					if (!output_buf
-					    (output, buf, sizeof(uint32_t)))
-						goto error;
-				}
-
-				/* place jmp to Lth label */
-
-				/* jmp <BRANCH POINT> */
-				je_offset_2 = output->n_elts;
-				OUTS("\xe9\x90\x90\x90\x90");
-
-				/* add jmp offset to branches list */
-				{
-					size_t branch_idx;
-
-					branch_idx = branches->n_elts;
-					if (!bp_grow(branches, 1))
-						goto error;
-
-					branches->
-					    elts[branch_idx].branch_offset =
-					    je_offset_2;
-					branches->
-					    elts[branch_idx].continuation_idx =
-					    sstack->elts[j].data.
-					    label.continuation_idx;
-				}
-
-				if (instructions[i].opcode == OPCODE_BR_IF) {
-					/* update je operand in previous if block */
-					int ret;
-					size_t offset =
-					    output->n_elts - je_offset - 2;
-					assert(offset < 128 && offset > 0);
-					ret =
-					    snprintf(buf, sizeof(buf), "\x74%c",
-						     (int)offset);
-					if (ret < 0)
-						goto error;
-					assert(strlen(buf) == 2);
-					memcpy(&output->elts[je_offset], buf,
-					       2);
-				}
-			}
-
-			break;
-		case OPCODE_RETURN:
-			/* shift $arity values from top of stock to below */
-
-			/* lea (arity - 1)*8(%rsp), %rsi */
-			OUTS("\x48\x8d\x74\x24");
-			OUTB((intmax_t) ((type->n_outputs - 1) * 8));
-
-			/* lea -8(%rbp), %rdi */
-			OUTS("\x48\x8d\x7d\xf8");
-
-			/* mov $arity, %rcx */
-			OUTS("\x48\xc7\xc1");
-			encode_le_uint32_t(type->n_outputs, buf);
-			if (!output_buf(output, buf, sizeof(uint32_t)))
-				goto error;
-
-			/* std */
-			OUTS("\xfd");
-
-			/* rep movsq */
-			OUTS("\x48\xa5");
-
-			/* adjust stack to top of arity */
-			/* lea -arity * 8(%rbp), %rsp */
-			OUTS("\x48\x8d\x65");
-			OUTB((intmax_t) (type->n_outputs * -8));
-
-			/* jmp <EPILOGUE> */
-			{
-				size_t branch_idx;
-
-				branch_idx = branches->n_elts;
-				if (!bp_grow(branches, 1))
-					goto error;
-
-				branches->elts[branch_idx].branch_offset =
-				    output->n_elts;
-				branches->elts[branch_idx].continuation_idx =
-				    FUNC_EXIT_CONT;
-
-				OUTS("\xe9\x90\x90\x90\x90");
-			}
-
-			break;
-		case OPCODE_CALL:
-			{
-				uint32_t fidx =
-				    instructions[i].data.call.funcidx;
-				size_t faddr = module->funcaddrs.elts[fidx];
-				size_t n_inputs =
-				    store->funcs.elts[faddr].type.n_inputs;
-				size_t i;
-				size_t n_movs, n_xmm_movs, n_stack;
-				int aligned = 0;
-
-				static const char *const movs[] = {
-					"\x48\x8b\x7c\x24",	/* mov N(%rsp), %rdi */
-					"\x48\x8b\x74\x24",	/* mov N(%rsp), %rsi */
-					"\x48\x8b\x54\x24",	/* mov N(%rsp), %rdx */
-					"\x48\x8b\x4c\x24",	/* mov N(%rsp), %rcx */
-					"\x4c\x8b\x44\x24",	/* mov N(%rsp), %r8 */
-					"\x4c\x8b\x4c\x24",	/* mov N(%rsp), %r9 */
-				};
-
-				static const char *const f32_movs[] = {
-					"\xf3\x0f\x10\x44\x24",	/* movss N(%rsp), %xmm0 */
-					"\xf3\x0f\x10\x4c\x24",	/* movss N(%rsp), %xmm1 */
-					"\xf3\x0f\x10\x54\x24",	/* movss N(%rsp), %xmm2 */
-					"\xf3\x0f\x10\x5c\x24",	/* movss N(%rsp), %xmm3 */
-					"\xf3\x0f\x10\x64\x24",	/* movss N(%rsp), %xmm4 */
-					"\xf3\x0f\x10\x6c\x24",	/* movss N(%rsp), %xmm5 */
-					"\xf3\x0f\x10\x74\x24",	/* movss N(%rsp), %xmm6 */
-					"\xf3\x0f\x10\x7c\x24",	/* movss N(%rsp), %xmm7 */
-				};
-
-				static const char *const f64_movs[] = {
-					"\xf2\x0f\x10\x44\x24",	/* movsd N(%rsp), %xmm0 */
-					"\xf2\x0f\x10\x4c\x24",	/* movsd N(%rsp), %xmm1 */
-					"\xf2\x0f\x10\x54\x24",	/* movsd N(%rsp), %xmm2 */
-					"\xf2\x0f\x10\x5c\x24",	/* movsd N(%rsp), %xmm3 */
-					"\xf2\x0f\x10\x64\x24",	/* movsd N(%rsp), %xmm4 */
-					"\xf2\x0f\x10\x6c\x24",	/* movsd N(%rsp), %xmm5 */
-					"\xf2\x0f\x10\x74\x24",	/* movsd N(%rsp), %xmm6 */
-					"\xf2\x0f\x10\x7c\x24",	/* movsd N(%rsp), %xmm7 */
-				};
-
-				/* align stack to 16-byte boundary */
-				{
-					size_t cur_stack_depth = n_frame_locals;
-
-					/* add current stack depth */
-					for (i = sstack->n_elts; i;) {
-						i -= 1;
-						if (sstack->elts[i].type != STACK_LABEL) {
-							cur_stack_depth += 1;
-						}
-					}
-
-					/* add stack contribution from spilled arguments */
-					n_movs = 0;
-					n_xmm_movs = 0;
-					for (i = 0; i < n_inputs; ++i) {
-						if ((store->funcs.elts[faddr].type.
-						     input_types[i] == VALTYPE_I32
-						     || store->funcs.elts[faddr].type.
-						     input_types[i] == VALTYPE_I64)
-						    && n_movs < 6) {
-							n_movs += 1;
-						} else if (store->funcs.elts[faddr].
-							   type.input_types[i] ==
-							   VALTYPE_F32
-							   && n_xmm_movs < 8) {
-							n_xmm_movs += 1;
-						} else if (store->funcs.elts[faddr].
-							   type.input_types[i] ==
-							   VALTYPE_F64
-							   && n_xmm_movs < 8) {
-							n_xmm_movs += 1;
-						} else {
-							cur_stack_depth += 1;
-						}
-					}
-
-
-					aligned = cur_stack_depth % 2;
-					if (aligned)
-						OUTS("\x48\x83\xec\x08");
-				}
-
-				n_movs = 0;
-				n_xmm_movs = 0;
-				n_stack = 0;
-				for (i = 0; i < n_inputs; ++i) {
-					intmax_t stack_offset;
-					assert(sstack->
-					       elts[sstack->n_elts - n_inputs +
-						    i].type ==
-					       store->funcs.elts[faddr].type.
-					       input_types[i]);
-
-					stack_offset =
-					    (n_inputs - i - 1 + n_stack + aligned) * 8;
-					if (stack_offset > 127
-					    || stack_offset < -128)
-						goto error;
-
-					/* mov -n_inputs + i(%rsp), %rdi */
-					if ((store->funcs.elts[faddr].type.
-					     input_types[i] == VALTYPE_I32
-					     || store->funcs.elts[faddr].type.
-					     input_types[i] == VALTYPE_I64)
-					    && n_movs < 6) {
-						OUTS(movs[n_movs]);
-						n_movs += 1;
-					} else if (store->funcs.elts[faddr].
-						   type.input_types[i] ==
-						   VALTYPE_F32
-						   && n_xmm_movs < 8) {
-						OUTS(f32_movs[n_xmm_movs]);
-						n_xmm_movs += 1;
-					} else if (store->funcs.elts[faddr].
-						   type.input_types[i] ==
-						   VALTYPE_F64
-						   && n_xmm_movs < 8) {
-						OUTS(f64_movs[n_xmm_movs]);
-						n_xmm_movs += 1;
-					} else {
-						OUTS("\xff\x74\x24");	/* push N(%rsp) */
-						n_stack += 1;
-					}
-
-					OUTB(stack_offset);
-				}
-
-				/* set memory base address in known location */
-				if (IS_HOST(&store->funcs.elts[faddr])) {
-					size_t memref_idx;
-
-					/* movq $const, %rax */
-					memref_idx = memrefs->n_elts;
-					if (!memrefs_grow(memrefs, 1))
-						goto error;
-
-					memrefs->elts[memref_idx].type =
-					    MEMREF_MEM;
-					memrefs->elts[memref_idx].code_offset =
-					    output->n_elts + 2;
-					memrefs->elts[memref_idx].addr =
-					    module->memaddrs.elts[0];
-
-					OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
-
-					/* movq %rax, (const) */
-					memref_idx = memrefs->n_elts;
-					if (!memrefs_grow(memrefs, 1))
-						goto error;
-
-					memrefs->elts[memref_idx].type =
-					    MEMREF_MEM_BOX;
-					memrefs->elts[memref_idx].code_offset =
-					    output->n_elts + 2;
-
-					OUTS("\x48\xa3\x90\x90\x90\x90\x90\x90\x90\x90");
-				}
-
-				/* movq $const, %rax */
-				{
-					size_t memref_idx;
-
-					memref_idx = memrefs->n_elts;
-					if (!memrefs_grow(memrefs, 1))
-						goto error;
-
-					memrefs->elts[memref_idx].type =
-					    MEMREF_CALL;
-					memrefs->elts[memref_idx].code_offset =
-					    output->n_elts + 2;
-					memrefs->elts[memref_idx].addr = faddr;
-
-					OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
-				}
-
-				/* call *%rax */
-				OUTS("\xff\xd0");
-
-				/* clean up stack */
-				/* add (n_stack + n_inputs + aligned) * 8, %rsp */
-				OUTS("\x48\x81\xc4");
-				encode_le_uint32_t((n_stack + n_inputs + aligned) * 8,
-						   buf);
-				if (!output_buf(output, buf, sizeof(uint32_t)))
-					goto error;
-
-				if (!stack_truncate(sstack,
-						    sstack->n_elts -
-						    store->funcs.elts[faddr].type.
-						    n_inputs))
-					goto error;
-
-				if (store->funcs.elts[faddr].type.n_outputs) {
-					assert(store->funcs.elts[faddr].type.
-					       n_outputs == 1);
-					if (store->funcs.elts[faddr].type.
-					    output_types[0] == VALTYPE_F32
-					    || store->funcs.elts[faddr].type.
-					    output_types[0] == VALTYPE_F64) {
-						/* movq %xmm0, %rax */
-						OUTS("\x66\x48\x0f\x7e\xc0");
-					}
-					/* push %rax */
-					OUTS("\x50");
-
-					if (!push_stack(sstack,
-							store->funcs.elts[faddr].type.
-							output_types[0]))
-						goto error;
-				}
-			}
-			break;
-		case OPCODE_DROP:
-			/* add $8, %rsp */
-			OUTS("\x48\x83\xc4\x08");
-			if (!pop_stack(sstack))
-				goto error;
-			break;
-		case OPCODE_GET_LOCAL:
-			assert(instructions[i].data.get_local.localidx < n_locals);
-			push_stack(sstack,
-				   locals_md[instructions[i].data.
-					     get_local.localidx].valtype);
-
-			/* push 8*(offset + 1)(%rbp) */
-			OUTS("\xff\x75");
-			OUTB(locals_md
-			     [instructions[i].data.get_local.localidx]
-			     .fp_offset);
-			break;
-		case OPCODE_SET_LOCAL:
-			assert(peek_stack(sstack) ==
-			       locals_md[instructions[i].data.
-					 set_local.localidx].valtype);
-
-			/* pop 8*(offset + 1)(%rbp) */
-			OUTS("\x8f\x45");
-			OUTB(locals_md
-			     [instructions[i].data.set_local.localidx]
-			     .fp_offset);
-			pop_stack(sstack);
-			break;
-		case OPCODE_TEE_LOCAL:
-			assert(peek_stack(sstack) ==
-			       locals_md[instructions[i].data.
-					 tee_local.localidx].valtype);
-
-			/* movq (%rsp), %rax */
-			OUTS("\x48\x8b\x04\x24");
-			/* movq %rax, 8*(offset + 1)(%rbp) */
-			OUTS("\x48\x89\x45");
-			OUTB(locals_md
-			     [instructions[i].data.tee_local.localidx]
-			     .fp_offset);
-			break;
-		case OPCODE_GET_GLOBAL: {
-			wasmjit_addr_t globaladdr;
-			unsigned type;
-
-			assert(instructions[i].data.get_global.globalidx < module->globaladdrs.n_elts);
-			globaladdr = module->globaladdrs.elts[instructions[i].data.get_global.globalidx];
-
-			type = store->globals.elts[globaladdr].value.type;
-			switch (type) {
-			case VALTYPE_I32:
-			case VALTYPE_F32:
-				/* mov (const), %eax */
-				OUTS("\xa1\x90\x90\x90\x90\x90\x90\x90\x90");
-				break;
-			case VALTYPE_I64:
-			case VALTYPE_F64:
-				/* mov (const), %rax */
-				OUTS("\x48\xa1\x90\x90\x90\x90\x90\x90\x90\x90");
-				break;
-			default:
-				assert(0);
-				break;
-			}
-
-			{
-				size_t memref_idx;
-
-				memref_idx = memrefs->n_elts;
-				if (!memrefs_grow(memrefs, 1))
-					goto error;
-
-				memrefs->elts[memref_idx].type =
-					MEMREF_GLOBAL_ADDR;
-				memrefs->elts[memref_idx].code_offset =
-					output->n_elts - 8;
-				memrefs->elts[memref_idx].addr =
-					globaladdr;
-			}
-
-			/* push %rax*/
-			OUTS("\x50");
-			push_stack(sstack, type);
-
-			break;
-		}
-		case OPCODE_SET_GLOBAL: {
-			wasmjit_addr_t globaladdr;
-
-			assert(instructions[i].data.get_global.globalidx < module->globaladdrs.n_elts);
-			globaladdr = module->globaladdrs.elts[instructions[i].data.get_global.globalidx];
-
-			/* pop %rax */
-			OUTS("\x58");
-
-			assert(peek_stack(sstack) == store->globals.elts[globaladdr].value.type);
-			if (!pop_stack(sstack))
-				goto error;
-
-			switch (store->globals.elts[globaladdr].value.type) {
-			case VALTYPE_I32:
-			case VALTYPE_F32:
-				/* movl %eax, (const) */
-				OUTS("\xa3\x90\x90\x90\x90\x90\x90\x90\x90");
-				break;
-			case VALTYPE_I64:
-			case VALTYPE_F64:
-				/* movq %rax, (const) */
-				OUTS("\x48\xa3\x90\x90\x90\x90\x90\x90\x90\x90");
-				break;
-			default:
-				assert(0);
-				break;
-			}
-
-			{
-				size_t memref_idx;
-
-				memref_idx = memrefs->n_elts;
-				if (!memrefs_grow(memrefs, 1))
-					goto error;
-
-				memrefs->elts[memref_idx].type =
-					MEMREF_GLOBAL_ADDR;
-				memrefs->elts[memref_idx].code_offset =
-					output->n_elts - 8;
-				memrefs->elts[memref_idx].addr =
-					globaladdr;
-			}
-
-			break;
-		}
-		case OPCODE_I32_LOAD:
-		case OPCODE_I64_LOAD:
-		case OPCODE_I32_LOAD8_S:
-		case OPCODE_I32_STORE:
-		case OPCODE_I64_STORE:
-		case OPCODE_I32_STORE8: {
-			const struct LoadStoreExtra *extra;
-
-			switch (instructions[i].opcode) {
-			case OPCODE_I32_LOAD:
-				extra = &instructions[i].data.i32_load;
-				break;
-			case OPCODE_I64_LOAD:
-				extra = &instructions[i].data.i64_load;
-				break;
-			case OPCODE_I32_LOAD8_S:
-				extra = &instructions[i].data.i32_load8_s;
-				break;
-			case OPCODE_I32_STORE:
-				assert(peek_stack(sstack) == STACK_I32);
-				extra = &instructions[i].data.i32_store;
-				goto after;
-			case OPCODE_I32_STORE8:
-				assert(peek_stack(sstack) == STACK_I32);
-				extra = &instructions[i].data.i32_store8;
-				goto after;
-			case OPCODE_I64_STORE:
-				assert(peek_stack(sstack) == STACK_I64);
-				extra = &instructions[i].data.i64_store;
-			after:
-				if (!pop_stack(sstack))
-					goto error;
-
-				/* pop rdi */
-				OUTS("\x5f");
-				break;
-			default:
-				assert(0);
-				break;
-			}
-
-			/* LOGIC: ea = pop_stack() */
+		/* fix up static stack */
+		/* shift stack results over label */
+		memmove(&sstack->elts[stack_idx],
+			&sstack->elts[sstack->n_elts - arity],
+			arity * sizeof(sstack->elts[0]));
+		if (!stack_truncate(sstack, stack_idx + arity))
+			goto error;
+
+		/* set labels position */
+		labels->elts[label_idx] = output->n_elts;;
+		break;
+	}
+	case OPCODE_BR_IF:
+	case OPCODE_BR: {
+		uint32_t labelidx, arity, stack_shift;
+		size_t je_offset, je_offset_2, j;
+
+		if (instruction->opcode == OPCODE_BR_IF) {
+			/* LOGIC: v = pop_stack() */
 
 			/* pop %rsi */
 			assert(peek_stack(sstack) == STACK_I32);
@@ -946,303 +372,922 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				goto error;
 			OUTS("\x5e");
 
-			if (4 + instructions[i].data.i32_load.offset != 0) {
-				/* LOGIC: ea += memarg.offset + 4 */
+			/* LOGIC: if (v) br(); */
 
-				/* add <VAL>, %rsi */
-				OUTS("\x48\x81\xc6");
-				encode_le_uint32_t(4 +
-						   extra->offset, buf);
-				if (!output_buf(output, buf, sizeof(uint32_t)))
-					goto error;
-			}
+			/* testl %esi, %esi */
+			OUTS("\x85\xf6");
 
-			{
-				/* LOGIC: size = store->mems.elts[maddr].size */
-
-				/* movq (const), %rax */
-				OUTS("\x48\xa1\x90\x90\x90\x90\x90\x90\x90\x90");
-
-				/* add reference to max */
-				{
-					size_t memref_idx;
-
-					memref_idx = memrefs->n_elts;
-					if (!memrefs_grow(memrefs, 1))
-						goto error;
-
-					memrefs->elts[memref_idx].type =
-					    MEMREF_MEM_SIZE;
-					memrefs->elts[memref_idx].code_offset =
-					    output->n_elts - 8;
-					memrefs->elts[memref_idx].addr =
-					    module->memaddrs.elts[0];
-				}
-
-				/* LOGIC: if ea > size then trap() */
-
-				/* cmp %rax, %rsi */
-				OUTS("\x48\x39\xc6");
-
-				/* jle AFTER_TRAP: */
-				/* int $4 */
-				/* AFTER_TRAP1  */
-				OUTS("\x7e\x02\xcd\x04");
-			}
-
-			/* LOGIC: data = store->mems.elts[maddr].data */
-			{
-				/* movq (const), %rax */
-				OUTS("\x48\xa1\x90\x90\x90\x90\x90\x90\x90\x90");
-
-				/* add reference to data */
-				{
-					size_t memref_idx;
-
-					memref_idx = memrefs->n_elts;
-					if (!memrefs_grow(memrefs, 1))
-						goto error;
-
-					memrefs->elts[memref_idx].type =
-					    MEMREF_MEM_ADDR;
-					memrefs->elts[memref_idx].code_offset =
-					    output->n_elts - 8;
-					memrefs->elts[memref_idx].addr =
-					    module->memaddrs.elts[0];
-				}
-			}
-
-
-			switch (instructions[i].opcode) {
-			case OPCODE_I32_LOAD:
-			case OPCODE_I32_LOAD8_S:
-			case OPCODE_I64_LOAD: {
-				unsigned valtype;
-
-				/* LOGIC: push_stack(data[ea - 4]) */
-				switch (instructions[i].opcode) {
-				case OPCODE_I32_LOAD8_S:
-					/* movsbl -4(%rax, %rsi), %eax */
-					OUTS("\x0f\xbe\x44\x30\xfc");
-					valtype = STACK_I32;
-					break;
-				case OPCODE_I32_LOAD:
-					/* movl -4(%rax, %rsi), %eax */
-					OUTS("\x8b\x44\x30\xfc");
-					valtype = STACK_I32;
-					break;
-				case OPCODE_I64_LOAD:
-					/* movq -4(%rax, %rsi), %rax */
-					OUTS("\x48\x8b\x44\x30\xfc");
-					valtype = STACK_I64;
-					break;
-				default:
-					assert(0);
-					break;
-				}
-
-				/* push %rax */
-				OUTS("\x50");
-				if (!push_stack(sstack, valtype))
-					goto error;
-
-				break;
-			}
-			case OPCODE_I32_STORE:
-				/* LOGIC: data[ea - 4] = pop_stack() */
-				/* movl %edi, -4(%rax, %rsi) */
-				OUTS("\x89\x7c\x30\xfc");
-				break;
-			case OPCODE_I32_STORE8:
-				/* LOGIC: data[ea - 4] = pop_stack() */
-				/* movb %dil, -4(%rax, %rsi) */
-				OUTS("\x40\x88\x7c\x30\xfc");
-				break;
-			case OPCODE_I64_STORE:
-				/* LOGIC: data[ea - 4] = pop_stack() */
-				/* movq %rdi, -4(%rax, %rsi) */
-				OUTS("\x48\x89\x7c\x30\xfc");
-				break;
-			default:
-				assert(0);
-				break;
-			}
-
-			break;
+			/* je AFTER_BR */
+			je_offset = output->n_elts;
+			OUTS("\x74\x01");
 		}
-		case OPCODE_I32_CONST:
-			/* push $value */
-			OUTS("\x68");
-			encode_le_uint32_t(instructions[i].data.i32_const.value,
-					   buf);
-			if (!output_buf(output, buf, sizeof(uint32_t)))
-				goto error;
-			push_stack(sstack, STACK_I32);
-			break;
-		case OPCODE_I64_CONST:
-			/* movq $value, %rax */
-			OUTS("\x48\xb8");
-			encode_le_uint64_t(instructions[i].data.i64_const.value,
-					   buf);
-			if (!output_buf(output, buf, sizeof(uint64_t)))
+
+		/* find out bottom of stack to L */
+		j = sstack->n_elts;
+		labelidx = instruction->data.br.labelidx;
+		while (j) {
+			j -= 1;
+			if (sstack->elts[j].type == STACK_LABEL) {
+				if (!labelidx) {
+					break;
+				}
+				labelidx--;
+			}
+		}
+
+		arity = sstack->elts[j].data.label.arity;
+		stack_shift =
+			sstack->n_elts - j - (labelidx + 1) - arity;
+
+		if (arity) {
+			/* move top <arity> values for Lth label to
+			   bottom of stack where Lth label is */
+
+			/* LOGIC: memmove(sp + stack_shift * 8, sp, arity * 8); */
+
+			/* mov %rsp, %rsi */
+			OUTS("\x48\x89\xe6");
+
+			if (arity - 1) {
+				/* add <(arity - 1) * 8>, %rsi */
+				assert((arity - 1) * 8 <=
+				       INT_MAX);
+				OUTS("\x48\x03\x34\x25");
+				encode_le_uint32_t((arity -
+						    1) * 8,
+						   buf);
+				if (!output_buf
+				    (output, buf,
+				     sizeof(uint32_t)))
+					goto error;
+			}
+
+			/* mov %rsp, %rdi */
+			OUTS("\x48\x89\xe7");
+
+			/* add <(arity - 1 + stack_shift) * 8>, %rdi */
+			if (arity - 1 + stack_shift) {
+				assert((arity - 1 +
+					stack_shift) * 8 <=
+				       INT_MAX);
+				OUTS("\x48\x81\xc7");
+				encode_le_uint32_t((arity - 1 +
+						    stack_shift)
+						   * 8, buf);
+				if (!output_buf
+				    (output, buf,
+				     sizeof(uint32_t)))
+					goto error;
+			}
+
+			/* mov <arity>, %rcx */
+			OUTS("\x48\xc7\xc1");
+			assert(arity <= INT_MAX);
+			encode_le_uint32_t(arity, buf);
+			if (!output_buf
+			    (output, buf, sizeof(uint32_t)))
 				goto error;
 
+			/* std */
+			OUTS("\xfd");
+
+			/* rep movsq */
+			OUTS("\x48\xa5");
+		}
+
+		/* increment esp to Lth label (simulating pop) */
+		/* add <stack_shift * 8>, %rsp */
+		if (stack_shift) {
+			OUTS("\x48\x81\xc4");
+			assert(stack_shift * 8 <= INT_MAX);
+			encode_le_uint32_t(stack_shift * 8,
+					   buf);
+			if (!output_buf
+			    (output, buf, sizeof(uint32_t)))
+				goto error;
+		}
+
+		/* place jmp to Lth label */
+
+		/* jmp <BRANCH POINT> */
+		je_offset_2 = output->n_elts;
+		OUTS("\xe9\x90\x90\x90\x90");
+
+		/* add jmp offset to branches list */
+		{
+			size_t branch_idx;
+
+			branch_idx = branches->n_elts;
+			if (!bp_grow(branches, 1))
+				goto error;
+
+			branches->
+				elts[branch_idx].branch_offset =
+				je_offset_2;
+			branches->
+				elts[branch_idx].continuation_idx =
+				sstack->elts[j].data.
+				label.continuation_idx;
+		}
+
+		if (instruction->opcode == OPCODE_BR_IF) {
+			/* update je operand in previous if block */
+			int ret;
+			size_t offset =
+				output->n_elts - je_offset - 2;
+			assert(offset < 128 && offset > 0);
+			ret =
+				snprintf(buf, sizeof(buf), "\x74%c",
+					 (int)offset);
+			if (ret < 0)
+				goto error;
+			assert(strlen(buf) == 2);
+			memcpy(&output->elts[je_offset], buf,
+			       2);
+		}
+
+		break;
+	}
+	case OPCODE_RETURN:
+		/* shift $arity values from top of stock to below */
+
+		/* lea (arity - 1)*8(%rsp), %rsi */
+		OUTS("\x48\x8d\x74\x24");
+		OUTB((intmax_t) ((type->n_outputs - 1) * 8));
+
+		/* lea -8(%rbp), %rdi */
+		OUTS("\x48\x8d\x7d\xf8");
+
+		/* mov $arity, %rcx */
+		OUTS("\x48\xc7\xc1");
+		encode_le_uint32_t(type->n_outputs, buf);
+		if (!output_buf(output, buf, sizeof(uint32_t)))
+			goto error;
+
+		/* std */
+		OUTS("\xfd");
+
+		/* rep movsq */
+		OUTS("\x48\xa5");
+
+		/* adjust stack to top of arity */
+		/* lea -arity * 8(%rbp), %rsp */
+		OUTS("\x48\x8d\x65");
+		OUTB((intmax_t) (type->n_outputs * -8));
+
+		/* jmp <EPILOGUE> */
+		{
+			size_t branch_idx;
+
+			branch_idx = branches->n_elts;
+			if (!bp_grow(branches, 1))
+				goto error;
+
+			branches->elts[branch_idx].branch_offset =
+				output->n_elts;
+			branches->elts[branch_idx].continuation_idx =
+				FUNC_EXIT_CONT;
+
+			OUTS("\xe9\x90\x90\x90\x90");
+		}
+
+		break;
+	case OPCODE_CALL: {
+		uint32_t fidx =
+			instruction->data.call.funcidx;
+		size_t faddr = module->funcaddrs.elts[fidx];
+		size_t n_inputs =
+			store->funcs.elts[faddr].type.n_inputs;
+		size_t i;
+		size_t n_movs, n_xmm_movs, n_stack;
+		int aligned = 0;
+
+		static const char *const movs[] = {
+			"\x48\x8b\x7c\x24",	/* mov N(%rsp), %rdi */
+			"\x48\x8b\x74\x24",	/* mov N(%rsp), %rsi */
+			"\x48\x8b\x54\x24",	/* mov N(%rsp), %rdx */
+			"\x48\x8b\x4c\x24",	/* mov N(%rsp), %rcx */
+			"\x4c\x8b\x44\x24",	/* mov N(%rsp), %r8 */
+			"\x4c\x8b\x4c\x24",	/* mov N(%rsp), %r9 */
+		};
+
+		static const char *const f32_movs[] = {
+			"\xf3\x0f\x10\x44\x24",	/* movss N(%rsp), %xmm0 */
+			"\xf3\x0f\x10\x4c\x24",	/* movss N(%rsp), %xmm1 */
+			"\xf3\x0f\x10\x54\x24",	/* movss N(%rsp), %xmm2 */
+			"\xf3\x0f\x10\x5c\x24",	/* movss N(%rsp), %xmm3 */
+			"\xf3\x0f\x10\x64\x24",	/* movss N(%rsp), %xmm4 */
+			"\xf3\x0f\x10\x6c\x24",	/* movss N(%rsp), %xmm5 */
+			"\xf3\x0f\x10\x74\x24",	/* movss N(%rsp), %xmm6 */
+			"\xf3\x0f\x10\x7c\x24",	/* movss N(%rsp), %xmm7 */
+		};
+
+		static const char *const f64_movs[] = {
+			"\xf2\x0f\x10\x44\x24",	/* movsd N(%rsp), %xmm0 */
+			"\xf2\x0f\x10\x4c\x24",	/* movsd N(%rsp), %xmm1 */
+			"\xf2\x0f\x10\x54\x24",	/* movsd N(%rsp), %xmm2 */
+			"\xf2\x0f\x10\x5c\x24",	/* movsd N(%rsp), %xmm3 */
+			"\xf2\x0f\x10\x64\x24",	/* movsd N(%rsp), %xmm4 */
+			"\xf2\x0f\x10\x6c\x24",	/* movsd N(%rsp), %xmm5 */
+			"\xf2\x0f\x10\x74\x24",	/* movsd N(%rsp), %xmm6 */
+			"\xf2\x0f\x10\x7c\x24",	/* movsd N(%rsp), %xmm7 */
+		};
+
+		/* align stack to 16-byte boundary */
+		{
+			size_t cur_stack_depth = n_frame_locals;
+
+			/* add current stack depth */
+			for (i = sstack->n_elts; i;) {
+				i -= 1;
+				if (sstack->elts[i].type != STACK_LABEL) {
+					cur_stack_depth += 1;
+				}
+			}
+
+			/* add stack contribution from spilled arguments */
+			n_movs = 0;
+			n_xmm_movs = 0;
+			for (i = 0; i < n_inputs; ++i) {
+				if ((store->funcs.elts[faddr].type.
+				     input_types[i] == VALTYPE_I32
+				     || store->funcs.elts[faddr].type.
+				     input_types[i] == VALTYPE_I64)
+				    && n_movs < 6) {
+					n_movs += 1;
+				} else if (store->funcs.elts[faddr].
+					   type.input_types[i] ==
+					   VALTYPE_F32
+					   && n_xmm_movs < 8) {
+					n_xmm_movs += 1;
+				} else if (store->funcs.elts[faddr].
+					   type.input_types[i] ==
+					   VALTYPE_F64
+					   && n_xmm_movs < 8) {
+					n_xmm_movs += 1;
+				} else {
+					cur_stack_depth += 1;
+				}
+			}
+
+
+			aligned = cur_stack_depth % 2;
+			if (aligned)
+				OUTS("\x48\x83\xec\x08");
+		}
+
+		n_movs = 0;
+		n_xmm_movs = 0;
+		n_stack = 0;
+		for (i = 0; i < n_inputs; ++i) {
+			intmax_t stack_offset;
+			assert(sstack->
+			       elts[sstack->n_elts - n_inputs +
+				    i].type ==
+			       store->funcs.elts[faddr].type.
+			       input_types[i]);
+
+			stack_offset =
+				(n_inputs - i - 1 + n_stack + aligned) * 8;
+			if (stack_offset > 127
+			    || stack_offset < -128)
+				goto error;
+
+			/* mov -n_inputs + i(%rsp), %rdi */
+			if ((store->funcs.elts[faddr].type.
+			     input_types[i] == VALTYPE_I32
+			     || store->funcs.elts[faddr].type.
+			     input_types[i] == VALTYPE_I64)
+			    && n_movs < 6) {
+				OUTS(movs[n_movs]);
+				n_movs += 1;
+			} else if (store->funcs.elts[faddr].
+				   type.input_types[i] ==
+				   VALTYPE_F32
+				   && n_xmm_movs < 8) {
+				OUTS(f32_movs[n_xmm_movs]);
+				n_xmm_movs += 1;
+			} else if (store->funcs.elts[faddr].
+				   type.input_types[i] ==
+				   VALTYPE_F64
+				   && n_xmm_movs < 8) {
+				OUTS(f64_movs[n_xmm_movs]);
+				n_xmm_movs += 1;
+			} else {
+				OUTS("\xff\x74\x24");	/* push N(%rsp) */
+				n_stack += 1;
+			}
+
+			OUTB(stack_offset);
+		}
+
+		/* set memory base address in known location */
+		if (IS_HOST(&store->funcs.elts[faddr])) {
+			size_t memref_idx;
+
+			/* movq $const, %rax */
+			memref_idx = memrefs->n_elts;
+			if (!memrefs_grow(memrefs, 1))
+				goto error;
+
+			memrefs->elts[memref_idx].type =
+				MEMREF_MEM;
+			memrefs->elts[memref_idx].code_offset =
+				output->n_elts + 2;
+			memrefs->elts[memref_idx].addr =
+				module->memaddrs.elts[0];
+
+			OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
+
+			/* movq %rax, (const) */
+			memref_idx = memrefs->n_elts;
+			if (!memrefs_grow(memrefs, 1))
+				goto error;
+
+			memrefs->elts[memref_idx].type =
+				MEMREF_MEM_BOX;
+			memrefs->elts[memref_idx].code_offset =
+				output->n_elts + 2;
+
+			OUTS("\x48\xa3\x90\x90\x90\x90\x90\x90\x90\x90");
+		}
+
+		/* movq $const, %rax */
+		{
+			size_t memref_idx;
+
+			memref_idx = memrefs->n_elts;
+			if (!memrefs_grow(memrefs, 1))
+				goto error;
+
+			memrefs->elts[memref_idx].type =
+				MEMREF_CALL;
+			memrefs->elts[memref_idx].code_offset =
+				output->n_elts + 2;
+			memrefs->elts[memref_idx].addr = faddr;
+
+			OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
+		}
+
+		/* call *%rax */
+		OUTS("\xff\xd0");
+
+		/* clean up stack */
+		/* add (n_stack + n_inputs + aligned) * 8, %rsp */
+		OUTS("\x48\x81\xc4");
+		encode_le_uint32_t((n_stack + n_inputs + aligned) * 8,
+				   buf);
+		if (!output_buf(output, buf, sizeof(uint32_t)))
+			goto error;
+
+		if (!stack_truncate(sstack,
+				    sstack->n_elts -
+				    store->funcs.elts[faddr].type.
+				    n_inputs))
+			goto error;
+
+		if (store->funcs.elts[faddr].type.n_outputs) {
+			assert(store->funcs.elts[faddr].type.
+			       n_outputs == 1);
+			if (store->funcs.elts[faddr].type.
+			    output_types[0] == VALTYPE_F32
+			    || store->funcs.elts[faddr].type.
+			    output_types[0] == VALTYPE_F64) {
+				/* movq %xmm0, %rax */
+				OUTS("\x66\x48\x0f\x7e\xc0");
+			}
 			/* push %rax */
 			OUTS("\x50");
 
-			push_stack(sstack, STACK_I64);
+			if (!push_stack(sstack,
+					store->funcs.elts[faddr].type.
+					output_types[0]))
+				goto error;
+		}
+		break;
+	}
+	case OPCODE_DROP:
+		/* add $8, %rsp */
+		OUTS("\x48\x83\xc4\x08");
+		if (!pop_stack(sstack))
+			goto error;
+		break;
+	case OPCODE_GET_LOCAL:
+		assert(instruction->data.get_local.localidx < n_locals);
+		push_stack(sstack,
+			   locals_md[instruction->data.
+				     get_local.localidx].valtype);
+
+		/* push 8*(offset + 1)(%rbp) */
+		OUTS("\xff\x75");
+		OUTB(locals_md
+		     [instruction->data.get_local.localidx]
+		     .fp_offset);
+		break;
+	case OPCODE_SET_LOCAL:
+		assert(peek_stack(sstack) ==
+		       locals_md[instruction->data.
+				 set_local.localidx].valtype);
+
+		/* pop 8*(offset + 1)(%rbp) */
+		OUTS("\x8f\x45");
+		OUTB(locals_md
+		     [instruction->data.set_local.localidx]
+		     .fp_offset);
+		pop_stack(sstack);
+		break;
+	case OPCODE_TEE_LOCAL:
+		assert(peek_stack(sstack) ==
+		       locals_md[instruction->data.
+				 tee_local.localidx].valtype);
+
+		/* movq (%rsp), %rax */
+		OUTS("\x48\x8b\x04\x24");
+		/* movq %rax, 8*(offset + 1)(%rbp) */
+		OUTS("\x48\x89\x45");
+		OUTB(locals_md
+		     [instruction->data.tee_local.localidx]
+		     .fp_offset);
+		break;
+	case OPCODE_GET_GLOBAL: {
+		wasmjit_addr_t globaladdr;
+		unsigned type;
+
+		assert(instruction->data.get_global.globalidx < module->globaladdrs.n_elts);
+		globaladdr = module->globaladdrs.elts[instruction->data.get_global.globalidx];
+
+		type = store->globals.elts[globaladdr].value.type;
+		switch (type) {
+		case VALTYPE_I32:
+		case VALTYPE_F32:
+			/* mov (const), %eax */
+			OUTS("\xa1\x90\x90\x90\x90\x90\x90\x90\x90");
 			break;
-		case OPCODE_I32_EQZ:
-			assert(peek_stack(sstack) == STACK_I32);
-			/* xor %eax, %eax */
-			OUTS("\x31\xc0");
-			/* cmpl $0, (%rsp) */
-			OUTS("\x83\x3c\x24\x00");
-			/* sete %al */
-			OUTS("\x0f\x94\xc0");
-			/* mov %eax, (%rsp) */
-			OUTS("\x89\x04\x24");
-			break;
-		case OPCODE_I32_EQ:
-		case OPCODE_I32_NE:
-		case OPCODE_I32_LT_S:
-		case OPCODE_I32_LT_U:
-		case OPCODE_I32_GT_S:
-		case OPCODE_I32_GT_U:
-		case OPCODE_I32_LE_U:
-		case OPCODE_I32_GE_S:
-			/* popq %rdi */
-			assert(peek_stack(sstack) == STACK_I32);
-			pop_stack(sstack);
-			OUTS("\x5f");
-			assert(peek_stack(sstack) == STACK_I32);
-			/* xor %eax, %eax */
-			OUTS("\x31\xc0");
-			/* cmpl %edi, (%rsp) */
-			OUTS("\x39\x3c\x24");
-			switch (instructions[i].opcode) {
-			case OPCODE_I32_EQ:
-				/* sete %al */
-				OUTS("\x0f\x94\xc0");
-				break;
-			case OPCODE_I32_NE:
-				OUTS("\x0f\x95\xc0");
-				break;
-			case OPCODE_I32_LT_S:
-				/* setl %al */
-				OUTS("\x0f\x9c\xc0");
-				break;
-			case OPCODE_I32_LT_U:
-				/* setb %al */
-				OUTS("\x0f\x92\xc0");
-				break;
-			case OPCODE_I32_GT_S:
-				/* setg %al */
-				OUTS("\x0f\x9f\xc0");
-				break;
-			case OPCODE_I32_GT_U:
-				/* seta %al */
-				OUTS("\x0f\x97\xc0");
-				break;
-			case OPCODE_I32_LE_U:
-				/* setbe %al */
-				OUTS("\x0f\x96\xc0");
-				break;
-			case OPCODE_I32_GE_S:
-				/* setge %al */
-				OUTS("\x0f\x9d\xc0");
-				break;
-			default:
-				assert(0);
-				break;
-			}
-			/* mov %eax, (%rsp) */
-			OUTS("\x89\x04\x24");
-			break;
-		case OPCODE_I32_SUB:
-		case OPCODE_I32_ADD:
-		case OPCODE_I32_MUL:
-		case OPCODE_I32_AND:
-		case OPCODE_I32_OR:
-		case OPCODE_I32_XOR:
-			/* popq %rax */
-			assert(peek_stack(sstack) == STACK_I32);
-			pop_stack(sstack);
-			OUTS("\x5f");
-
-			assert(peek_stack(sstack) == STACK_I32);
-
-			switch (instructions[i].opcode) {
-			case OPCODE_I32_SUB:
-				OUTS("\x29\x04\x24");
-				break;
-			case OPCODE_I32_ADD:
-				/* add    %eax,(%rsp) */
-				OUTS("\x01\x04\x24");
-				break;
-			case OPCODE_I32_MUL:
-				/* mull (%rsp) */
-				OUTS("\xf7\x24\x24");
-				/* mov    %eax,(%rsp) */
-				OUTS("\x89\x04\x24");
-				break;
-			case OPCODE_I32_AND:
-				/* and    %eax,(%rsp) */
-				OUTS("\x21\x04\x24");
-				break;
-			case OPCODE_I32_OR:
-				/* or    %eax,(%rsp) */
-				OUTS("\x09\x04\x24");
-				break;
-			case OPCODE_I32_XOR:
-				/* xor    %eax,(%rsp) */
-				OUTS("\x31\x04\x24");
-				break;
-			default:
-				assert(0);
-				break;
-			}
-
-			break;
-		case OPCODE_I32_SHL:
-		case OPCODE_I32_SHR_S:
-		case OPCODE_I32_SHR_U:
-			/* pop %rcx */
-			OUTS("\x59");
-			assert(peek_stack(sstack) == STACK_I32);
-			pop_stack(sstack);
-
-			assert(peek_stack(sstack) == STACK_I32);
-
-			switch (instructions[0].opcode) {
-			case OPCODE_I32_SHL:
-				/* shll   %cl,(%rsp) */
-				OUTS("\xd3x24\x24");
-				break;
-			case OPCODE_I32_SHR_S:
-				/* sarl %cl, (%rsp) */
-				OUTS("\xd3\x3c\x24");
-				break;
-			case OPCODE_I32_SHR_U:
-				/* shrl %cl, (%rsp) */
-				OUTS("\xd3\x2c\x24");
-				break;
-			}
-
+		case VALTYPE_I64:
+		case VALTYPE_F64:
+			/* mov (const), %rax */
+			OUTS("\x48\xa1\x90\x90\x90\x90\x90\x90\x90\x90");
 			break;
 		default:
-			fprintf(stderr, "Unhandled Opcode: 0x%" PRIx8 "\n", instructions[i].opcode);
 			assert(0);
 			break;
 		}
+
+		{
+			size_t memref_idx;
+
+			memref_idx = memrefs->n_elts;
+			if (!memrefs_grow(memrefs, 1))
+				goto error;
+
+			memrefs->elts[memref_idx].type =
+				MEMREF_GLOBAL_ADDR;
+			memrefs->elts[memref_idx].code_offset =
+				output->n_elts - 8;
+			memrefs->elts[memref_idx].addr =
+				globaladdr;
+		}
+
+		/* push %rax*/
+		OUTS("\x50");
+		push_stack(sstack, type);
+
+		break;
+	}
+	case OPCODE_SET_GLOBAL: {
+		wasmjit_addr_t globaladdr;
+
+		assert(instruction->data.get_global.globalidx < module->globaladdrs.n_elts);
+		globaladdr = module->globaladdrs.elts[instruction->data.get_global.globalidx];
+
+		/* pop %rax */
+		OUTS("\x58");
+
+		assert(peek_stack(sstack) == store->globals.elts[globaladdr].value.type);
+		if (!pop_stack(sstack))
+			goto error;
+
+		switch (store->globals.elts[globaladdr].value.type) {
+		case VALTYPE_I32:
+		case VALTYPE_F32:
+			/* movl %eax, (const) */
+			OUTS("\xa3\x90\x90\x90\x90\x90\x90\x90\x90");
+			break;
+		case VALTYPE_I64:
+		case VALTYPE_F64:
+			/* movq %rax, (const) */
+			OUTS("\x48\xa3\x90\x90\x90\x90\x90\x90\x90\x90");
+			break;
+		default:
+			assert(0);
+			break;
+		}
+
+		{
+			size_t memref_idx;
+
+			memref_idx = memrefs->n_elts;
+			if (!memrefs_grow(memrefs, 1))
+				goto error;
+
+			memrefs->elts[memref_idx].type =
+				MEMREF_GLOBAL_ADDR;
+			memrefs->elts[memref_idx].code_offset =
+				output->n_elts - 8;
+			memrefs->elts[memref_idx].addr =
+				globaladdr;
+		}
+
+		break;
+	}
+	case OPCODE_I32_LOAD:
+	case OPCODE_I64_LOAD:
+	case OPCODE_I32_LOAD8_S:
+	case OPCODE_I32_STORE:
+	case OPCODE_I64_STORE:
+	case OPCODE_I32_STORE8: {
+		const struct LoadStoreExtra *extra;
+
+		switch (instruction->opcode) {
+		case OPCODE_I32_LOAD:
+			extra = &instruction->data.i32_load;
+			break;
+		case OPCODE_I64_LOAD:
+			extra = &instruction->data.i64_load;
+			break;
+		case OPCODE_I32_LOAD8_S:
+			extra = &instruction->data.i32_load8_s;
+			break;
+		case OPCODE_I32_STORE:
+			assert(peek_stack(sstack) == STACK_I32);
+			extra = &instruction->data.i32_store;
+			goto after;
+		case OPCODE_I32_STORE8:
+			assert(peek_stack(sstack) == STACK_I32);
+			extra = &instruction->data.i32_store8;
+			goto after;
+		case OPCODE_I64_STORE:
+			assert(peek_stack(sstack) == STACK_I64);
+			extra = &instruction->data.i64_store;
+		after:
+			if (!pop_stack(sstack))
+				goto error;
+
+			/* pop rdi */
+			OUTS("\x5f");
+			break;
+		default:
+			assert(0);
+			break;
+		}
+
+		/* LOGIC: ea = pop_stack() */
+
+		/* pop %rsi */
+		assert(peek_stack(sstack) == STACK_I32);
+		if (!pop_stack(sstack))
+			goto error;
+		OUTS("\x5e");
+
+		if (4 + instruction->data.i32_load.offset != 0) {
+			/* LOGIC: ea += memarg.offset + 4 */
+
+			/* add <VAL>, %rsi */
+			OUTS("\x48\x81\xc6");
+			encode_le_uint32_t(4 +
+					   extra->offset, buf);
+			if (!output_buf(output, buf, sizeof(uint32_t)))
+				goto error;
+		}
+
+		{
+			/* LOGIC: size = store->mems.elts[maddr].size */
+
+			/* movq (const), %rax */
+			OUTS("\x48\xa1\x90\x90\x90\x90\x90\x90\x90\x90");
+
+			/* add reference to max */
+			{
+				size_t memref_idx;
+
+				memref_idx = memrefs->n_elts;
+				if (!memrefs_grow(memrefs, 1))
+					goto error;
+
+				memrefs->elts[memref_idx].type =
+					MEMREF_MEM_SIZE;
+				memrefs->elts[memref_idx].code_offset =
+					output->n_elts - 8;
+				memrefs->elts[memref_idx].addr =
+					module->memaddrs.elts[0];
+			}
+
+			/* LOGIC: if ea > size then trap() */
+
+			/* cmp %rax, %rsi */
+			OUTS("\x48\x39\xc6");
+
+			/* jle AFTER_TRAP: */
+			/* int $4 */
+			/* AFTER_TRAP1  */
+			OUTS("\x7e\x02\xcd\x04");
+		}
+
+		/* LOGIC: data = store->mems.elts[maddr].data */
+		{
+			/* movq (const), %rax */
+			OUTS("\x48\xa1\x90\x90\x90\x90\x90\x90\x90\x90");
+
+			/* add reference to data */
+			{
+				size_t memref_idx;
+
+				memref_idx = memrefs->n_elts;
+				if (!memrefs_grow(memrefs, 1))
+					goto error;
+
+				memrefs->elts[memref_idx].type =
+					MEMREF_MEM_ADDR;
+				memrefs->elts[memref_idx].code_offset =
+					output->n_elts - 8;
+				memrefs->elts[memref_idx].addr =
+					module->memaddrs.elts[0];
+			}
+		}
+
+
+		switch (instruction->opcode) {
+		case OPCODE_I32_LOAD:
+		case OPCODE_I32_LOAD8_S:
+		case OPCODE_I64_LOAD: {
+			unsigned valtype;
+
+			/* LOGIC: push_stack(data[ea - 4]) */
+			switch (instruction->opcode) {
+			case OPCODE_I32_LOAD8_S:
+				/* movsbl -4(%rax, %rsi), %eax */
+				OUTS("\x0f\xbe\x44\x30\xfc");
+				valtype = STACK_I32;
+				break;
+			case OPCODE_I32_LOAD:
+				/* movl -4(%rax, %rsi), %eax */
+				OUTS("\x8b\x44\x30\xfc");
+				valtype = STACK_I32;
+				break;
+			case OPCODE_I64_LOAD:
+				/* movq -4(%rax, %rsi), %rax */
+				OUTS("\x48\x8b\x44\x30\xfc");
+				valtype = STACK_I64;
+				break;
+			default:
+				assert(0);
+				break;
+			}
+
+			/* push %rax */
+			OUTS("\x50");
+			if (!push_stack(sstack, valtype))
+				goto error;
+
+			break;
+		}
+		case OPCODE_I32_STORE:
+			/* LOGIC: data[ea - 4] = pop_stack() */
+			/* movl %edi, -4(%rax, %rsi) */
+			OUTS("\x89\x7c\x30\xfc");
+			break;
+		case OPCODE_I32_STORE8:
+			/* LOGIC: data[ea - 4] = pop_stack() */
+			/* movb %dil, -4(%rax, %rsi) */
+			OUTS("\x40\x88\x7c\x30\xfc");
+			break;
+		case OPCODE_I64_STORE:
+			/* LOGIC: data[ea - 4] = pop_stack() */
+			/* movq %rdi, -4(%rax, %rsi) */
+			OUTS("\x48\x89\x7c\x30\xfc");
+			break;
+		default:
+			assert(0);
+			break;
+		}
+
+		break;
+	}
+	case OPCODE_I32_CONST:
+		/* push $value */
+		OUTS("\x68");
+		encode_le_uint32_t(instruction->data.i32_const.value,
+				   buf);
+		if (!output_buf(output, buf, sizeof(uint32_t)))
+			goto error;
+		push_stack(sstack, STACK_I32);
+		break;
+	case OPCODE_I64_CONST:
+		/* movq $value, %rax */
+		OUTS("\x48\xb8");
+		encode_le_uint64_t(instruction->data.i64_const.value,
+				   buf);
+		if (!output_buf(output, buf, sizeof(uint64_t)))
+			goto error;
+
+		/* push %rax */
+		OUTS("\x50");
+
+		push_stack(sstack, STACK_I64);
+		break;
+	case OPCODE_I32_EQZ:
+		assert(peek_stack(sstack) == STACK_I32);
+		/* xor %eax, %eax */
+		OUTS("\x31\xc0");
+		/* cmpl $0, (%rsp) */
+		OUTS("\x83\x3c\x24\x00");
+		/* sete %al */
+		OUTS("\x0f\x94\xc0");
+		/* mov %eax, (%rsp) */
+		OUTS("\x89\x04\x24");
+		break;
+	case OPCODE_I32_EQ:
+	case OPCODE_I32_NE:
+	case OPCODE_I32_LT_S:
+	case OPCODE_I32_LT_U:
+	case OPCODE_I32_GT_S:
+	case OPCODE_I32_GT_U:
+	case OPCODE_I32_LE_U:
+	case OPCODE_I32_GE_S:
+		/* popq %rdi */
+		assert(peek_stack(sstack) == STACK_I32);
+		pop_stack(sstack);
+		OUTS("\x5f");
+		assert(peek_stack(sstack) == STACK_I32);
+		/* xor %eax, %eax */
+		OUTS("\x31\xc0");
+		/* cmpl %edi, (%rsp) */
+		OUTS("\x39\x3c\x24");
+		switch (instruction->opcode) {
+		case OPCODE_I32_EQ:
+			/* sete %al */
+			OUTS("\x0f\x94\xc0");
+			break;
+		case OPCODE_I32_NE:
+			OUTS("\x0f\x95\xc0");
+			break;
+		case OPCODE_I32_LT_S:
+			/* setl %al */
+			OUTS("\x0f\x9c\xc0");
+			break;
+		case OPCODE_I32_LT_U:
+			/* setb %al */
+			OUTS("\x0f\x92\xc0");
+			break;
+		case OPCODE_I32_GT_S:
+			/* setg %al */
+			OUTS("\x0f\x9f\xc0");
+			break;
+		case OPCODE_I32_GT_U:
+			/* seta %al */
+			OUTS("\x0f\x97\xc0");
+			break;
+		case OPCODE_I32_LE_U:
+			/* setbe %al */
+			OUTS("\x0f\x96\xc0");
+			break;
+		case OPCODE_I32_GE_S:
+			/* setge %al */
+			OUTS("\x0f\x9d\xc0");
+			break;
+		default:
+			assert(0);
+			break;
+		}
+		/* mov %eax, (%rsp) */
+		OUTS("\x89\x04\x24");
+		break;
+	case OPCODE_I32_SUB:
+	case OPCODE_I32_ADD:
+	case OPCODE_I32_MUL:
+	case OPCODE_I32_AND:
+	case OPCODE_I32_OR:
+	case OPCODE_I32_XOR:
+		/* popq %rax */
+		assert(peek_stack(sstack) == STACK_I32);
+		pop_stack(sstack);
+		OUTS("\x5f");
+
+		assert(peek_stack(sstack) == STACK_I32);
+
+		switch (instruction->opcode) {
+		case OPCODE_I32_SUB:
+			OUTS("\x29\x04\x24");
+			break;
+		case OPCODE_I32_ADD:
+			/* add    %eax,(%rsp) */
+			OUTS("\x01\x04\x24");
+			break;
+		case OPCODE_I32_MUL:
+			/* mull (%rsp) */
+			OUTS("\xf7\x24\x24");
+			/* mov    %eax,(%rsp) */
+			OUTS("\x89\x04\x24");
+			break;
+		case OPCODE_I32_AND:
+			/* and    %eax,(%rsp) */
+			OUTS("\x21\x04\x24");
+			break;
+		case OPCODE_I32_OR:
+			/* or    %eax,(%rsp) */
+			OUTS("\x09\x04\x24");
+			break;
+		case OPCODE_I32_XOR:
+			/* xor    %eax,(%rsp) */
+			OUTS("\x31\x04\x24");
+			break;
+		default:
+			assert(0);
+			break;
+		}
+
+		break;
+	case OPCODE_I32_SHL:
+	case OPCODE_I32_SHR_S:
+	case OPCODE_I32_SHR_U:
+		/* pop %rcx */
+		OUTS("\x59");
+		assert(peek_stack(sstack) == STACK_I32);
+		pop_stack(sstack);
+
+		assert(peek_stack(sstack) == STACK_I32);
+
+		switch (instruction->opcode) {
+		case OPCODE_I32_SHL:
+			/* shll   %cl,(%rsp) */
+			OUTS("\xd3x24\x24");
+			break;
+		case OPCODE_I32_SHR_S:
+			/* sarl %cl, (%rsp) */
+			OUTS("\xd3\x3c\x24");
+			break;
+		case OPCODE_I32_SHR_U:
+			/* shrl %cl, (%rsp) */
+			OUTS("\xd3\x2c\x24");
+			break;
+		}
+
+		break;
+	default:
+		fprintf(stderr, "Unhandled Opcode: 0x%" PRIx8 "\n", instruction->opcode);
+		assert(0);
+		break;
 	}
 
 #undef INC_LABELS
 #undef BUFFMT
 
 	return 1;
- error:
 
+ error:
+	assert(0);
+	return 0;
+
+}
+
+
+static int wasmjit_compile_instructions(const struct Store *store,
+					const struct ModuleInst *module,
+					const struct TypeSectionType *type,
+					const struct CodeSectionCode *code,
+					const struct Instr *instructions,
+					size_t n_instructions,
+					struct SizedBuffer *output,
+					struct LabelContinuations *labels,
+					struct BranchPoints *branches,
+					struct MemoryReferences *memrefs,
+					struct LocalsMD *locals_md,
+					size_t n_locals,
+					int n_frame_locals,
+					struct StaticStack *sstack)
+{
+	size_t i;
+
+	for (i = 0; i < n_instructions; ++i) {
+		if (!wasmjit_compile_instruction(store,
+						 module,
+						 type,
+						 code,
+						 &instructions[i],
+						 output,
+						 labels,
+						 branches,
+						 memrefs,
+						 locals_md,
+						 n_locals,
+						 n_frame_locals,
+						 sstack))
+			goto error;
+	}
+
+	return 1;
+
+ error:
 	return 0;
 }
 
