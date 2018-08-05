@@ -558,6 +558,15 @@ static int wasmjit_compile_instruction(const struct Store *store,
 		size_t n_movs, n_xmm_movs, n_stack;
 		int aligned = 0;
 		struct FuncType *ft;
+		size_t cur_stack_depth = n_frame_locals;
+
+		/* add current stack depth */
+		for (i = sstack->n_elts; i;) {
+			i -= 1;
+			if (sstack->elts[i].type != STACK_LABEL) {
+				cur_stack_depth += 1;
+			}
+		}
 
 		if (instruction->opcode == OPCODE_CALL_INDIRECT) {
 			assert(instruction->data.call_indirect.typeidx < module->types.n_elts);
@@ -605,9 +614,17 @@ static int wasmjit_compile_instruction(const struct Store *store,
 					output->n_elts - 8;
 			}
 
+			/* align to 16 bytes */
+			if (cur_stack_depth % 2)
+				/* sub $8, %rsp */
+				OUTS("\x48\x83\xec\x08");
 
 			/* call *%rax */
 			OUTS("\xff\xd0");
+
+			if (cur_stack_depth % 2)
+				/* add $8, %rsp */
+				OUTS("\x48\x83\xc4\x08");
 		} else {
 			uint32_t fidx =
 				instruction->data.call.funcidx;
@@ -665,16 +682,6 @@ static int wasmjit_compile_instruction(const struct Store *store,
 
 		/* align stack to 16-byte boundary */
 		{
-			size_t cur_stack_depth = n_frame_locals;
-
-			/* add current stack depth */
-			for (i = sstack->n_elts; i;) {
-				i -= 1;
-				if (sstack->elts[i].type != STACK_LABEL) {
-					cur_stack_depth += 1;
-				}
-			}
-
 			/* add stack contribution from spilled arguments */
 			n_movs = 0;
 			n_xmm_movs = 0;
