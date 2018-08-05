@@ -246,6 +246,113 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				}
 			}
 			break;
+		case OPCODE_IF: {
+			int arity;
+			size_t jump_to_else_offset, jump_to_after_else_offset,
+				stack_idx, label_idx;
+
+			/* test top of stack */
+			assert(peek_stack(sstack) == STACK_I32);
+			pop_stack(sstack);
+			/* pop %rax */
+			OUTS("\x58");
+
+			/* if not true jump to else case */
+			/* cmp $0, %eax */
+			OUTS("\x83\xf8\x00");
+
+			jump_to_else_offset = output->n_elts + 2;
+			/* je else_offset */
+			OUTS("\x0f\x8f\x90\x90\x90\x90");
+
+			/* output then case */
+			label_idx = labels->n_elts;
+			INC_LABELS();
+
+			arity =
+				instructions[i].data.if_.blocktype !=
+				VALTYPE_NULL ? 1 : 0;
+			{
+				struct StackElt *elt;
+				stack_idx = sstack->n_elts;
+				if (!stack_grow(sstack, 1))
+					goto error;
+				elt = &sstack->elts[stack_idx];
+				elt->type = STACK_LABEL;
+				elt->data.label.arity = arity;
+				elt->data.label.continuation_idx = label_idx;
+			}
+
+			wasmjit_compile_instructions(store,
+						     module,
+						     type,
+						     code,
+						     instructions
+						     [i].data.
+						     if_.instructions_then,
+						     instructions
+						     [i].data.
+						     if_.n_instructions_then,
+						     output, labels,
+						     branches, memrefs,
+						     locals_md, n_locals,
+						     n_frame_locals,
+						     sstack);
+
+			/* if (else_exist) {
+			   jump after else
+			   }
+			*/
+			if (instructions[i].data.if_.n_instructions_else) {
+				jump_to_after_else_offset = output->n_elts + 1;
+				/* jmp after_else_offset */
+				OUTS("\xe9\x90\x90\x90\x90");
+			}
+
+			/* fix up jump_to_else_offset */
+			jump_to_else_offset = output->n_elts - jump_to_else_offset;
+			encode_le_uint32_t(jump_to_else_offset - 4,
+					   &output->elts[output->n_elts - jump_to_else_offset]);
+
+			/* if (else_exist) {
+			   output else case
+			   }
+			*/
+			if (instructions[i].data.if_.n_instructions_else) {
+				wasmjit_compile_instructions(store,
+							     module,
+							     type,
+							     code,
+							     instructions
+							     [i].data.
+							     if_.instructions_else,
+							     instructions
+							     [i].data.
+							     if_.n_instructions_else,
+							     output, labels,
+							     branches, memrefs,
+							     locals_md, n_locals,
+							     n_frame_locals,
+							     sstack);
+
+				/* fix up jump_to_after_else_offset */
+				jump_to_after_else_offset = output->n_elts - jump_to_after_else_offset;
+				encode_le_uint32_t(jump_to_after_else_offset - 4,
+						   &output->elts[output->n_elts - jump_to_after_else_offset]);
+			}
+
+			/* fix up static stack */
+			/* shift stack results over label */
+			memmove(&sstack->elts[stack_idx],
+				&sstack->elts[sstack->n_elts - arity],
+				arity * sizeof(sstack->elts[0]));
+			if (!stack_truncate(sstack, stack_idx + arity))
+				goto error;
+
+			/* set labels position */
+			labels->elts[label_idx] = output->n_elts;;
+			break;
+		}
 		case OPCODE_BR_IF:
 		case OPCODE_BR:
 			{
