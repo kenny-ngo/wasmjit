@@ -1092,6 +1092,17 @@ static int wasmjit_compile_instructions(const struct Store *store,
 
 			push_stack(sstack, STACK_I64);
 			break;
+		case OPCODE_I32_EQZ:
+			assert(peek_stack(sstack) == STACK_I32);
+			/* xor %eax, %eax */
+			OUTS("\x31\xc0");
+			/* cmpl $0, (%rsp) */
+			OUTS("\x83\x3c\x24\x00");
+			/* sete %al */
+			OUTS("\x0f\x94\xc0");
+			/* mov %eax, (%rsp) */
+			OUTS("\x89\x04\x24");
+			break;
 		case OPCODE_I32_EQ:
 		case OPCODE_I32_NE:
 		case OPCODE_I32_LT_S:
