@@ -1204,6 +1204,32 @@ static int wasmjit_compile_instructions(const struct Store *store,
 			}
 
 			break;
+		case OPCODE_I32_SHL:
+		case OPCODE_I32_SHR_S:
+		case OPCODE_I32_SHR_U:
+			/* pop %rcx */
+			OUTS("\x59");
+			assert(peek_stack(sstack) == STACK_I32);
+			pop_stack(sstack);
+
+			assert(peek_stack(sstack) == STACK_I32);
+
+			switch (instructions[0].opcode) {
+			case OPCODE_I32_SHL:
+				/* shll   %cl,(%rsp) */
+				OUTS("\xd3x24\x24");
+				break;
+			case OPCODE_I32_SHR_S:
+				/* sarl %cl, (%rsp) */
+				OUTS("\xd3\x3c\x24");
+				break;
+			case OPCODE_I32_SHR_U:
+				/* shrl %cl, (%rsp) */
+				OUTS("\xd3\x2c\x24");
+				break;
+			}
+
+			break;
 		default:
 			fprintf(stderr, "Unhandled Opcode: 0x%" PRIx8 "\n", instructions[i].opcode);
 			assert(0);
