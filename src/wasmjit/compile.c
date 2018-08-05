@@ -1159,35 +1159,50 @@ static int wasmjit_compile_instructions(const struct Store *store,
 			/* mov %eax, (%rsp) */
 			OUTS("\x89\x04\x24");
 			break;
+		case OPCODE_I32_SUB:
 		case OPCODE_I32_ADD:
-			/* popq %rdi */
-			assert(peek_stack(sstack) == STACK_I32);
-			pop_stack(sstack);
-			OUTS("\x5f");
-			/* popq %rsi */
-			assert(peek_stack(sstack) == STACK_I32);
-			pop_stack(sstack);
-			OUTS("\x5e");
-			/* add %rsi, %rdi */
-			OUTS("\x48\x01\xf7");
-			/* push %rdi */
-			OUTS("\x57");
-			push_stack(sstack, STACK_I32);
-			break;
 		case OPCODE_I32_MUL:
+		case OPCODE_I32_AND:
+		case OPCODE_I32_OR:
+		case OPCODE_I32_XOR:
 			/* popq %rax */
 			assert(peek_stack(sstack) == STACK_I32);
 			pop_stack(sstack);
-			OUTS("\x58");
-			/* popq %rsi */
+			OUTS("\x5f");
+
 			assert(peek_stack(sstack) == STACK_I32);
-			pop_stack(sstack);
-			OUTS("\x5e");
-			/* imul %esi */
-			OUTS("\xf7\xee");
-			/* push %rax */
-			OUTS("\x50");
-			push_stack(sstack, STACK_I32);
+
+			switch (instructions[i].opcode) {
+			case OPCODE_I32_SUB:
+				OUTS("\x29\x04\x24");
+				break;
+			case OPCODE_I32_ADD:
+				/* add    %eax,(%rsp) */
+				OUTS("\x01\x04\x24");
+				break;
+			case OPCODE_I32_MUL:
+				/* mull (%rsp) */
+				OUTS("\xf7\x24\x24");
+				/* mov    %eax,(%rsp) */
+				OUTS("\x89\x04\x24");
+				break;
+			case OPCODE_I32_AND:
+				/* and    %eax,(%rsp) */
+				OUTS("\x21\x04\x24");
+				break;
+			case OPCODE_I32_OR:
+				/* or    %eax,(%rsp) */
+				OUTS("\x09\x04\x24");
+				break;
+			case OPCODE_I32_XOR:
+				/* xor    %eax,(%rsp) */
+				OUTS("\x31\x04\x24");
+				break;
+			default:
+				assert(0);
+				break;
+			}
+
 			break;
 		default:
 			fprintf(stderr, "Unhandled Opcode: 0x%" PRIx8 "\n", instructions[i].opcode);
