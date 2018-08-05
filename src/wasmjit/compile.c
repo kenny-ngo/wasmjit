@@ -737,6 +737,12 @@ static int wasmjit_compile_instructions(const struct Store *store,
 				if (!output_buf(output, buf, sizeof(uint32_t)))
 					goto error;
 
+				if (!stack_truncate(sstack,
+						    sstack->n_elts -
+						    store->funcs.elts[faddr].type.
+						    n_inputs))
+					goto error;
+
 				if (store->funcs.elts[faddr].type.n_outputs) {
 					assert(store->funcs.elts[faddr].type.
 					       n_outputs == 1);
@@ -749,15 +755,12 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					}
 					/* push %rax */
 					OUTS("\x50");
-				}
 
-				stack_truncate(sstack,
-					       sstack->n_elts -
-					       store->funcs.elts[faddr].type.
-					       n_inputs);
-				push_stack(sstack,
-					   store->funcs.elts[faddr].type.
-					   output_types[0]);
+					if (!push_stack(sstack,
+							store->funcs.elts[faddr].type.
+							output_types[0]))
+						goto error;
+				}
 			}
 			break;
 		case OPCODE_DROP:
