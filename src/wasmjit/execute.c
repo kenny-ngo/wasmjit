@@ -146,8 +146,8 @@ int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 				{
 					struct MemInst *minst = &store->mems.elts[melt->addr];
 					val =
-						melt->type == MEMREF_MEM_ADDR ? (uintptr_t) &minst->size :
-						(uintptr_t) &minst->data;
+						melt->type == MEMREF_MEM_ADDR ? (uintptr_t) &minst->data :
+						(uintptr_t) &minst->size;
 					break;
 				}
 			case MEMREF_GLOBAL_ADDR:
