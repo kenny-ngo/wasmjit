@@ -1235,6 +1235,27 @@ static int wasmjit_compile_instruction(const struct Store *store,
 
 		push_stack(sstack, STACK_I64);
 		break;
+	case OPCODE_F64_CONST: {
+		uint64_t bitrepr;
+		/* movq $value, %rax */
+		OUTS("\x48\xb8");
+#ifndef		__STDC_IEC_559__
+#error We dont support non-IEC 449 floats
+#endif
+
+		memcpy(&bitrepr, &instruction->data.f64_const.value,
+		       sizeof(uint64_t));
+
+		encode_le_uint64_t(bitrepr, buf);
+		if (!output_buf(output, buf, sizeof(uint64_t)))
+			goto error;
+
+		/* push %rax */
+		OUTS("\x50");
+
+		push_stack(sstack, STACK_F64);
+		break;
+	}
 	case OPCODE_I32_EQZ:
 		assert(peek_stack(sstack) == STACK_I32);
 		/* xor %eax, %eax */
