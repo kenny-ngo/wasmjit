@@ -806,6 +806,7 @@ static int wasmjit_compile_instruction(const struct Store *store,
 
 			aligned = cur_stack_depth % 2;
 			if (aligned)
+				/* sub $8, %rsp */
 				OUTS("\x48\x83\xec\x08");
 		}
 
