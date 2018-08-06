@@ -322,6 +322,8 @@ static int wasmjit_compile_instruction(const struct Store *store,
 		/* ud2 */
 		OUTS("\x0f\0b");
 		break;
+	case OPCODE_NOP:
+		break;
 	case OPCODE_BLOCK:
 	case OPCODE_LOOP: {
 		int arity;
