@@ -319,6 +319,8 @@ static int wasmjit_compile_instruction(const struct Store *store,
 
 	switch (instruction->opcode) {
 	case OPCODE_UNREACHABLE:
+		/* ud2 */
+		OUTS("\x0f\0b");
 		break;
 	case OPCODE_BLOCK:
 	case OPCODE_LOOP: {
