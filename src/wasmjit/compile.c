@@ -633,7 +633,7 @@ static int wasmjit_compile_instruction(const struct Store *store,
 		/* adjust stack to top of arity */
 		/* lea -arity * 8(%rbp), %rsp */
 		OUTS("\x48\x8d\x65");
-		OUTB((intmax_t) (type->n_outputs * -8));
+		OUTB(((intmax_t) type->n_outputs) * -8);
 
 		/* jmp <EPILOGUE> */
 		{
