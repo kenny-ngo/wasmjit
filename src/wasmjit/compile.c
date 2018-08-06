@@ -1493,6 +1493,91 @@ static int wasmjit_compile_instruction(const struct Store *store,
 		}
 
 		break;
+	}
+	case OPCODE_I32_DIV_S:
+	case OPCODE_I32_DIV_U:
+	case OPCODE_I32_REM_S:
+	case OPCODE_I32_REM_U:
+	case OPCODE_I64_DIV_S:
+	case OPCODE_I64_DIV_U:
+	case OPCODE_I64_REM_S:
+	case OPCODE_I64_REM_U: {
+		unsigned stack_type;
+		switch (instruction->opcode) {
+		case OPCODE_I32_DIV_S:
+		case OPCODE_I32_DIV_U:
+		case OPCODE_I32_REM_S:
+		case OPCODE_I32_REM_U:
+			stack_type = STACK_I32;
+			break;
+		case OPCODE_I64_DIV_S:
+		case OPCODE_I64_DIV_U:
+		case OPCODE_I64_REM_S:
+		case OPCODE_I64_REM_U:
+			stack_type = STACK_I64;
+			break;
+		}
+
+		assert(peek_stack(sstack) == stack_type);
+		pop_stack(sstack);
+
+		assert(peek_stack(sstack) == stack_type);
+
+		/* pop %rdi */
+		OUTS("\x5f");
+
+		/* mov (%rsp), %(r|e)ax */
+		if (stack_type == STACK_I64)
+			OUTS("\x48");
+		OUTS("\x8b\x04\x24");
+
+		if (stack_type == STACK_I64)
+			OUTS("\x48");
+
+		switch (instruction->opcode) {
+		case OPCODE_I32_DIV_S:
+		case OPCODE_I32_REM_S:
+		case OPCODE_I64_DIV_S:
+		case OPCODE_I64_REM_S:
+			/* cld|cqto */
+			OUTS("\x99");
+			/* idiv %(r|e)di */
+			if (stack_type == STACK_I64)
+				OUTS("\x48");
+			OUTS("\xf7\xff");
+			break;
+		case OPCODE_I32_DIV_U:
+		case OPCODE_I32_REM_U:
+		case OPCODE_I64_DIV_U:
+		case OPCODE_I64_REM_U:
+			/* xor %(r|e)dx, %(r|e)dx */
+			OUTS("\x31\xd2");
+			/* div %(r|e)di */
+			if (stack_type == STACK_I64)
+				OUTS("\x48");
+			OUTS("\xf7\xf7");
+			break;
+		}
+
+		if (stack_type == STACK_I64)
+			OUTS("\x48");
+
+		switch (instruction->opcode) {
+		case OPCODE_I32_REM_S:
+		case OPCODE_I32_REM_U:
+		case OPCODE_I64_REM_S:
+		case OPCODE_I64_REM_U:
+			/* mov %(r|e)dx, (%rsp) */
+			OUTS("\x89\x14\x24");
+			break;
+		default:
+			/* mov %(e|r)ax, (%rsp) */
+			OUTS("\x89\x04\x24");
+			break;
+		}
+
+		break;
+	}
 	case OPCODE_I32_SHL:
 	case OPCODE_I32_SHR_S:
 	case OPCODE_I32_SHR_U:
