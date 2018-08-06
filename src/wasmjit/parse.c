@@ -142,11 +142,19 @@ uint8_t uint8_t_swap_bytes(uint8_t data)
 
 float float_swap_bytes(float data)
 {
+	uint32_t f;
+	memcpy(&f, &data, sizeof(f));
+	f = uint32_t_swap_bytes(f);
+	memcpy(&data, &f, sizeof(f));
 	return data;
 }
 
 double double_swap_bytes(double data)
 {
+	uint64_t f;
+	memcpy(&f, &data, sizeof(f));
+	f = uint64_t_swap_bytes(f);
+	memcpy(&data, &f, sizeof(f));
 	return data;
 }
 
@@ -169,6 +177,10 @@ double double_swap_bytes(double data)
 
 DEFINE_INT_READER(uint32_t);
 DEFINE_INT_READER(uint8_t);
+
+#ifndef __STDC_IEC_559__
+#error We dont support non-IEC 449 floats
+#endif
 DEFINE_INT_READER(float);
 DEFINE_INT_READER(double);
 
