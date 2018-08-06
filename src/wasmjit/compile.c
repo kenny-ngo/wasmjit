@@ -398,7 +398,7 @@ static int wasmjit_compile_instruction(const struct Store *store,
 
 		jump_to_else_offset = output->n_elts + 2;
 		/* je else_offset */
-		OUTS("\x0f\x8f\x90\x90\x90\x90");
+		OUTS("\x0f\x84\x90\x90\x90\x90");
 
 		/* output then case */
 		label_idx = labels->n_elts;
