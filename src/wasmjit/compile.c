@@ -1423,32 +1423,63 @@ static int wasmjit_compile_instruction(const struct Store *store,
 	case OPCODE_I32_AND:
 	case OPCODE_I32_OR:
 	case OPCODE_I32_XOR:
-		/* popq %rax */
-		assert(peek_stack(sstack) == STACK_I32);
-		pop_stack(sstack);
-		OUTS("\x5f");
+	case OPCODE_I64_ADD:
+	case OPCODE_I64_SUB:
+	case OPCODE_I64_MUL:
+	case OPCODE_I64_AND:
+	case OPCODE_I64_OR: {
+		unsigned stack_type;
 
-		assert(peek_stack(sstack) == STACK_I32);
+		switch (instruction->opcode) {
+		case OPCODE_I64_ADD:
+		case OPCODE_I64_SUB:
+		case OPCODE_I64_MUL:
+		case OPCODE_I64_AND:
+		case OPCODE_I64_OR:
+			stack_type = STACK_I64;
+			break;
+		default:
+			stack_type = STACK_I32;
+			break;
+		}
+
+		/* popq %rax */
+		assert(peek_stack(sstack) == stack_type);
+		pop_stack(sstack);
+		OUTS("\x58");
+
+		assert(peek_stack(sstack) == stack_type);
+
+		if (stack_type == STACK_I64)
+			OUTS("\x48");
 
 		switch (instruction->opcode) {
 		case OPCODE_I32_SUB:
+		case OPCODE_I64_SUB:
+			/* sub    %(r|e)ax,(%rsp) */
 			OUTS("\x29\x04\x24");
 			break;
+		case OPCODE_I64_ADD:
 		case OPCODE_I32_ADD:
 			/* add    %eax,(%rsp) */
 			OUTS("\x01\x04\x24");
 			break;
 		case OPCODE_I32_MUL:
-			/* mull (%rsp) */
+		case OPCODE_I64_MUL:
+			/* mul(q|l) (%rsp) */
 			OUTS("\xf7\x24\x24");
-			/* mov    %eax,(%rsp) */
+			if (stack_type == STACK_I64)
+				OUTS("\x48");
+			/* mov    %(r|e)ax,(%rsp) */
 			OUTS("\x89\x04\x24");
 			break;
 		case OPCODE_I32_AND:
+		case OPCODE_I64_AND:
 			/* and    %eax,(%rsp) */
 			OUTS("\x21\x04\x24");
 			break;
 		case OPCODE_I32_OR:
+		case OPCODE_I64_OR:
 			/* or    %eax,(%rsp) */
 			OUTS("\x09\x04\x24");
 			break;
