@@ -1273,26 +1273,58 @@ static int wasmjit_compile_instruction(const struct Store *store,
 	case OPCODE_I32_LT_U:
 	case OPCODE_I32_GT_S:
 	case OPCODE_I32_GT_U:
+	case OPCODE_I32_LE_S:
 	case OPCODE_I32_LE_U:
 	case OPCODE_I32_GE_S:
-		/* popq %rdi */
-		assert(peek_stack(sstack) == STACK_I32);
+	case OPCODE_I64_EQ:
+	case OPCODE_I64_NE:
+	case OPCODE_I64_LT_S:
+	case OPCODE_I64_GT_U: {
+		unsigned stack_type;
+
+		switch (instruction->opcode) {
+		case OPCODE_I64_EQ:
+		case OPCODE_I64_NE:
+		case OPCODE_I64_LT_S:
+		case OPCODE_I64_GT_U:
+			stack_type = STACK_I64;
+			break;
+		default:
+			stack_type = STACK_I32;
+			break;
+		}
+
+		assert(peek_stack(sstack) == stack_type);
 		pop_stack(sstack);
+
+		assert(peek_stack(sstack) == stack_type);
+		pop_stack(sstack);
+
+		/* popq %rdi */
 		OUTS("\x5f");
-		assert(peek_stack(sstack) == STACK_I32);
-		/* xor %eax, %eax */
+
+		/* xor %(e|r)ax, %(e|r)ax */
+		if (stack_type == STACK_I64)
+			OUTS("\x48");
 		OUTS("\x31\xc0");
-		/* cmpl %edi, (%rsp) */
+
+		/* cmp %(r|e)di, (%rsp) */
+		if (stack_type == STACK_I64)
+			OUTS("\x48");
 		OUTS("\x39\x3c\x24");
+
 		switch (instruction->opcode) {
 		case OPCODE_I32_EQ:
+		case OPCODE_I64_EQ:
 			/* sete %al */
 			OUTS("\x0f\x94\xc0");
 			break;
 		case OPCODE_I32_NE:
+		case OPCODE_I64_NE:
 			OUTS("\x0f\x95\xc0");
 			break;
 		case OPCODE_I32_LT_S:
+		case OPCODE_I64_LT_S:
 			/* setl %al */
 			OUTS("\x0f\x9c\xc0");
 			break;
@@ -1305,8 +1337,13 @@ static int wasmjit_compile_instruction(const struct Store *store,
 			OUTS("\x0f\x9f\xc0");
 			break;
 		case OPCODE_I32_GT_U:
+		case OPCODE_I64_GT_U:
 			/* seta %al */
 			OUTS("\x0f\x97\xc0");
+			break;
+		case OPCODE_I32_LE_S:
+			/* setle  %al */
+			OUTS("\x0f\x9e\xc0");
 			break;
 		case OPCODE_I32_LE_U:
 			/* setbe %al */
@@ -1320,8 +1357,13 @@ static int wasmjit_compile_instruction(const struct Store *store,
 			assert(0);
 			break;
 		}
-		/* mov %eax, (%rsp) */
+
+		/* mov %(r|e)ax, (%rsp) */
+		if (stack_type == STACK_I64)
+			OUTS("\x48");
 		OUTS("\x89\x04\x24");
+
+		push_stack(sstack, STACK_I32);
 		break;
 	case OPCODE_I32_SUB:
 	case OPCODE_I32_ADD:
