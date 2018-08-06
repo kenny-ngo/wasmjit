@@ -1822,6 +1822,7 @@ char *wasmjit_compile_code(const struct Store *store,
 			   const struct CodeSectionCode *code,
 			   struct MemoryReferences *memrefs, size_t *out_size)
 {
+	char buf[0x100];
 	struct SizedBuffer outputv = { 0, NULL };
 	struct SizedBuffer *output = &outputv;
 	struct BranchPoints branches = { 0, NULL };
@@ -1929,8 +1930,10 @@ char *wasmjit_compile_code(const struct Store *store,
 
 		/* sub $(8 * (n_frame_locals)), %rsp */
 		if (n_frame_locals) {
-			OUTS("\x48\x83\xec");
-			OUTB(8 * n_frame_locals);
+			OUTS("\x48\x81\xec");
+			encode_le_uint32_t(8 * n_frame_locals, buf);
+			if (!output_buf(output, buf, sizeof(uint32_t)))
+				goto error;
 		}
 
 		/* push args to stack */
@@ -2019,8 +2022,10 @@ char *wasmjit_compile_code(const struct Store *store,
 
 	/* add $(8 * (n_frame_locals)), %rsp */
 	if (n_frame_locals) {
-		OUTS("\x48\x83\xc4");
-		OUTB(8 * n_frame_locals);
+		OUTS("\x48\x81\xc4");
+		encode_le_uint32_t(8 * n_frame_locals, buf);
+		if (!output_buf(output, buf, sizeof(uint32_t)))
+			goto error;
 	}
 
 	/* pop %rbp */
