@@ -1581,29 +1581,52 @@ static int wasmjit_compile_instruction(const struct Store *store,
 	case OPCODE_I32_SHL:
 	case OPCODE_I32_SHR_S:
 	case OPCODE_I32_SHR_U:
+	case OPCODE_I64_SHL:
+	case OPCODE_I64_SHR_S:
+	case OPCODE_I64_SHR_U: {
+		unsigned stack_type;
+
+		switch (instruction->opcode) {
+		case OPCODE_I64_SHL:
+		case OPCODE_I64_SHR_S:
+		case OPCODE_I64_SHR_U:
+			stack_type = STACK_I64;
+			break;
+		default:
+			stack_type = STACK_I32;
+			break;
+		}
+
 		/* pop %rcx */
 		OUTS("\x59");
-		assert(peek_stack(sstack) == STACK_I32);
+		assert(peek_stack(sstack) == stack_type);
 		pop_stack(sstack);
 
-		assert(peek_stack(sstack) == STACK_I32);
+		assert(peek_stack(sstack) == stack_type);
+
+		if (stack_type == STACK_I64)
+			OUTS("\x48");
 
 		switch (instruction->opcode) {
 		case OPCODE_I32_SHL:
-			/* shll   %cl,(%rsp) */
+		case OPCODE_I64_SHL:
+			/* shl(l|q)   %cl,(%rsp) */
 			OUTS("\xd3x24\x24");
 			break;
 		case OPCODE_I32_SHR_S:
-			/* sarl %cl, (%rsp) */
+		case OPCODE_I64_SHR_S:
+			/* sar(l|q) %cl, (%rsp) */
 			OUTS("\xd3\x3c\x24");
 			break;
 		case OPCODE_I32_SHR_U:
-			/* shrl %cl, (%rsp) */
+		case OPCODE_I64_SHR_U:
+			/* shr(l|q) %cl, (%rsp) */
 			OUTS("\xd3\x2c\x24");
 			break;
 		}
 
 		break;
+	}
 	default:
 		fprintf(stderr, "Unhandled Opcode: 0x%" PRIx8 "\n", instruction->opcode);
 		assert(0);
