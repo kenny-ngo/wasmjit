@@ -1365,6 +1365,58 @@ static int wasmjit_compile_instruction(const struct Store *store,
 
 		push_stack(sstack, STACK_I32);
 		break;
+	}
+	case OPCODE_F64_EQ:
+	case OPCODE_F64_NE: {
+		assert(peek_stack(sstack) == STACK_F64);
+		pop_stack(sstack);
+
+		assert(peek_stack(sstack) == STACK_F64);
+		pop_stack(sstack);
+
+		/* movsd (%rsp), %xmm0 */
+		OUTS("\xf2\x0f\x10\x04\x24");
+		/* add $8, %rsp */
+		OUTS("\x48\x83\xc4\x08");
+		/* xor %eax, %eax */
+		OUTS("\x31\xc0");
+
+		switch (instruction->opcode) {
+		case OPCODE_F64_EQ:
+			/* xor %edx, %edx */
+			OUTS("\x31\xd2");
+			break;
+		case OPCODE_F64_NE:
+			/* mov $1, %edx */
+			OUTS("\xba\x01\x00\x00\x00");
+			break;
+		}
+
+		/* ucomisd (%rsp), %xmm0 */
+		OUTS("\x66\x0f\x2e\x04\x24");
+
+		switch (instruction->opcode) {
+		case OPCODE_F64_EQ:
+			/* setnp %al */
+			OUTS("\x0f\x9b\xc0");
+			/* cmovne %edx, %eax */
+			OUTS("\x0f\x45\xc2");
+			break;
+		case OPCODE_F64_NE:
+			/* setp %al */
+			OUTS("\x0f\x9a\xc0");
+			/* cmovne %edx, %eax */
+			OUTS("\x0f\x45\xc2");
+			break;
+		}
+
+		/* mov %rax, (%rsp) */
+		OUTS("\x48\x89\x04\x24");
+
+		push_stack(sstack, STACK_I32);
+
+		break;
+	}
 	case OPCODE_I32_SUB:
 	case OPCODE_I32_ADD:
 	case OPCODE_I32_MUL:
