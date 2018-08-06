@@ -216,7 +216,7 @@ int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 		struct NamespaceEntry *entry = &store->names.elts[i];
 
 		if (strcmp("env", entry->module_name) ||
-		    strcmp("main", entry->name) ||
+		    strcmp("_main", entry->name) ||
 		    entry->type != IMPORT_DESC_TYPE_FUNC)
 			continue;
 
