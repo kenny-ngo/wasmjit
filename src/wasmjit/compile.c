@@ -161,6 +161,127 @@ static int wasmjit_compile_instructions(const struct Store *store,
 					int n_frame_locals,
 					struct StaticStack *sstack);
 
+static int emit_br_code(struct SizedBuffer *output,
+			struct StaticStack *sstack,
+			struct BranchPoints *branches,
+			uint32_t labelidx)
+{
+	char buf[0x100];
+	uint32_t arity, stack_shift;
+	size_t je_offset_2, j;
+	/* find out bottom of stack to L */
+	j = sstack->n_elts;
+	while (j) {
+		j -= 1;
+		if (sstack->elts[j].type == STACK_LABEL) {
+			if (!labelidx) {
+				break;
+			}
+			labelidx--;
+		}
+	}
+
+	arity = sstack->elts[j].data.label.arity;
+	stack_shift =
+		sstack->n_elts - j - (labelidx + 1) - arity;
+
+	if (arity) {
+		/* move top <arity> values for Lth label to
+		   bottom of stack where Lth label is */
+
+		/* LOGIC: memmove(sp + stack_shift * 8, sp, arity * 8); */
+
+		/* mov %rsp, %rsi */
+		OUTS("\x48\x89\xe6");
+
+		if (arity - 1) {
+			/* add <(arity - 1) * 8>, %rsi */
+			assert((arity - 1) * 8 <=
+			       INT_MAX);
+			OUTS("\x48\x03\x34\x25");
+			encode_le_uint32_t((arity -
+					    1) * 8,
+					   buf);
+			if (!output_buf
+			    (output, buf,
+			     sizeof(uint32_t)))
+				goto error;
+		}
+
+		/* mov %rsp, %rdi */
+		OUTS("\x48\x89\xe7");
+
+		/* add <(arity - 1 + stack_shift) * 8>, %rdi */
+		if (arity - 1 + stack_shift) {
+			assert((arity - 1 +
+				stack_shift) * 8 <=
+			       INT_MAX);
+			OUTS("\x48\x81\xc7");
+			encode_le_uint32_t((arity - 1 +
+					    stack_shift)
+					   * 8, buf);
+			if (!output_buf
+			    (output, buf,
+			     sizeof(uint32_t)))
+				goto error;
+		}
+
+		/* mov <arity>, %rcx */
+		OUTS("\x48\xc7\xc1");
+		assert(arity <= INT_MAX);
+		encode_le_uint32_t(arity, buf);
+		if (!output_buf
+		    (output, buf, sizeof(uint32_t)))
+			goto error;
+
+		/* std */
+		OUTS("\xfd");
+
+		/* rep movsq */
+		OUTS("\x48\xa5");
+	}
+
+	/* increment esp to Lth label (simulating pop) */
+	/* add <stack_shift * 8>, %rsp */
+	if (stack_shift) {
+		OUTS("\x48\x81\xc4");
+		assert(stack_shift * 8 <= INT_MAX);
+		encode_le_uint32_t(stack_shift * 8,
+				   buf);
+		if (!output_buf
+		    (output, buf, sizeof(uint32_t)))
+			goto error;
+	}
+
+	/* place jmp to Lth label */
+
+	/* jmp <BRANCH POINT> */
+	je_offset_2 = output->n_elts;
+	OUTS("\xe9\x90\x90\x90\x90");
+
+	/* add jmp offset to branches list */
+	{
+		size_t branch_idx;
+
+		branch_idx = branches->n_elts;
+		if (!bp_grow(branches, 1))
+			goto error;
+
+		branches->
+			elts[branch_idx].branch_offset =
+			je_offset_2;
+		branches->
+			elts[branch_idx].continuation_idx =
+			sstack->elts[j].data.
+			label.continuation_idx;
+	}
+
+	return 1;
+
+ error:
+	return 0;
+}
+
 static int wasmjit_compile_instruction(const struct Store *store,
 				       const struct ModuleInst *module,
 				       const struct TypeSectionType *type,
@@ -176,6 +297,7 @@ static int wasmjit_compile_instruction(const struct Store *store,
 				       struct StaticStack *sstack)
 {
 	char buf[0x100];
+	size_t *end_jumps = NULL;
 
 #define BUFFMT(...)						\
 	do {							\
@@ -360,8 +482,8 @@ static int wasmjit_compile_instruction(const struct Store *store,
 	}
 	case OPCODE_BR_IF:
 	case OPCODE_BR: {
-		uint32_t labelidx, arity, stack_shift;
-		size_t je_offset, je_offset_2, j;
+		size_t je_offset;
+		const struct BrIfExtra *extra;
 
 		if (instruction->opcode == OPCODE_BR_IF) {
 			/* LOGIC: v = pop_stack() */
@@ -380,115 +502,15 @@ static int wasmjit_compile_instruction(const struct Store *store,
 			/* je AFTER_BR */
 			je_offset = output->n_elts;
 			OUTS("\x74\x01");
+
+			extra = &instruction->data.br_if;
+		}
+		else {
+			extra = &instruction->data.br;;
 		}
 
-		/* find out bottom of stack to L */
-		j = sstack->n_elts;
-		labelidx = instruction->data.br.labelidx;
-		while (j) {
-			j -= 1;
-			if (sstack->elts[j].type == STACK_LABEL) {
-				if (!labelidx) {
-					break;
-				}
-				labelidx--;
-			}
-		}
-
-		arity = sstack->elts[j].data.label.arity;
-		stack_shift =
-			sstack->n_elts - j - (labelidx + 1) - arity;
-
-		if (arity) {
-			/* move top <arity> values for Lth label to
-			   bottom of stack where Lth label is */
-
-			/* LOGIC: memmove(sp + stack_shift * 8, sp, arity * 8); */
-
-			/* mov %rsp, %rsi */
-			OUTS("\x48\x89\xe6");
-
-			if (arity - 1) {
-				/* add <(arity - 1) * 8>, %rsi */
-				assert((arity - 1) * 8 <=
-				       INT_MAX);
-				OUTS("\x48\x03\x34\x25");
-				encode_le_uint32_t((arity -
-						    1) * 8,
-						   buf);
-				if (!output_buf
-				    (output, buf,
-				     sizeof(uint32_t)))
-					goto error;
-			}
-
-			/* mov %rsp, %rdi */
-			OUTS("\x48\x89\xe7");
-
-			/* add <(arity - 1 + stack_shift) * 8>, %rdi */
-			if (arity - 1 + stack_shift) {
-				assert((arity - 1 +
-					stack_shift) * 8 <=
-				       INT_MAX);
-				OUTS("\x48\x81\xc7");
-				encode_le_uint32_t((arity - 1 +
-						    stack_shift)
-						   * 8, buf);
-				if (!output_buf
-				    (output, buf,
-				     sizeof(uint32_t)))
-					goto error;
-			}
-
-			/* mov <arity>, %rcx */
-			OUTS("\x48\xc7\xc1");
-			assert(arity <= INT_MAX);
-			encode_le_uint32_t(arity, buf);
-			if (!output_buf
-			    (output, buf, sizeof(uint32_t)))
-				goto error;
-
-			/* std */
-			OUTS("\xfd");
-
-			/* rep movsq */
-			OUTS("\x48\xa5");
-		}
-
-		/* increment esp to Lth label (simulating pop) */
-		/* add <stack_shift * 8>, %rsp */
-		if (stack_shift) {
-			OUTS("\x48\x81\xc4");
-			assert(stack_shift * 8 <= INT_MAX);
-			encode_le_uint32_t(stack_shift * 8,
-					   buf);
-			if (!output_buf
-			    (output, buf, sizeof(uint32_t)))
-				goto error;
-		}
-
-		/* place jmp to Lth label */
-
-		/* jmp <BRANCH POINT> */
-		je_offset_2 = output->n_elts;
-		OUTS("\xe9\x90\x90\x90\x90");
-
-		/* add jmp offset to branches list */
-		{
-			size_t branch_idx;
-
-			branch_idx = branches->n_elts;
-			if (!bp_grow(branches, 1))
-				goto error;
-
-			branches->
-				elts[branch_idx].branch_offset =
-				je_offset_2;
-			branches->
-				elts[branch_idx].continuation_idx =
-				sstack->elts[j].data.
-				label.continuation_idx;
-		}
+		if (!emit_br_code(output, sstack, branches, extra->labelidx))
+			goto error;
 
 		if (instruction->opcode == OPCODE_BR_IF) {
 			/* update je operand in previous if block */
@@ -504,6 +526,78 @@ static int wasmjit_compile_instruction(const struct Store *store,
 			assert(strlen(buf) == 2);
 			memcpy(&output->elts[je_offset], buf,
 			       2);
+		}
+
+		break;
+	}
+	case OPCODE_BR_TABLE: {
+		size_t table_offset, i, default_branch_offset;
+
+		end_jumps = wasmjit_alloc_vector(instruction->data.br_table.n_labelidxs, sizeof(size_t), NULL);
+		if (!end_jumps)
+			goto error;
+
+		/* jump to the right code based on the input value */
+
+		/* pop %rax */
+		OUTS("\x58");
+		if (!pop_stack(sstack))
+			goto error;
+
+		/* cmp $const, %eax */
+		OUTS("\x48\x3d");
+		/* const = instruction->data.br_table.n_labelidxs */
+		encode_le_uint32_t(instruction->data.br_table.n_labelidxs,
+				   buf);
+		if (!output_buf(output, buf, sizeof(uint32_t)))
+			goto error;
+
+		/* jae default_branch */
+		OUTS("\x0f\x83\x90\x90\x90\x90");
+		default_branch_offset = output->n_elts;
+
+		/* lea 9(%rip), %rdx */
+		OUTS("\x48\x8d\x15\x09\x00\x00\x00");
+		/* movsxl (%rdx, %rax, 4), %rax */
+		OUTS("\x48\x63\x04\x82");
+		/* add %rdx, %rax */
+		OUTS("\x48\x01\xd0");
+		/* jmp *%rax */
+		OUTS("\xff\xe0");
+
+		/* output nop for each branch */
+		table_offset = output->n_elts;
+		for (i = 0; i < instruction->data.br_table.n_labelidxs; ++i) {
+			OUTS("\x90\x90\x90\x90");
+		}
+
+		for (i = 0; i < instruction->data.br_table.n_labelidxs; ++i) {
+			/* store ip offset */
+			uint32_t ip_offset = output->n_elts - table_offset;
+			encode_le_uint32_t(ip_offset,
+					   &output->elts[table_offset + i * sizeof(uint32_t)]);
+
+			/* output branch */
+			if (!emit_br_code(output, sstack, branches,
+					  instruction->data.br_table.labelidxs[i]))
+				goto error;
+
+			/* output jmp to end */
+			OUTS("\xe9\x90\x90\x90\x90");
+			end_jumps[i] = output->n_elts;
+		}
+
+		/* store ip offset, output default branch */
+		encode_le_uint32_t(output->n_elts - default_branch_offset,
+				   &output->elts[default_branch_offset - 4]);
+		if (!emit_br_code(output, sstack, branches,
+				  instruction->data.br_table.labelidx))
+			goto error;
+
+		/* store ip offsets of end */
+		for (i = 0; i < instruction->data.br_table.n_labelidxs; ++i) {
+			encode_le_uint32_t(output->n_elts - end_jumps[i],
+					   &output->elts[end_jumps[i] - 4]);
 		}
 
 		break;
