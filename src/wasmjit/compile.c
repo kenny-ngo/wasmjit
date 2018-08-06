@@ -1665,6 +1665,99 @@ static int wasmjit_compile_instruction(const struct Store *store,
 		/* movsd %xmm0,(%rsp) */
 		OUTS("\xf2\x0f\x11\x04\x24");
 		break;
+	case OPCODE_I32_WRAP_I64:
+		assert(peek_stack(sstack) == STACK_I64);
+		pop_stack(sstack);
+
+		/* mov $0xffffffff,%eax */
+		OUTS("\xb8\xff\xff\xff\xff");
+		/* and %rax,(%rdi) */
+		OUTS("\x48\x21\x07");
+
+		if (!push_stack(sstack, STACK_I32))
+			goto error;
+
+		break;
+	case OPCODE_I32_TRUNC_U_F64:
+	case OPCODE_I32_TRUNC_S_F64:
+		assert(peek_stack(sstack) == STACK_F64);
+		pop_stack(sstack);
+
+		/* cvttsd2si (%rsp), %eax */
+		OUTS("\xf2\x0f\x2c\x04\x24");
+
+		/* mov %rax, (%rsp) */
+		OUTS("\x48\x89\x04\x24");
+
+		if (!push_stack(sstack, STACK_I32))
+			goto error;
+		break;
+	case OPCODE_I64_EXTEND_S_I32:
+		assert(peek_stack(sstack) == STACK_I32);
+		pop_stack(sstack);
+
+		/* movsxl (%rsp), %rax */
+		OUTS("\x48\x63\x04\x24");
+		/* mov %rax, (%rsp) */
+		OUTS("\x48\x89\x04\x24");
+
+		if (!push_stack(sstack, STACK_I64))
+			goto error;
+
+		break;
+	case OPCODE_I64_EXTEND_U_I32:
+		assert(peek_stack(sstack) == STACK_I32);
+		pop_stack(sstack);
+
+		/* NB: don't need to do anything,
+		   we store 32-bits as zero-extended 64-bits
+		 */
+
+		if (!push_stack(sstack, STACK_I64))
+			goto error;
+		break;
+	case OPCODE_F64_CONVERT_S_I32:
+	case OPCODE_F64_CONVERT_U_I32:
+		assert(peek_stack(sstack) == STACK_I32);
+		pop_stack(sstack);
+
+		switch (instruction->opcode) {
+		case OPCODE_F64_CONVERT_S_I32:
+			/* cvtsi2sdl (%rsp),%xmm0 */
+			OUTS("\xf2\x0f\x2a\x04\x24");
+			break;
+		case OPCODE_F64_CONVERT_U_I32:
+			/* mov (%rsp), %eax */
+			OUTS("\x8b\x04\x24");
+			/* cvtsi2sd %rax,%xmm0 */
+			OUTS("\xf2\x48\x0f\x2a\xc0");
+			break;
+		}
+
+		/* movsd %xmm0,(%rsp) */
+		OUTS("\xf2\x0f\x11\x04\x24");
+
+		if (!push_stack(sstack, STACK_F64))
+			goto error;
+		break;
+	case OPCODE_I64_REINTERPRET_F64:
+		assert(peek_stack(sstack) == STACK_F64);
+		pop_stack(sstack);
+
+		/* no need to do anything */
+
+		if (!push_stack(sstack, STACK_I64))
+			goto error;
+		break;
+	case OPCODE_F64_REINTERPRET_I64:
+		assert(peek_stack(sstack) == STACK_I64);
+		pop_stack(sstack);
+
+		/* no need to do anything */
+
+		if (!push_stack(sstack, STACK_F64))
+			goto error;
+		break;
 	default:
 		fprintf(stderr, "Unhandled Opcode: 0x%" PRIx8 "\n", instruction->opcode);
 		assert(0);
