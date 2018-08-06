@@ -750,34 +750,34 @@ static int wasmjit_compile_instruction(const struct Store *store,
 		}
 
 		static const char *const movs[] = {
-			"\x48\x8b\x7c\x24",	/* mov N(%rsp), %rdi */
-			"\x48\x8b\x74\x24",	/* mov N(%rsp), %rsi */
-			"\x48\x8b\x54\x24",	/* mov N(%rsp), %rdx */
-			"\x48\x8b\x4c\x24",	/* mov N(%rsp), %rcx */
-			"\x4c\x8b\x44\x24",	/* mov N(%rsp), %r8 */
-			"\x4c\x8b\x4c\x24",	/* mov N(%rsp), %r9 */
+			"\x48\x8b\xbc\x24",	/* mov N(%rsp), %rdi */
+			"\x48\x8b\xb4\x24",	/* mov N(%rsp), %rsi */
+			"\x48\x8b\x94\x24",	/* mov N(%rsp), %rdx */
+			"\x48\x8b\x8c\x24",	/* mov N(%rsp), %rcx */
+			"\x4c\x8b\x84\x24",	/* mov N(%rsp), %r8 */
+			"\x4c\x8b\x8c\x24",	/* mov N(%rsp), %r9 */
 		};
 
 		static const char *const f32_movs[] = {
-			"\xf3\x0f\x10\x44\x24",	/* movss N(%rsp), %xmm0 */
-			"\xf3\x0f\x10\x4c\x24",	/* movss N(%rsp), %xmm1 */
-			"\xf3\x0f\x10\x54\x24",	/* movss N(%rsp), %xmm2 */
-			"\xf3\x0f\x10\x5c\x24",	/* movss N(%rsp), %xmm3 */
-			"\xf3\x0f\x10\x64\x24",	/* movss N(%rsp), %xmm4 */
-			"\xf3\x0f\x10\x6c\x24",	/* movss N(%rsp), %xmm5 */
-			"\xf3\x0f\x10\x74\x24",	/* movss N(%rsp), %xmm6 */
-			"\xf3\x0f\x10\x7c\x24",	/* movss N(%rsp), %xmm7 */
+			"\xf3\x0f\x10\x84\x24",	/* movss N(%rsp), %xmm0 */
+			"\xf3\x0f\x10\x8c\x24",	/* movss N(%rsp), %xmm1 */
+			"\xf3\x0f\x10\x94\x24",	/* movss N(%rsp), %xmm2 */
+			"\xf3\x0f\x10\x9c\x24",	/* movss N(%rsp), %xmm3 */
+			"\xf3\x0f\x10\xa4\x24",	/* movss N(%rsp), %xmm4 */
+			"\xf3\x0f\x10\xac\x24",	/* movss N(%rsp), %xmm5 */
+			"\xf3\x0f\x10\xb4\x24",	/* movss N(%rsp), %xmm6 */
+			"\xf3\x0f\x10\xbc\x24",	/* movss N(%rsp), %xmm7 */
 		};
 
 		static const char *const f64_movs[] = {
-			"\xf2\x0f\x10\x44\x24",	/* movsd N(%rsp), %xmm0 */
-			"\xf2\x0f\x10\x4c\x24",	/* movsd N(%rsp), %xmm1 */
-			"\xf2\x0f\x10\x54\x24",	/* movsd N(%rsp), %xmm2 */
-			"\xf2\x0f\x10\x5c\x24",	/* movsd N(%rsp), %xmm3 */
-			"\xf2\x0f\x10\x64\x24",	/* movsd N(%rsp), %xmm4 */
-			"\xf2\x0f\x10\x6c\x24",	/* movsd N(%rsp), %xmm5 */
-			"\xf2\x0f\x10\x74\x24",	/* movsd N(%rsp), %xmm6 */
-			"\xf2\x0f\x10\x7c\x24",	/* movsd N(%rsp), %xmm7 */
+			"\xf2\x0f\x10\x84\x24",	/* movsd N(%rsp), %xmm0 */
+			"\xf2\x0f\x10\x8c\x24",	/* movsd N(%rsp), %xmm1 */
+			"\xf2\x0f\x10\x94\x24",	/* movsd N(%rsp), %xmm2 */
+			"\xf2\x0f\x10\x9c\x24",	/* movsd N(%rsp), %xmm3 */
+			"\xf2\x0f\x10\xa4\x24",	/* movsd N(%rsp), %xmm4 */
+			"\xf2\x0f\x10\xac\x24",	/* movsd N(%rsp), %xmm5 */
+			"\xf2\x0f\x10\xb4\x24",	/* movsd N(%rsp), %xmm6 */
+			"\xf2\x0f\x10\xbc\x24",	/* movsd N(%rsp), %xmm7 */
 		};
 
 		/* align stack to 16-byte boundary */
@@ -822,9 +822,6 @@ static int wasmjit_compile_instruction(const struct Store *store,
 
 			stack_offset =
 				(ft->n_inputs - i - 1 + n_stack + aligned) * 8;
-			if (stack_offset > 127
-			    || stack_offset < -128)
-				goto error;
 
 			/* mov -n_inputs + i(%rsp), %rdi */
 			if ((ft->input_types[i] == VALTYPE_I32 ||
@@ -843,11 +840,13 @@ static int wasmjit_compile_instruction(const struct Store *store,
 				OUTS(f64_movs[n_xmm_movs]);
 				n_xmm_movs += 1;
 			} else {
-				OUTS("\xff\x74\x24");	/* push N(%rsp) */
+				OUTS("\xff\xb4\x24");	/* push N(%rsp) */
 				n_stack += 1;
 			}
 
-			OUTB(stack_offset);
+			encode_le_uint32_t(stack_offset, buf);
+			if (!output_buf(output, buf, sizeof(uint32_t)))
+				goto error;
 		}
 
 		/* call *%rax */
