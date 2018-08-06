@@ -1627,6 +1627,44 @@ static int wasmjit_compile_instruction(const struct Store *store,
 
 		break;
 	}
+	case OPCODE_F64_NEG:
+		assert(peek_stack(sstack) == STACK_F64);
+		/* btcq   $0x3f,(%rsp)  */
+		OUTS("\x48\x0f\xba\x3c\x24\x3f");
+		break;
+	case OPCODE_F64_ADD:
+	case OPCODE_F64_SUB:
+	case OPCODE_F64_MUL:
+		assert(peek_stack(sstack) == STACK_F64);
+		pop_stack(sstack);
+
+ 		assert(peek_stack(sstack) == STACK_F64);
+
+		/* movsd (%rsp), %xmm0 */
+		OUTS("\xf2\x0f\x10\x07");
+		/* add $8, %rsp */
+		OUTS("\x48\x8d\x47\x08");
+
+		switch (instruction->opcode) {
+		case OPCODE_F64_ADD:
+			/* addsd (%rsp), %xmm0 */
+			OUTS("\xf2\x0f\x58\x04\x24");
+			break;
+		case OPCODE_F64_SUB:
+			/* subsd (%rsp), %xmm0 */
+			OUTS("\xf2\x0f\x5c\x04\x24");
+			break;
+		case OPCODE_F64_MUL:
+			/* mulsd (%rsp), %xmm0 */
+			OUTS("\xf2\x0f\x59\x47\x08");
+			break;
+		default:
+			assert(0);
+			break;
+		}
+		/* movsd %xmm0,(%rsp) */
+		OUTS("\xf2\x0f\x11\x04\x24");
+		break;
 	default:
 		fprintf(stderr, "Unhandled Opcode: 0x%" PRIx8 "\n", instruction->opcode);
 		assert(0);
