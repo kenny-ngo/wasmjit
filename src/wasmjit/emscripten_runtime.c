@@ -38,13 +38,13 @@
 wasmjit_tls_key_t baseaddr_key;
 
 __attribute__((constructor))
-static void init_baseaddr_key()
+static void init_baseaddr_key(void)
 {
 	if (!wasmjit_init_tls_key(&baseaddr_key, NULL))
 		abort();
 }
 
-static void *wasmjit_get_base_address()
+static void *wasmjit_get_base_address(void)
 {
 	void *addr;
 	if (!wasmjit_get_tls_key(baseaddr_key, &addr))

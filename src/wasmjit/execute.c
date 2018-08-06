@@ -32,7 +32,7 @@
 #include <sys/mman.h>
 
 __attribute__((noreturn))
-static void trap()
+static void trap(void)
 {
 	asm("int $4");
 	__builtin_unreachable();
@@ -41,13 +41,13 @@ static void trap()
 wasmjit_tls_key_t store_key;
 
 __attribute__((constructor))
-static void init_store_key()
+static void init_store_key(void)
 {
 	if (!wasmjit_init_tls_key(&store_key, NULL))
 		abort();
 }
 
-static const struct Store *_get_store()
+static const struct Store *_get_store(void)
 {
 	const struct Store *store;
 	if (!wasmjit_get_tls_key(store_key, &store))
