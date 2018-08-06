@@ -840,6 +840,8 @@ static int wasmjit_compile_instruction(const struct Store *store,
 				OUTS(f64_movs[n_xmm_movs]);
 				n_xmm_movs += 1;
 			} else {
+				stack_offset =
+					(i - (ft->n_inputs - 1) + n_stack + aligned) * 8;
 				OUTS("\xff\xb4\x24");	/* push N(%rsp) */
 				n_stack += 1;
 			}
