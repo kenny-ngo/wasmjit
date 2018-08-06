@@ -609,24 +609,26 @@ static int wasmjit_compile_instruction(const struct Store *store,
 	case OPCODE_RETURN:
 		/* shift $arity values from top of stock to below */
 
-		/* lea (arity - 1)*8(%rsp), %rsi */
-		OUTS("\x48\x8d\x74\x24");
-		OUTB((intmax_t) ((type->n_outputs - 1) * 8));
+		if (type->n_outputs) {
+			/* lea (arity - 1)*8(%rsp), %rsi */
+			OUTS("\x48\x8d\x74\x24");
+			OUTB(((intmax_t) (type->n_outputs - 1)) * 8);
 
-		/* lea -8(%rbp), %rdi */
-		OUTS("\x48\x8d\x7d\xf8");
+			/* lea -8(%rbp), %rdi */
+			OUTS("\x48\x8d\x7d\xf8");
 
-		/* mov $arity, %rcx */
-		OUTS("\x48\xc7\xc1");
-		encode_le_uint32_t(type->n_outputs, buf);
-		if (!output_buf(output, buf, sizeof(uint32_t)))
-			goto error;
+			/* mov $arity, %rcx */
+			OUTS("\x48\xc7\xc1");
+			encode_le_uint32_t(type->n_outputs, buf);
+			if (!output_buf(output, buf, sizeof(uint32_t)))
+				goto error;
 
-		/* std */
-		OUTS("\xfd");
+			/* std */
+			OUTS("\xfd");
 
-		/* rep movsq */
-		OUTS("\x48\xa5");
+			/* rep movsq */
+			OUTS("\x48\xa5");
+		}
 
 		/* adjust stack to top of arity */
 		/* lea -arity * 8(%rbp), %rsp */
