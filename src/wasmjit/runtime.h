@@ -38,8 +38,7 @@ struct Addrs {
 	wasmjit_addr_t *elts;
 };
 
-__attribute__ ((unused))
-static DEFINE_VECTOR_GROW(addrs, struct Addrs);
+DECLARE_VECTOR_GROW(addrs, struct Addrs);
 
 struct FuncType {
 	size_t n_inputs;
@@ -59,8 +58,7 @@ struct ModuleInst {
 	struct Addrs globaladdrs;
 };
 
-__attribute__ ((unused))
-static DEFINE_VECTOR_GROW(func_types, struct FuncTypeVector);
+DECLARE_VECTOR_GROW(func_types, struct FuncTypeVector);
 
 struct Value {
 	unsigned type;
@@ -88,8 +86,7 @@ struct MemoryReferences {
 	} *elts;
 };
 
-__attribute__ ((unused))
-static DEFINE_VECTOR_GROW(memrefs, struct MemoryReferences);
+DECLARE_VECTOR_GROW(memrefs, struct MemoryReferences);
 
 #define IS_HOST(funcinst) (!(funcinst)->module_inst)
 
@@ -144,18 +141,12 @@ struct Store {
 	struct Addrs startfuncs;
 };
 
-__attribute__ ((unused))
-static DEFINE_VECTOR_GROW(store_module_insts, struct ModuleInstances);
-__attribute__ ((unused))
-static DEFINE_VECTOR_GROW(store_names, struct Namespace);
-__attribute__ ((unused))
-static DEFINE_VECTOR_GROW(store_funcs, struct StoreFuncs);
-__attribute__ ((unused))
-static DEFINE_VECTOR_GROW(store_tables, struct TableFuncs);
-__attribute__ ((unused))
-static DEFINE_VECTOR_GROW(store_mems, struct StoreMems);
-__attribute__ ((unused))
-static DEFINE_VECTOR_GROW(store_globals, struct StoreGlobals);
+DECLARE_VECTOR_GROW(store_module_insts, struct ModuleInstances);
+DECLARE_VECTOR_GROW(store_names, struct Namespace);
+DECLARE_VECTOR_GROW(store_funcs, struct StoreFuncs);
+DECLARE_VECTOR_GROW(store_tables, struct TableFuncs);
+DECLARE_VECTOR_GROW(store_mems, struct StoreMems);
+DECLARE_VECTOR_GROW(store_globals, struct StoreGlobals);
 
 #define WASM_PAGE_SIZE ((size_t) (64 * 1024))
 

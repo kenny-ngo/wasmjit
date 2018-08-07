@@ -29,6 +29,16 @@
 
 #include <assert.h>
 
+DEFINE_VECTOR_GROW(addrs, struct Addrs);
+DEFINE_VECTOR_GROW(func_types, struct FuncTypeVector);
+DEFINE_VECTOR_GROW(memrefs, struct MemoryReferences);
+DEFINE_VECTOR_GROW(store_module_insts, struct ModuleInstances);
+DEFINE_VECTOR_GROW(store_names, struct Namespace);
+DEFINE_VECTOR_GROW(store_funcs, struct StoreFuncs);
+DEFINE_VECTOR_GROW(store_tables, struct TableFuncs);
+DEFINE_VECTOR_GROW(store_mems, struct StoreMems);
+DEFINE_VECTOR_GROW(store_globals, struct StoreGlobals);
+
 int _wasmjit_create_func_type(struct FuncType *ft,
 			      size_t n_inputs,
 			      unsigned *input_types,

@@ -30,6 +30,10 @@
 
 void *wasmjit_vector_set_size(void *, size_t *, size_t, size_t);
 
+#define DECLARE_VECTOR_GROW(name, _type)					\
+	int name ## _grow(_type *sstack, size_t n_elts)
+
+
 #define DEFINE_VECTOR_GROW(name, _type)					\
 	int name ## _grow(_type *sstack, size_t n_elts) {		\
 		sstack->elts =						\
