@@ -1923,14 +1923,14 @@ char *wasmjit_compile_code(const struct Store *store,
 			"\xf2\x0f\x11\x7d",	/* movsd %xmm7, N(%rbp) */
 		};
 
-		/* generate breakpoint on function entrance for now */
-		OUTS("\xcc");
-
 		/* push %rbp */
 		OUTS("\x55");
 
 		/* mov %rsp, %rbp */
 		OUTS("\x48\x89\xe5");
+
+		/* generate breakpoint on function entrance for now */
+		OUTS("\xcc");
 
 		/* sub $(8 * (n_frame_locals)), %rsp */
 		if (n_frame_locals) {
