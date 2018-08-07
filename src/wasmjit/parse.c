@@ -1027,7 +1027,7 @@ int read_instruction(struct ParseState *pstate, struct Instr *instr,
 	case OPCODE_I32_REINTERPRET_F32:
 	case OPCODE_I64_REINTERPRET_F64:
 	case OPCODE_F32_REINTERPRET_I32:
-	case OPCODE_F64_REINTERPRET_I46:
+	case OPCODE_F64_REINTERPRET_I64:
 		break;
 	default:
 		goto error;
