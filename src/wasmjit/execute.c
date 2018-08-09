@@ -75,14 +75,7 @@ void *_resolve_indirect_call(const struct TableInst *tableinst,
 		trap();
 
 	funcinst = &store->funcs.elts[faddr];
-	if (!wasmjit_typelist_equal(funcinst->type.n_inputs,
-				    funcinst->type.input_types,
-				    expected_type->n_inputs,
-				    expected_type->input_types) ||
-	    !wasmjit_typelist_equal(funcinst->type.n_outputs,
-				    funcinst->type.output_types,
-				    expected_type->n_outputs,
-				    expected_type->output_types))
+	if (!wasmjit_typecheck_func(expected_type, funcinst))
 		trap();
 
 	return funcinst->compiled_code;

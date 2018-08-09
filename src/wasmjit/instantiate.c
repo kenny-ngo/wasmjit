@@ -182,12 +182,7 @@ int wasmjit_instantiate(const char *module_name,
 				assert(entry->addr < store->funcs.n_elts);
 				struct FuncInst *funcinst = &store->funcs.elts[entry->addr];
 				struct TypeSectionType *type = &module->type_section.types[import->desc.functypeidx];
-				if (!wasmjit_typelist_equal(type->n_inputs, type->input_types,
-						    funcinst->type.n_inputs,
-						    funcinst->type.input_types) ||
-				    !wasmjit_typelist_equal(type->n_outputs, type->output_types,
-						    funcinst->type.n_outputs,
-						    funcinst->type.output_types)) {
+				if (!wasmjit_typecheck_func(type, funcinst)) {
 					int ret;
 					ret = snprintf(why, why_size,
 						       "Mismatched types for %s.%s: ",
@@ -213,11 +208,8 @@ int wasmjit_instantiate(const char *module_name,
 				assert(entry->addr < store->tables.n_elts);
 				struct TableInst *tableinst = &store->tables.elts[entry->addr];
 
-				if (!(tableinst->elemtype == import->desc.tabletype.elemtype &&
-				      tableinst->length >= import->desc.tabletype.limits.min &&
-				      (!import->desc.tabletype.limits.max ||
-				       (import->desc.tabletype.limits.max && tableinst->max &&
-					tableinst->max <= import->desc.tabletype.limits.max)))) {
+				if (!wasmjit_typecheck_table(&import->desc.tabletype,
+							    tableinst)) {
 					if (why)
 						snprintf(why, why_size,
 							 "Mismatched table import for import "
@@ -235,13 +227,9 @@ int wasmjit_instantiate(const char *module_name,
 			case IMPORT_DESC_TYPE_MEM: {
 				assert(entry->addr < store->mems.n_elts);
 				struct MemInst *meminst = &store->mems.elts[entry->addr];
-				size_t msize = meminst->size / WASM_PAGE_SIZE;
-				size_t mmax = meminst->max / WASM_PAGE_SIZE;
 
-				if (!(msize >= import->desc.memtype.limits.min &&
-				      (!import->desc.memtype.limits.max ||
-				       (import->desc.memtype.limits.max && mmax &&
-					mmax <= import->desc.memtype.limits.max)))) {
+				if (!wasmjit_typecheck_memory(&import->desc.memtype,
+							      meminst)) {
 					if (why)
 						snprintf(why, why_size,
 							 "Mismatched memory size for import "
@@ -259,8 +247,8 @@ int wasmjit_instantiate(const char *module_name,
 				assert(entry->addr < store->globals.n_elts);
 				struct GlobalInst *globalinst = &store->globals.elts[entry->addr];
 
-				if (globalinst->value.type != import->desc.globaltype.valtype ||
-				    globalinst->mut != import->desc.globaltype.mut) {
+				if (!wasmjit_typecheck_global(&import->desc.globaltype,
+							      globalinst)) {
 					if (why)
 						snprintf(why, why_size,
 							 "Mismatched global for import "

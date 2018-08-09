@@ -38,6 +38,46 @@ DEFINE_VECTOR_GROW(store_tables, struct TableFuncs);
 DEFINE_VECTOR_GROW(store_mems, struct StoreMems);
 DEFINE_VECTOR_GROW(store_globals, struct StoreGlobals);
 
+
+int wasmjit_typecheck_func(struct FuncType *type,
+			   struct FuncInst *funcinst)
+{
+	return wasmjit_typelist_equal(type->n_inputs, type->input_types,
+				      funcinst->type.n_inputs,
+				      funcinst->type.input_types) &&
+		wasmjit_typelist_equal(type->n_outputs, type->output_types,
+				       funcinst->type.n_outputs,
+				       funcinst->type.output_types);
+}
+
+int wasmjit_typecheck_table(struct TableType *type,
+			    struct TableInst *tableinst)
+{
+	return (tableinst->elemtype == type->elemtype &&
+		tableinst->length >= type->limits.min &&
+		(!type->limits.max ||
+		 (type->limits.max && tableinst->max &&
+		  tableinst->max <= type->limits.max)));
+}
+
+int wasmjit_typecheck_memory(struct MemoryType *type,
+			     struct MemInst *meminst)
+{
+	size_t msize = meminst->size / WASM_PAGE_SIZE;
+	size_t mmax = meminst->max / WASM_PAGE_SIZE;
+	return (msize >= type->limits.min &&
+		(!type->limits.max ||
+		 (type->limits.max && mmax &&
+		  mmax <= type->limits.max)));
+}
+
+int wasmjit_typecheck_global(struct GlobalType *globaltype,
+			     struct GlobalInst *globalinst)
+{
+	return globalinst->value.type != globaltype->valtype ||
+		globalinst->mut != globaltype->mut;
+}
+
 int _wasmjit_create_func_type(struct FuncType *ft,
 			      size_t n_inputs,
 			      unsigned *input_types,

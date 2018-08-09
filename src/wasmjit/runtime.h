@@ -183,4 +183,16 @@ int wasmjit_import_global(struct Store *store,
 			  struct Value value,
 			  unsigned mut);
 
+int wasmjit_typecheck_func(struct FuncType *expected_type,
+			   struct FuncInst *func);
+
+int wasmjit_typecheck_table(struct TableType *expected_type,
+			    struct TableInst *table);
+
+int wasmjit_typecheck_memory(struct MemoryType *expected_type,
+			     struct MemInst *mem);
+
+int wasmjit_typecheck_global(struct GlobalType *expected_type,
+			     struct GlobalInst *mem);
+
 #endif
