@@ -25,6 +25,7 @@
 #include <wasmjit/execute.h>
 
 #include <wasmjit/ast.h>
+#include <wasmjit/compile.h>
 #include <wasmjit/runtime.h>
 #include <wasmjit/util.h>
 #include <wasmjit/tls.h>
@@ -59,19 +60,13 @@ static int _set_store(const struct Store *store)
 {
 	return wasmjit_set_tls_key(store_key, store);
 }
-
-void *_resolve_indirect_call(struct ModuleInst *module,
-			     uint32_t idx,
-			     uint32_t typeidx)
+void *_resolve_indirect_call(const struct TableInst *tableinst,
+			     const struct FuncType *expected_type,
+			     uint32_t idx)
 {
 	const struct Store *store = _get_store();
-	wasmjit_addr_t taddr = module->tableaddrs.elts[0];
-	assert(taddr < store->tables.n_elts);
-	struct TableInst *tableinst = &store->tables.elts[taddr];
-	struct FuncType *expected_type = &module->types.elts[typeidx];
 	struct FuncInst *funcinst;
 	wasmjit_addr_t faddr;
-
 	if (idx >= tableinst->length)
 		trap();
 
@@ -80,7 +75,6 @@ void *_resolve_indirect_call(struct ModuleInst *module,
 		trap();
 
 	funcinst = &store->funcs.elts[faddr];
-
 	if (!wasmjit_typelist_equal(funcinst->type.n_inputs,
 				    funcinst->type.input_types,
 				    expected_type->n_inputs,
@@ -91,7 +85,7 @@ void *_resolve_indirect_call(struct ModuleInst *module,
 				    expected_type->output_types))
 		trap();
 
-	return funcinst->code;
+	return funcinst->compiled_code;
 }
 
 int wasmjit_execute(const struct Store *store, int argc, char *argv[])
@@ -104,20 +98,35 @@ int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 	/* map all code in executable memory */
 	for (i = 0; i < store->funcs.n_elts; ++i) {
 		struct FuncInst *funcinst = &store->funcs.elts[i];
-		void *newcode;
+		void *newcode, *unmapped;
+		struct ModuleInst *module_inst = funcinst->module_inst;
+		struct ModuleTypes module_types;
+		struct CodeSectionCode code;
+		struct MemoryReferences memrefs;
+		size_t code_size;
 
 		if (IS_HOST(funcinst))
 			continue;
 
-		newcode = mmap(NULL, funcinst->code_size, PROT_READ | PROT_WRITE,
+		/* TODO: set module_types, code */
+		assert(0);
+		unmapped = wasmjit_compile_function(module_inst->types.elts,
+						    &module_types,
+						    &funcinst->type,
+						    &code,
+						    &memrefs,
+						    &code_size);
+		if (!unmapped)
+			goto error;
+
+		newcode = mmap(NULL, code_size, PROT_READ | PROT_WRITE,
 			       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 		if (newcode == MAP_FAILED)
 			goto error;
 
-		memcpy(newcode, funcinst->code, funcinst->code_size);
-
-		free(funcinst->code);
-		funcinst->code = newcode;
+		memcpy(newcode, unmapped, code_size);
+		/* TODO: store newcode somewhere */
+		assert(0);
 	}
 
 	/* resolve references */
@@ -128,9 +137,11 @@ int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 		if (IS_HOST(funcinst))
 			continue;
 
-		for (j = 0; j < funcinst->memrefs.n_elts; ++j) {
+		/* TODO: get memrefs here */
+		assert(0);
+		for (j = 0; j < 1; ++j) {
 			uint64_t val;
-			struct MemoryReferenceElt *melt = &funcinst->memrefs.elts[j];
+			struct MemoryReferenceElt *melt = NULL;
 
 			assert(sizeof(uint64_t) == sizeof(uintptr_t));
 
@@ -172,8 +183,8 @@ int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 					}
 				}
 				break;
-			case MEMREF_FUNC_MODULE_INSTANCE:
-				val = (uintptr_t) funcinst->module_inst;
+			case MEMREF_MODULE_TABLES:
+				val = (uintptr_t) &store->tables.elts[funcinst->module_inst->tableaddrs.elts[0]];
 				break;
 			case MEMREF_RESOLVE_INDIRECT_CALL:
 				val = (uintptr_t) &_resolve_indirect_call;
@@ -190,11 +201,14 @@ int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 	/* mark code executable only */
 	for (i = 0; i < store->funcs.n_elts; ++i) {
 		struct FuncInst *funcinst = &store->funcs.elts[i];
+		size_t code_size = 0;
 
 		if (IS_HOST(funcinst))
 			continue;
 
-		if (mprotect(funcinst->code, funcinst->code_size, PROT_READ | PROT_EXEC))
+		/* TODO: get code_size here */
+		assert(0);
+		if (mprotect(funcinst->code, code_size, PROT_READ | PROT_EXEC))
 			goto error;
 	}
 
@@ -206,7 +220,9 @@ int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 		    store->funcs.elts[startaddr].type.n_inputs)
 			goto error;
 
-		void (*fptr)() = store->funcs.elts[startaddr].code;
+		/* TODO: get code here */
+		assert(0);
+		void (*fptr)() = 0;
 		fptr();
 	}
 
@@ -224,12 +240,14 @@ int wasmjit_execute(const struct Store *store, int argc, char *argv[])
 		if (funcinst->type.n_outputs == 1 &&
 		    funcinst->type.output_types[0] == VALTYPE_I32) {
 			if (funcinst->type.n_inputs == 0) {
-				int (*fptr)() = funcinst->code;
+				/* TODO: get code here */
+				int (*fptr)() = 0;
 				ret = fptr();
 			} else if (funcinst->type.n_inputs == 2 &&
 				   funcinst->type.input_types[0] == VALTYPE_I32 &&
 				   funcinst->type.input_types[1] == VALTYPE_I32) {
-				int (*fptr)(int, int) = funcinst->code;
+				/* TODO: get code here */
+				int (*fptr)(int, int) = 0;
 				/* TODO: map argv into memory module of function */
 				(void) argc;
 				(void) argv;

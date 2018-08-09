@@ -455,7 +455,7 @@ int read_import_section(struct ParseState *pstate,
 
 		switch (import->desc_type) {
 		case IMPORT_DESC_TYPE_FUNC:
-			ret = read_uleb_uint32_t(pstate, &import->desc.typeidx);
+			ret = read_uleb_uint32_t(pstate, &import->desc.functypeidx);
 			if (!ret)
 				goto error;
 			break;
@@ -474,7 +474,7 @@ int read_import_section(struct ParseState *pstate,
 
 			break;
 		case IMPORT_DESC_TYPE_MEM:
-			ret = read_limits(pstate, &import->desc.memtype);
+			ret = read_limits(pstate, &import->desc.memtype.limits);
 			if (!ret)
 				goto error;
 			break;
@@ -603,7 +603,7 @@ int read_memory_section(struct ParseState *pstate,
 			struct MemorySectionMemory *memory =
 			    &memory_section->memories[i];
 
-			ret = read_limits(pstate, &memory->memtype);
+			ret = read_limits(pstate, &memory->memtype.limits);
 			if (!ret)
 				goto error;
 		}

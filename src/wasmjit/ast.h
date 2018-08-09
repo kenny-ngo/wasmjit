@@ -267,6 +267,22 @@ struct Limits {
 	uint32_t min, max;
 };
 
+struct FuncType {
+	uint32_t n_inputs;
+	unsigned *input_types;
+	uint32_t n_outputs;
+	unsigned *output_types;
+};
+
+struct TableType {
+	unsigned elemtype;
+	struct Limits limits;
+};
+
+struct MemoryType {
+	struct Limits limits;
+};
+
 struct Instr {
 	uint8_t opcode;
 	union {
@@ -331,12 +347,11 @@ void init_instruction(struct Instr *instr);
 void free_instruction(struct Instr *instr);
 void free_instructions(struct Instr *instructions, size_t n_instructions);
 
+#define TypeSectionType FuncType
+
 struct TypeSection {
 	uint32_t n_types;
-	struct TypeSectionType {
-		uint32_t n_inputs, n_outputs;
-		unsigned *input_types, *output_types;
-	} *types;
+	struct TypeSectionType *types;
 };
 
 struct ImportSection {
@@ -346,12 +361,9 @@ struct ImportSection {
 		char *name;
 		unsigned desc_type;
 		union {
-			uint32_t typeidx;
-			struct {
-				unsigned elemtype;
-				struct Limits limits;
-			} tabletype;
-			struct Limits memtype;
+			uint32_t functypeidx;
+			struct TableType tabletype;
+			struct MemoryType memtype;
 			struct GlobalType globaltype;
 		} desc;
 	} *imports;
@@ -373,7 +385,7 @@ struct TableSection {
 struct MemorySection {
 	uint32_t n_memories;
 	struct MemorySectionMemory {
-		struct Limits memtype;
+		struct MemoryType memtype;
 	} *memories;
 };
 

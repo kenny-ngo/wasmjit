@@ -31,7 +31,6 @@
 
 DEFINE_VECTOR_GROW(addrs, struct Addrs);
 DEFINE_VECTOR_GROW(func_types, struct FuncTypeVector);
-DEFINE_VECTOR_GROW(memrefs, struct MemoryReferences);
 DEFINE_VECTOR_GROW(store_module_insts, struct ModuleInstances);
 DEFINE_VECTOR_GROW(store_names, struct Namespace);
 DEFINE_VECTOR_GROW(store_funcs, struct StoreFuncs);
@@ -103,11 +102,10 @@ wasmjit_addr_t _wasmjit_add_memory_to_store(struct Store *store,
 
 wasmjit_addr_t _wasmjit_add_function_to_store(struct Store *store,
 					      struct ModuleInst *module_inst,
-					      void *code, size_t code_size,
+					      void *code,
 					      size_t n_inputs,
 					      unsigned *input_types,
-					      size_t n_outputs, unsigned *output_types,
-					      struct MemoryReferences memrefs)
+					      size_t n_outputs, unsigned *output_types)
 {
 	struct FuncInst *funcinst;
 	wasmjit_addr_t funcaddr = store->funcs.n_elts;
@@ -123,9 +121,7 @@ wasmjit_addr_t _wasmjit_add_function_to_store(struct Store *store,
 		goto error;
 
 	funcinst->module_inst = module_inst;
-	funcinst->code = code;
-	funcinst->code_size = code_size;
-	funcinst->memrefs = memrefs;
+	funcinst->compiled_code = code;
 
 	return funcaddr;
 
@@ -261,14 +257,12 @@ int wasmjit_import_function(struct Store *store,
 			    size_t n_outputs, unsigned *output_types)
 {
 	wasmjit_addr_t funcaddr;
-	struct MemoryReferences m = {0, NULL};
 
 	funcaddr = _wasmjit_add_function_to_store(store,
 						  NULL,
-						  funcptr, 0,
+						  funcptr,
 						  n_inputs, input_types,
-						  n_outputs, output_types,
-						  m);
+						  n_outputs, output_types);
 	if (funcaddr == INVALID_ADDR)
 		goto error;
 

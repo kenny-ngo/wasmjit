@@ -26,14 +26,37 @@
 #define __WASMJIT__COMPILE_H__
 
 #include <wasmjit/ast.h>
-#include <wasmjit/runtime.h>
 
 #include <stddef.h>
 
-char *wasmjit_compile_code(const struct Store *store,
-			   const struct ModuleInst *module,
-			   const struct TypeSectionType *type,
-			   const struct CodeSectionCode *code,
-			   struct MemoryReferences *memrefs, size_t *size);
+struct ModuleTypes {
+	struct FuncType *functypes;
+	struct TableType *tabletypes;
+	struct MemoryType *memorytypes;
+	struct GlobalType *globaltypes;
+};
+
+struct MemoryReferences {
+	size_t n_elts;
+	struct MemoryReferenceElt {
+		enum {
+			MEMREF_CALL,
+			MEMREF_MEM_ADDR,
+			MEMREF_MEM_SIZE,
+			MEMREF_GLOBAL_ADDR,
+			MEMREF_RESOLVE_INDIRECT_CALL,
+			MEMREF_MODULE_TABLES,
+		} type;
+		size_t code_offset;
+		size_t addr;
+	} *elts;
+};
+
+char *wasmjit_compile_function(const struct FuncType *func_types,
+			       const struct ModuleTypes *module_types,
+			       const struct FuncType *type,
+			       const struct CodeSectionCode *code,
+			       struct MemoryReferences *memrefs,
+			       size_t *out_size);
 
 #endif

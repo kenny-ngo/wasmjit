@@ -181,7 +181,7 @@ int wasmjit_instantiate(const char *module_name,
 			case IMPORT_DESC_TYPE_FUNC: {
 				assert(entry->addr < store->funcs.n_elts);
 				struct FuncInst *funcinst = &store->funcs.elts[entry->addr];
-				struct TypeSectionType *type = &module->type_section.types[import->desc.typeidx];
+				struct TypeSectionType *type = &module->type_section.types[import->desc.functypeidx];
 				if (!wasmjit_typelist_equal(type->n_inputs, type->input_types,
 						    funcinst->type.n_inputs,
 						    funcinst->type.input_types) ||
@@ -238,10 +238,10 @@ int wasmjit_instantiate(const char *module_name,
 				size_t msize = meminst->size / WASM_PAGE_SIZE;
 				size_t mmax = meminst->max / WASM_PAGE_SIZE;
 
-				if (!(msize >= import->desc.memtype.min &&
-				      (!import->desc.memtype.max ||
-				       (import->desc.memtype.max && mmax &&
-					mmax <= import->desc.memtype.max)))) {
+				if (!(msize >= import->desc.memtype.limits.min &&
+				      (!import->desc.memtype.limits.max ||
+				       (import->desc.memtype.limits.max && mmax &&
+					mmax <= import->desc.memtype.limits.max)))) {
 					if (why)
 						snprintf(why, why_size,
 							 "Mismatched memory size for import "
@@ -249,8 +249,8 @@ int wasmjit_instantiate(const char *module_name,
 							 entry->module_name, entry->name,
 							 meminst->size / WASM_PAGE_SIZE,
 							 meminst->max / WASM_PAGE_SIZE,
-							 import->desc.memtype.min,
-							 import->desc.memtype.max);
+							 import->desc.memtype.limits.min,
+							 import->desc.memtype.limits.max);
 					goto error;
 				}
 				break;
@@ -294,7 +294,7 @@ int wasmjit_instantiate(const char *module_name,
 				switch (import->desc_type) {
 				case IMPORT_DESC_TYPE_FUNC: {
 					int ret;
-					struct TypeSectionType *type = &module->type_section.types[import->desc.typeidx];
+					struct TypeSectionType *type = &module->type_section.types[import->desc.functypeidx];
 					ret = snprintf(why, why_size,
 						       "couldn't find func import: %s.%s ",
 						       import->module,
@@ -319,8 +319,8 @@ int wasmjit_instantiate(const char *module_name,
 						 "couldn't find memory import: %s.%s "
 						 "{%" PRIu32 ", %" PRIu32 "}",
 						 import->module, import->name,
-						 import->desc.memtype.min,
-						 import->desc.memtype.max);
+						 import->desc.memtype.limits.min,
+						 import->desc.memtype.limits.max);
 					break;
 				case IMPORT_DESC_TYPE_GLOBAL:
 					snprintf(why, why_size,
@@ -342,7 +342,6 @@ int wasmjit_instantiate(const char *module_name,
 	for (i = 0; i < module->function_section.n_typeidxs; ++i) {
 		struct TypeSectionType *type;
 		size_t funcaddr;
-		struct MemoryReferences memrefs = {0, NULL};
 
 		addrs = &module_inst->funcaddrs;
 
@@ -355,8 +354,7 @@ int wasmjit_instantiate(const char *module_name,
 							  type->n_inputs,
 							  type->input_types,
 							  type->n_outputs,
-							  type->output_types,
-							  memrefs);
+							  type->output_types);
 		if (funcaddr == INVALID_ADDR)
 			goto error;
 
@@ -394,15 +392,15 @@ int wasmjit_instantiate(const char *module_name,
 		wasmjit_addr_t memaddr;
 		size_t size, max;
 
-		assert(!memory->memtype.max
-		       || memory->memtype.min <= memory->memtype.max);
+		assert(!memory->memtype.limits.max
+		       || memory->memtype.limits.min <= memory->memtype.limits.max);
 
-		if (__builtin_umull_overflow(memory->memtype.min, WASM_PAGE_SIZE,
+		if (__builtin_umull_overflow(memory->memtype.limits.min, WASM_PAGE_SIZE,
 					     &size)) {
 			goto error;
 		}
 
-		if (__builtin_umull_overflow(memory->memtype.max, WASM_PAGE_SIZE,
+		if (__builtin_umull_overflow(memory->memtype.limits.max, WASM_PAGE_SIZE,
 					     &max)) {
 			goto error;
 		}
@@ -495,27 +493,23 @@ int wasmjit_instantiate(const char *module_name,
 	}
 
 	for (i = 0; i < module->code_section.n_codes; ++i) {
-		struct TypeSectionType *type;
+		struct CodeSectionCode *code = &module->code_section.codes[i];
 		struct FuncInst *funcinst;
-
-		type =
-		    &module->type_section.types[module->
-						function_section.typeidxs[i]];
 
 		funcinst = &store->funcs.elts[module_inst->funcaddrs.elts[i + internal_func_idx]];
 
-		funcinst->code = wasmjit_compile_code(store,
-						      module_inst,
-						      type,
-						      &module->
-						      code_section.codes[i],
-						      &funcinst->memrefs,
-						      &funcinst->code_size);
-		if (!funcinst->code) {
-			if (why)
-				snprintf(why, why_size, "compile failed");
+		funcinst->code_length = code->n_instructions;
+		funcinst->code = wasmjit_copy_buf(code->instructions,
+						  code->n_instructions,
+						  sizeof(code->instructions[0]));
+		if (!funcinst->code)
 			goto error;
-		}
+		funcinst->n_locals = code->n_locals;
+		funcinst->locals = wasmjit_copy_buf(code->locals,
+						    code->n_locals,
+						    sizeof(code->locals[0]));
+		if (!funcinst->locals)
+			goto error;
 	}
 
 	for (i = 0; i < module->data_section.n_datas; ++i) {

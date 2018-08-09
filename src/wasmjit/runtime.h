@@ -25,6 +25,7 @@
 #ifndef __WASMJIT__RUNTIME_H__
 #define __WASMJIT__RUNTIME_H__
 
+#include <wasmjit/ast.h>
 #include <wasmjit/vector.h>
 
 #include <stddef.h>
@@ -39,13 +40,6 @@ struct Addrs {
 };
 
 DECLARE_VECTOR_GROW(addrs, struct Addrs);
-
-struct FuncType {
-	size_t n_inputs;
-	unsigned *input_types;
-	size_t n_outputs;
-	unsigned *output_types;
-};
 
 struct ModuleInst {
 	struct FuncTypeVector {
@@ -70,24 +64,6 @@ struct Value {
 	} data;
 };
 
-struct MemoryReferences {
-	size_t n_elts;
-	struct MemoryReferenceElt {
-		enum {
-			MEMREF_CALL,
-			MEMREF_MEM_ADDR,
-			MEMREF_MEM_SIZE,
-			MEMREF_GLOBAL_ADDR,
-			MEMREF_FUNC_MODULE_INSTANCE,
-			MEMREF_RESOLVE_INDIRECT_CALL,
-		} type;
-		size_t code_offset;
-		size_t addr;
-	} *elts;
-};
-
-DECLARE_VECTOR_GROW(memrefs, struct MemoryReferences);
-
 #define IS_HOST(funcinst) (!(funcinst)->module_inst)
 
 struct Store {
@@ -109,9 +85,14 @@ struct Store {
 		struct FuncInst {
 			struct ModuleInst *module_inst;
 			struct FuncType type;
-			void *code;
-			size_t code_size;
-			struct MemoryReferences memrefs;
+			size_t code_length;
+			struct Instr *code;
+			size_t n_locals;
+			struct {
+				uint32_t count;
+				uint8_t valtype;
+			} *locals;
+			void *compiled_code;
 		} *elts;
 	} funcs;
 	struct TableFuncs {
@@ -159,11 +140,10 @@ wasmjit_addr_t _wasmjit_add_memory_to_store(struct Store *store,
 					    size_t size, size_t max);
 wasmjit_addr_t _wasmjit_add_function_to_store(struct Store *store,
 					      struct ModuleInst *module_inst,
-					      void *code, size_t code_size,
+					      void *code,
 					      size_t n_inputs,
 					      unsigned *input_types,
-					      size_t n_outputs, unsigned *output_types,
-					      struct MemoryReferences memrefs);
+					      size_t n_outputs, unsigned *output_types);
 wasmjit_addr_t _wasmjit_add_table_to_store(struct Store *store,
 					   unsigned elemtype,
 					   size_t length,

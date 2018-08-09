@@ -24,10 +24,9 @@
 
 #include <wasmjit/compile.h>
 
-#include <wasmjit/parse.h>
+#include <wasmjit/ast.h>
 #include <wasmjit/util.h>
 #include <wasmjit/vector.h>
-#include <wasmjit/runtime.h>
 
 #include <assert.h>
 #include <inttypes.h>
@@ -54,6 +53,8 @@ static int output_buf(struct SizedBuffer *sstack, const char *buf,
 }
 
 #define FUNC_EXIT_CONT SIZE_MAX
+
+static DEFINE_VECTOR_GROW(memrefs, struct MemoryReferences);
 
 struct BranchPoints {
 	size_t n_elts;
@@ -146,9 +147,9 @@ struct LocalsMD {
 	int8_t fp_offset;
 };
 
-static int wasmjit_compile_instructions(const struct Store *store,
-					const struct ModuleInst *module,
-					const struct TypeSectionType *type,
+static int wasmjit_compile_instructions(const struct FuncType *func_types,
+					const struct ModuleTypes *module_types,
+					const struct FuncType *type,
 					const struct CodeSectionCode *code,
 					const struct Instr *instructions,
 					size_t n_instructions,
@@ -282,9 +283,9 @@ static int emit_br_code(struct SizedBuffer *output,
 	return 0;
 }
 
-static int wasmjit_compile_instruction(const struct Store *store,
-				       const struct ModuleInst *module,
-				       const struct TypeSectionType *type,
+static int wasmjit_compile_instruction(const struct FuncType *func_types,
+				       const struct ModuleTypes *module_types,
+				       const struct FuncType *type,
 				       const struct CodeSectionCode *code,
 				       const struct Instr *instruction,
 				       struct SizedBuffer *output,
@@ -346,8 +347,8 @@ static int wasmjit_compile_instruction(const struct Store *store,
 		elt->data.label.continuation_idx = label_idx;
 
 		output_idx = output->n_elts;
-		wasmjit_compile_instructions(store,
-					     module,
+		wasmjit_compile_instructions(func_types,
+					     module_types,
 					     type,
 					     code,
 					     instruction->data.
@@ -418,8 +419,8 @@ static int wasmjit_compile_instruction(const struct Store *store,
 			elt->data.label.continuation_idx = label_idx;
 		}
 
-		wasmjit_compile_instructions(store,
-					     module,
+		wasmjit_compile_instructions(func_types,
+					     module_types,
 					     type,
 					     code,
 					     instruction->data.
@@ -452,8 +453,8 @@ static int wasmjit_compile_instruction(const struct Store *store,
 		   }
 		*/
 		if (instruction->data.if_.n_instructions_else) {
-			wasmjit_compile_instructions(store,
-						     module,
+			wasmjit_compile_instructions(func_types,
+						     module_types,
 						     type,
 						     code,
 						     instruction->data.
@@ -657,7 +658,7 @@ static int wasmjit_compile_instruction(const struct Store *store,
 		size_t i;
 		size_t n_movs, n_xmm_movs, n_stack;
 		int aligned = 0;
-		struct FuncType *ft;
+		const struct FuncType *ft;
 		size_t cur_stack_depth = n_frame_locals;
 
 		/* add current stack depth */
@@ -669,8 +670,7 @@ static int wasmjit_compile_instruction(const struct Store *store,
 		}
 
 		if (instruction->opcode == OPCODE_CALL_INDIRECT) {
-			assert(instruction->data.call_indirect.typeidx < module->types.n_elts);
-			ft = &module->types.elts[instruction->data.call_indirect.typeidx];
+			ft = &func_types[instruction->data.call_indirect.typeidx];
 			assert(peek_stack(sstack) == STACK_I32);
 			if (!pop_stack(sstack))
 				goto error;
@@ -685,7 +685,7 @@ static int wasmjit_compile_instruction(const struct Store *store,
 					goto error;
 
 				memrefs->elts[memref_idx].type =
-					MEMREF_FUNC_MODULE_INSTANCE;
+					MEMREF_MODULE_TABLES;
 				memrefs->elts[memref_idx].code_offset =
 					output->n_elts - 8;
 			}
@@ -728,8 +728,7 @@ static int wasmjit_compile_instruction(const struct Store *store,
 		} else {
 			uint32_t fidx =
 				instruction->data.call.funcidx;
-			size_t faddr = module->funcaddrs.elts[fidx];
-			ft = &store->funcs.elts[faddr].type;
+			ft = &module_types->functypes[fidx];
 
 			/* movq $const, %rax */
 			{
@@ -743,7 +742,7 @@ static int wasmjit_compile_instruction(const struct Store *store,
 					MEMREF_CALL;
 				memrefs->elts[memref_idx].code_offset =
 					output->n_elts + 2;
-				memrefs->elts[memref_idx].addr = faddr;
+				memrefs->elts[memref_idx].addr = fidx;
 
 				OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
 			}
@@ -926,13 +925,10 @@ static int wasmjit_compile_instruction(const struct Store *store,
 		     .fp_offset);
 		break;
 	case OPCODE_GET_GLOBAL: {
-		wasmjit_addr_t globaladdr;
+		uint32_t gidx = instruction->data.get_global.globalidx;
 		unsigned type;
 
-		assert(instruction->data.get_global.globalidx < module->globaladdrs.n_elts);
-		globaladdr = module->globaladdrs.elts[instruction->data.get_global.globalidx];
-
-		type = store->globals.elts[globaladdr].value.type;
+		type = module_types->globaltypes[gidx].valtype;
 		switch (type) {
 		case VALTYPE_I32:
 		case VALTYPE_F32:
@@ -961,7 +957,7 @@ static int wasmjit_compile_instruction(const struct Store *store,
 			memrefs->elts[memref_idx].code_offset =
 				output->n_elts - 8;
 			memrefs->elts[memref_idx].addr =
-				globaladdr;
+				gidx;
 		}
 
 		/* push %rax*/
@@ -971,19 +967,17 @@ static int wasmjit_compile_instruction(const struct Store *store,
 		break;
 	}
 	case OPCODE_SET_GLOBAL: {
-		wasmjit_addr_t globaladdr;
-
-		assert(instruction->data.get_global.globalidx < module->globaladdrs.n_elts);
-		globaladdr = module->globaladdrs.elts[instruction->data.get_global.globalidx];
+		uint32_t gidx = instruction->data.get_global.globalidx;
+		unsigned type = module_types->globaltypes[gidx].valtype;
 
 		/* pop %rax */
 		OUTS("\x58");
 
-		assert(peek_stack(sstack) == store->globals.elts[globaladdr].value.type);
+		assert(peek_stack(sstack) == type);
 		if (!pop_stack(sstack))
 			goto error;
 
-		switch (store->globals.elts[globaladdr].value.type) {
+		switch (type) {
 		case VALTYPE_I32:
 		case VALTYPE_F32:
 			/* movl %eax, (const) */
@@ -1011,7 +1005,7 @@ static int wasmjit_compile_instruction(const struct Store *store,
 			memrefs->elts[memref_idx].code_offset =
 				output->n_elts - 8;
 			memrefs->elts[memref_idx].addr =
-				globaladdr;
+				gidx;
 		}
 
 		break;
@@ -1109,7 +1103,7 @@ static int wasmjit_compile_instruction(const struct Store *store,
 				memrefs->elts[memref_idx].code_offset =
 					output->n_elts - 8;
 				memrefs->elts[memref_idx].addr =
-					module->memaddrs.elts[0];
+					0;
 			}
 
 			/* LOGIC: if ea > size then trap() */
@@ -1141,7 +1135,7 @@ static int wasmjit_compile_instruction(const struct Store *store,
 				memrefs->elts[memref_idx].code_offset =
 					output->n_elts - 8;
 				memrefs->elts[memref_idx].addr =
-					module->memaddrs.elts[0];
+					0;
 			}
 		}
 
@@ -1777,9 +1771,9 @@ static int wasmjit_compile_instruction(const struct Store *store,
 }
 
 
-static int wasmjit_compile_instructions(const struct Store *store,
-					const struct ModuleInst *module,
-					const struct TypeSectionType *type,
+static int wasmjit_compile_instructions(const struct FuncType *func_types,
+					const struct ModuleTypes *module_types,
+					const struct FuncType *type,
 					const struct CodeSectionCode *code,
 					const struct Instr *instructions,
 					size_t n_instructions,
@@ -1795,8 +1789,8 @@ static int wasmjit_compile_instructions(const struct Store *store,
 	size_t i;
 
 	for (i = 0; i < n_instructions; ++i) {
-		if (!wasmjit_compile_instruction(store,
-						 module,
+		if (!wasmjit_compile_instruction(func_types,
+						 module_types,
 						 type,
 						 code,
 						 &instructions[i],
@@ -1817,11 +1811,11 @@ static int wasmjit_compile_instructions(const struct Store *store,
 	return 0;
 }
 
-char *wasmjit_compile_code(const struct Store *store,
-			   const struct ModuleInst *module,
-			   const struct TypeSectionType *type,
-			   const struct CodeSectionCode *code,
-			   struct MemoryReferences *memrefs, size_t *out_size)
+char *wasmjit_compile_function(const struct FuncType *func_types,
+			       const struct ModuleTypes *module_types,
+			       const struct FuncType *type,
+			       const struct CodeSectionCode *code,
+			       struct MemoryReferences *memrefs, size_t *out_size)
 {
 	char buf[0x100];
 	struct SizedBuffer outputv = { 0, NULL };
@@ -1989,7 +1983,7 @@ char *wasmjit_compile_code(const struct Store *store,
 		}
 	}
 
-	if (!wasmjit_compile_instructions(store, module, type, code,
+	if (!wasmjit_compile_instructions(func_types, module_types, type, code,
 					  code->instructions, code->n_instructions,
 					  output, &labels, &branches, memrefs,
 					  locals_md, n_locals, n_frame_locals, &sstack))
