@@ -2018,9 +2018,6 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 		/* mov %rsp, %rbp */
 		OUTS("\x48\x89\xe5");
 
-		/* generate breakpoint on function entrance for now */
-		OUTS("\xcc");
-
 		/* sub $(8 * (n_frame_locals)), %rsp */
 		if (n_frame_locals) {
 			int32_t out;
