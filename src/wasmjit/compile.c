@@ -143,7 +143,7 @@ static int wasmjit_compile_instructions(const struct FuncType *func_types,
 					struct MemoryReferences *memrefs,
 					struct LocalsMD *locals_md,
 					size_t n_locals,
-					int n_frame_locals,
+					size_t n_frame_locals,
 					struct StaticStack *sstack);
 
 static int emit_br_code(struct SizedBuffer *output,
@@ -281,7 +281,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 				       struct MemoryReferences *memrefs,
 				       struct LocalsMD *locals_md,
 				       size_t n_locals,
-				       int n_frame_locals,
+				       size_t n_frame_locals,
 				       struct StaticStack *sstack)
 {
 	char buf[0x100];
@@ -1835,7 +1835,7 @@ static int wasmjit_compile_instructions(const struct FuncType *func_types,
 					struct MemoryReferences *memrefs,
 					struct LocalsMD *locals_md,
 					size_t n_locals,
-					int n_frame_locals,
+					size_t n_frame_locals,
 					struct StaticStack *sstack)
 {
 	size_t i;
@@ -1876,7 +1876,7 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 	struct StaticStack sstack = { 0, NULL };
 	struct LabelContinuations labels = { 0, NULL };
 	struct LocalsMD *locals_md;
-	int n_frame_locals;
+	size_t n_frame_locals;
 	unsigned n_locals;
 
 	{
