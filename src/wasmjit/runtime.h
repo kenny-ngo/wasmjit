@@ -56,7 +56,7 @@ DECLARE_VECTOR_GROW(func_types, struct FuncTypeVector);
 
 struct Value {
 	unsigned type;
-	union {
+	union ValueUnion {
 		uint32_t i32;
 		uint64_t i64;
 		float f32;

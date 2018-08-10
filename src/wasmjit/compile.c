@@ -27,6 +27,7 @@
 #include <wasmjit/ast.h>
 #include <wasmjit/util.h>
 #include <wasmjit/vector.h>
+#include <wasmjit/runtime.h>
 
 #include <assert.h>
 #include <inttypes.h>
@@ -660,7 +661,6 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 
 			/* mov $const, %rdi */
 			OUTS("\x48\xbf\x90\x90\x90\x90\x90\x90\x90\x90");
-			// address of module_instance
 			{
 				size_t memref_idx;
 				memref_idx = memrefs->n_elts;
@@ -668,19 +668,31 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 					goto error;
 
 				memrefs->elts[memref_idx].type =
-					MEMREF_MODULE_TABLES;
+					MEMREF_TABLE;
 				memrefs->elts[memref_idx].code_offset =
 					output->n_elts - 8;
+				memrefs->elts[memref_idx].idx =
+					0;
 			}
 
-			/* pop %rsi */
-			OUTS("\x58");
+			/* mov $const, %rsi */
+			OUTS("\x48\xbe\x90\x90\x90\x90\x90\x90\x90\x90");
+			{
+				size_t memref_idx;
+				memref_idx = memrefs->n_elts;
+				if (!memrefs_grow(memrefs, 1))
+					goto error;
 
-			/* mov $const, %rdx */
-			OUTS("\x48\xc7\xc2");
-			encode_le_uint32_t(instruction->data.call_indirect.typeidx, buf);
-			if (!output_buf(output, buf, sizeof(uint32_t)))
-				goto error;
+				memrefs->elts[memref_idx].type =
+					MEMREF_TYPE;
+				memrefs->elts[memref_idx].code_offset =
+					output->n_elts - 8;
+				memrefs->elts[memref_idx].idx =
+					instruction->data.call_indirect.typeidx;
+			}
+
+			/* pop %rdx */
+			OUTS("\x5a");
 
 			/* mov $const, %rax */
 			OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
@@ -722,13 +734,17 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 					goto error;
 
 				memrefs->elts[memref_idx].type =
-					MEMREF_CALL;
+					MEMREF_FUNC;
 				memrefs->elts[memref_idx].code_offset =
 					output->n_elts + 2;
-				memrefs->elts[memref_idx].addr = fidx;
+				memrefs->elts[memref_idx].idx = fidx;
 
 				OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
 			}
+
+			/* mov compiled_code_off(%rax), %rax */
+			OUTS("\x48\x8b\x40");
+			OUTB(offsetof(struct FuncInst, compiled_code));
 		}
 
 		static const char *const movs[] = {
@@ -911,23 +927,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		uint32_t gidx = instruction->data.get_global.globalidx;
 		unsigned type;
 
-		type = module_types->globaltypes[gidx].valtype;
-		switch (type) {
-		case VALTYPE_I32:
-		case VALTYPE_F32:
-			/* mov (const), %eax */
-			OUTS("\xa1\x90\x90\x90\x90\x90\x90\x90\x90");
-			break;
-		case VALTYPE_I64:
-		case VALTYPE_F64:
-			/* mov (const), %rax */
-			OUTS("\x48\xa1\x90\x90\x90\x90\x90\x90\x90\x90");
-			break;
-		default:
-			assert(0);
-			break;
-		}
-
+		/* movq $const, %rax */
+		OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
 		{
 			size_t memref_idx;
 
@@ -936,12 +937,48 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 				goto error;
 
 			memrefs->elts[memref_idx].type =
-				MEMREF_GLOBAL_ADDR;
+				MEMREF_GLOBAL;
 			memrefs->elts[memref_idx].code_offset =
 				output->n_elts - 8;
-			memrefs->elts[memref_idx].addr =
+			memrefs->elts[memref_idx].idx =
 				gidx;
 		}
+
+		type = module_types->globaltypes[gidx].valtype;
+		switch (type) {
+		case VALTYPE_I32:
+		case VALTYPE_F32:
+			/* mov offset(%rax), %eax */
+			OUTS("\x8b\x40");
+			if (type == VALTYPE_I32) {
+				OUTB(offsetof(struct GlobalInst, value) +
+				     offsetof(struct Value, data) +
+				     offsetof(union ValueUnion, i32));
+			} else {
+				OUTB(offsetof(struct GlobalInst, value) +
+				     offsetof(struct Value, data) +
+				     offsetof(union ValueUnion, f32));
+			}
+			break;
+		case VALTYPE_I64:
+		case VALTYPE_F64:
+			/* mov offset(%rax), %rax */
+			OUTS("\x48\x8b\x40");
+			if (type == VALTYPE_I64) {
+				OUTB(offsetof(struct GlobalInst, value) +
+				     offsetof(struct Value, data) +
+				     offsetof(union ValueUnion, i64));
+			} else {
+				OUTB(offsetof(struct GlobalInst, value) +
+				     offsetof(struct Value, data) +
+				     offsetof(union ValueUnion, f64));
+			}
+			break;
+		default:
+			assert(0);
+			break;
+		}
+
 
 		/* push %rax*/
 		OUTS("\x50");
@@ -953,29 +990,15 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		uint32_t gidx = instruction->data.get_global.globalidx;
 		unsigned type = module_types->globaltypes[gidx].valtype;
 
-		/* pop %rax */
-		OUTS("\x58");
+		/* pop %rdx */
+		OUTS("\x5a");
 
 		assert(peek_stack(sstack) == type);
 		if (!pop_stack(sstack))
 			goto error;
 
-		switch (type) {
-		case VALTYPE_I32:
-		case VALTYPE_F32:
-			/* movl %eax, (const) */
-			OUTS("\xa3\x90\x90\x90\x90\x90\x90\x90\x90");
-			break;
-		case VALTYPE_I64:
-		case VALTYPE_F64:
-			/* movq %rax, (const) */
-			OUTS("\x48\xa3\x90\x90\x90\x90\x90\x90\x90\x90");
-			break;
-		default:
-			assert(0);
-			break;
-		}
-
+		/* movq $const, %rax */
+		OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
 		{
 			size_t memref_idx;
 
@@ -984,11 +1007,46 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 				goto error;
 
 			memrefs->elts[memref_idx].type =
-				MEMREF_GLOBAL_ADDR;
+				MEMREF_GLOBAL;
 			memrefs->elts[memref_idx].code_offset =
 				output->n_elts - 8;
-			memrefs->elts[memref_idx].addr =
+			memrefs->elts[memref_idx].idx =
 				gidx;
+		}
+
+		type = module_types->globaltypes[gidx].valtype;
+		switch (type) {
+		case VALTYPE_I32:
+		case VALTYPE_F32:
+			/* mov %edx, offset(%rax) */
+			OUTS("\x89\x50");
+			if (type == VALTYPE_I32) {
+				OUTB(offsetof(struct GlobalInst, value) +
+				     offsetof(struct Value, data) +
+				     offsetof(union ValueUnion, i32));
+			} else {
+				OUTB(offsetof(struct GlobalInst, value) +
+				     offsetof(struct Value, data) +
+				     offsetof(union ValueUnion, f32));
+			}
+			break;
+		case VALTYPE_I64:
+		case VALTYPE_F64:
+			/* mov %rdx, offset(%rax) */
+			OUTS("\x48\x89\x50");
+			if (type == VALTYPE_I64) {
+				OUTB(offsetof(struct GlobalInst, value) +
+				     offsetof(struct Value, data) +
+				     offsetof(union ValueUnion, i64));
+			} else {
+				OUTB(offsetof(struct GlobalInst, value) +
+				     offsetof(struct Value, data) +
+				     offsetof(union ValueUnion, f64));
+			}
+			break;
+		default:
+			assert(0);
+			break;
 		}
 
 		break;
@@ -1070,8 +1128,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		{
 			/* LOGIC: size = store->mems.elts[maddr].size */
 
-			/* movq (const), %rax */
-			OUTS("\x48\xa1\x90\x90\x90\x90\x90\x90\x90\x90");
+			/* movq $const, %rax */
+			OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
 
 			/* add reference to max */
 			{
@@ -1082,12 +1140,16 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 					goto error;
 
 				memrefs->elts[memref_idx].type =
-					MEMREF_MEM_SIZE;
+					MEMREF_MEM;
 				memrefs->elts[memref_idx].code_offset =
 					output->n_elts - 8;
-				memrefs->elts[memref_idx].addr =
+				memrefs->elts[memref_idx].idx =
 					0;
 			}
+
+			/* mov size_offset(%rax), %rax */
+			OUTS("\x48\x8b\x40");
+			OUTB(offsetof(struct MemInst, size));
 
 			/* LOGIC: if ea > size then trap() */
 
@@ -1102,8 +1164,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 
 		/* LOGIC: data = store->mems.elts[maddr].data */
 		{
-			/* movq (const), %rax */
-			OUTS("\x48\xa1\x90\x90\x90\x90\x90\x90\x90\x90");
+			/* movq $const, %rax */
+			OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
 
 			/* add reference to data */
 			{
@@ -1114,12 +1176,16 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 					goto error;
 
 				memrefs->elts[memref_idx].type =
-					MEMREF_MEM_ADDR;
+					MEMREF_MEM;
 				memrefs->elts[memref_idx].code_offset =
 					output->n_elts - 8;
-				memrefs->elts[memref_idx].addr =
+				memrefs->elts[memref_idx].idx =
 					0;
 			}
+
+			/* mov data_off(%rax), %rax */
+			OUTS("\x48\x8b\x40");
+			OUTB(offsetof(struct MemInst, data));
 		}
 
 

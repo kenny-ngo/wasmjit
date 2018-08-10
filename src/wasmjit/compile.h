@@ -40,15 +40,15 @@ struct MemoryReferences {
 	size_t n_elts;
 	struct MemoryReferenceElt {
 		enum {
-			MEMREF_CALL,
-			MEMREF_MEM_ADDR,
-			MEMREF_MEM_SIZE,
-			MEMREF_GLOBAL_ADDR,
+			MEMREF_TYPE,
+			MEMREF_FUNC,
+			MEMREF_TABLE,
+			MEMREF_MEM,
+			MEMREF_GLOBAL,
 			MEMREF_RESOLVE_INDIRECT_CALL,
-			MEMREF_MODULE_TABLES,
 		} type;
 		size_t code_offset;
-		size_t addr;
+		size_t idx;
 	} *elts;
 };
 
