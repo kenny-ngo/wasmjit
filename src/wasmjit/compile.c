@@ -549,7 +549,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		default_branch_offset = output->n_elts;
 
 		/* lea 9(%rip), %rdx */
-		OUTS("\x48\x8d\x15\x09\x00\x00\x00");
+		OUTS("\x48\x8d\x15\x09");
+		OUTB(0); OUTB(0); OUTB(0);
 		/* movsxl (%rdx, %rax, 4), %rax */
 		OUTS("\x48\x63\x04\x82");
 		/* add %rdx, %rax */
@@ -1332,7 +1333,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		/* xor %eax, %eax */
 		OUTS("\x31\xc0");
 		/* cmpl $0, (%rsp) */
-		OUTS("\x83\x3c\x24\x00");
+		OUTS("\x83\x3c\x24");
+		OUTB(0);
 		/* sete %al */
 		OUTS("\x0f\x94\xc0");
 		/* mov %eax, (%rsp) */
@@ -1459,7 +1461,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			break;
 		case OPCODE_F64_NE:
 			/* mov $1, %edx */
-			OUTS("\xba\x01\x00\x00\x00");
+			OUTS("\xba\x01");
+			OUTB(0); OUTB(0); OUTB(0);
 			break;
 		}
 
