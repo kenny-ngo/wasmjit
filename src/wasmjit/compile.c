@@ -155,6 +155,7 @@ static int emit_br_code(struct SizedBuffer *output,
 	size_t arity;
 	size_t je_offset_2, j;
 	int32_t stack_shift;
+	uint32_t olabelidx = labelidx;
 	/* find out bottom of stack to L */
 	j = sstack->n_elts;
 	while (j) {
@@ -168,7 +169,7 @@ static int emit_br_code(struct SizedBuffer *output,
 	}
 
 	arity = sstack->elts[j].data.label.arity;
-	assert(sstack->n_elts >= j + (labelidx + 1) + arity);
+	assert(sstack->n_elts >= j + (olabelidx + 1) + arity);
 	if (__builtin_mul_overflow(sstack->n_elts - j - (olabelidx + 1) - arity,
 				   8, &stack_shift))
 		goto error;
