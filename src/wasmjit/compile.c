@@ -1286,12 +1286,16 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		break;
 	}
 	case OPCODE_I32_CONST:
-		/* push $value */
-		OUTS("\x68");
+		/* mov $value, %eax */
+		OUTS("\xb8");
 		encode_le_uint32_t(instruction->data.i32_const.value,
 				   buf);
 		if (!output_buf(output, buf, sizeof(uint32_t)))
 			goto error;
+
+		/* push %rax */
+		OUTS("\x50");
+
 		push_stack(sstack, STACK_I32);
 		break;
 	case OPCODE_I64_CONST:
