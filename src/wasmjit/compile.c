@@ -128,7 +128,7 @@ static void encode_le_uint32_t(uint32_t val, char *buf)
 
 struct LocalsMD {
 	wasmjit_valtype_t valtype;
-	int8_t fp_offset;
+	int32_t fp_offset;
 };
 
 static int wasmjit_compile_instructions(const struct FuncType *func_types,
@@ -913,22 +913,26 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			   locals_md[instruction->data.
 				     get_local.localidx].valtype);
 
-		/* push 8*(offset + 1)(%rbp) */
-		OUTS("\xff\x75");
-		OUTB(locals_md
-		     [instruction->data.get_local.localidx]
-		     .fp_offset);
+		/* push fp_offset(%rbp) */
+		OUTS("\xff\xb5");
+		encode_le_uint32_t(locals_md
+				   [instruction->data.get_local.localidx]
+				   .fp_offset, buf);
+		if (!output_buf(output, buf, sizeof(uint32_t)))
+			goto error;
 		break;
 	case OPCODE_SET_LOCAL:
 		assert(peek_stack(sstack) ==
 		       locals_md[instruction->data.
 				 set_local.localidx].valtype);
 
-		/* pop 8*(offset + 1)(%rbp) */
-		OUTS("\x8f\x45");
-		OUTB(locals_md
-		     [instruction->data.set_local.localidx]
-		     .fp_offset);
+		/* pop fp_offset(%rbp) */
+		OUTS("\x8f\x85");
+		encode_le_uint32_t(locals_md
+				   [instruction->data.set_local.localidx]
+				   .fp_offset, buf);
+		if (!output_buf(output, buf, sizeof(uint32_t)))
+			goto error;
 		pop_stack(sstack);
 		break;
 	case OPCODE_TEE_LOCAL:
@@ -937,12 +941,14 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 				 tee_local.localidx].valtype);
 
 		/* movq (%rsp), %rax */
-		OUTS("\x48\x8b\x04\x24");
-		/* movq %rax, 8*(offset + 1)(%rbp) */
+		OUTS("\x48\\x85");
+		/* movq %rax, fp_offset(%rbp) */
 		OUTS("\x48\x89\x45");
-		OUTB(locals_md
-		     [instruction->data.tee_local.localidx]
-		     .fp_offset);
+		encode_le_uint32_t(locals_md
+				   [instruction->data.tee_local.localidx]
+				   .fp_offset, buf);
+		if (!output_buf(output, buf, sizeof(uint32_t)))
+			goto error;
 		break;
 	case OPCODE_GET_GLOBAL: {
 		uint32_t gidx = instruction->data.get_global.globalidx;
@@ -1926,15 +1932,26 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 				    -(1 + n_movs + n_xmm_movs) * 8;
 				n_xmm_movs += 1;
 			} else {
-				locals_md[i].fp_offset = (2 + n_stack) * 8;
+				int32_t off = 2 * 8;
+				int32_t si; /* (n_stack + 2) * 8) */
+				if (__builtin_mul_overflow(n_stack, 8, &si))
+					goto error;
+				if (__builtin_add_overflow(si, off, &si))
+					goto error;
+				locals_md[i].fp_offset = si;
 				n_stack += 1;
 			}
 			locals_md[i].valtype = type->input_types[i];
 		}
 
 		for (i = 0; i < n_locals - type->n_inputs; ++i) {
-			locals_md[i + type->n_inputs].fp_offset =
-			    -(1 + n_movs + n_xmm_movs + i) * 8;
+			int32_t off = -(1 + n_movs + n_xmm_movs) * 8;
+			int32_t si; /* -(1 + n_movs + n_xmm_movs + i) * 8; */
+			if (__builtin_mul_overflow(-8, i, &si))
+				goto error;
+			if (__builtin_add_overflow(si, off, &si))
+				goto error;
+			locals_md[i + type->n_inputs].fp_offset = si;
 		}
 
 		{
