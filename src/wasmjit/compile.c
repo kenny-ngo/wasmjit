@@ -152,9 +152,9 @@ static int emit_br_code(struct SizedBuffer *output,
 			uint32_t labelidx)
 {
 	char buf[0x100];
-	uint32_t stack_shift;
 	size_t arity;
 	size_t je_offset_2, j;
+	int32_t stack_shift;
 	/* find out bottom of stack to L */
 	j = sstack->n_elts;
 	while (j) {
@@ -168,10 +168,16 @@ static int emit_br_code(struct SizedBuffer *output,
 	}
 
 	arity = sstack->elts[j].data.label.arity;
-	stack_shift =
-		sstack->n_elts - j - (labelidx + 1) - arity;
+	assert(sstack->n_elts >= j + (labelidx + 1) + arity);
+	if (__builtin_mul_overflow(sstack->n_elts - j - (olabelidx + 1) - arity,
+				   8, &stack_shift))
+		goto error;
 
 	if (arity) {
+		int32_t off;
+		if (__builtin_mul_overflow(arity - 1, 8, &off))
+			goto error;
+
 		/* move top <arity> values for Lth label to
 		   bottom of stack where Lth label is */
 
@@ -182,12 +188,8 @@ static int emit_br_code(struct SizedBuffer *output,
 
 		if (arity - 1) {
 			/* add <(arity - 1) * 8>, %rsi */
-			assert((arity - 1) * 8 <=
-			       INT_MAX);
 			OUTS("\x48\x03\x34\x25");
-			encode_le_uint32_t((arity -
-					    1) * 8,
-					   buf);
+			encode_le_uint32_t(off, buf);
 			if (!output_buf
 			    (output, buf,
 			     sizeof(uint32_t)))
@@ -199,13 +201,13 @@ static int emit_br_code(struct SizedBuffer *output,
 
 		/* add <(arity - 1 + stack_shift) * 8>, %rdi */
 		if (arity - 1 + stack_shift) {
-			assert((arity - 1 +
-				stack_shift) * 8 <=
-			       INT_MAX);
+			/* (arity - 1 +  stack_shift) * 8 */
+			int32_t si;
+			if (__builtin_add_overflow(off, stack_shift, &si))
+				goto error;
+
 			OUTS("\x48\x81\xc7");
-			encode_le_uint32_t((arity - 1 +
-					    stack_shift)
-					   * 8, buf);
+			encode_le_uint32_t(si, buf);
 			if (!output_buf
 			    (output, buf,
 			     sizeof(uint32_t)))
@@ -214,7 +216,8 @@ static int emit_br_code(struct SizedBuffer *output,
 
 		/* mov <arity>, %rcx */
 		OUTS("\x48\xc7\xc1");
-		assert(arity <= INT_MAX);
+		if (arity > INT32_MAX)
+			goto error;
 		encode_le_uint32_t(arity, buf);
 		if (!output_buf
 		    (output, buf, sizeof(uint32_t)))
@@ -231,9 +234,7 @@ static int emit_br_code(struct SizedBuffer *output,
 	/* add <stack_shift * 8>, %rsp */
 	if (stack_shift) {
 		OUTS("\x48\x81\xc4");
-		assert(stack_shift * 8 <= INT_MAX);
-		encode_le_uint32_t(stack_shift * 8,
-				   buf);
+		encode_le_uint32_t(stack_shift, buf);
 		if (!output_buf
 		    (output, buf, sizeof(uint32_t)))
 			goto error;
