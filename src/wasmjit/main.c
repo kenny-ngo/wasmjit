@@ -47,9 +47,9 @@ int main(int argc, char *argv[])
 	int ret;
 	struct ParseState pstate;
 	struct Module module;
-	struct Store store;
+	//struct Store store;
 	int dump_module, opt;
-	char error_buffer[0x1000];
+	//char error_buffer[0x1000];
 
 	dump_module =  0;
 	while ((opt = getopt(argc, argv, "d")) != -1) {
@@ -133,6 +133,9 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
+	return 0;
+
+#if 0
 	/* initialize store */
 	memset(&store, 0, sizeof(store));
 
@@ -146,4 +149,5 @@ int main(int argc, char *argv[])
 
 	/* go to entry point */
 	return wasmjit_execute(&store, optind + 1, &argv[optind + 1]);
+#endif
 }
