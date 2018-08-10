@@ -119,8 +119,8 @@ static void encode_le_uint32_t(uint32_t val, char *buf)
 #define OUTB(b)						   \
 	do {						   \
 		char __b;				   \
-		assert((b) <= 127 && (b) >= -128);	   \
-		__b = b;				   \
+		assert((b) <= 127 && ((intmax_t)(b)) >= -128);  \
+		__b = (b);				   \
 		if (!output_buf(output, &__b, 1))	   \
 			goto error;			   \
 	}						   \
