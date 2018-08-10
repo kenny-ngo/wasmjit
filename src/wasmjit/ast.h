@@ -382,12 +382,11 @@ struct FunctionSection {
 	uint32_t *typeidxs;
 };
 
+#define TableSectionTable TableType
+
 struct TableSection {
 	uint32_t n_tables;
-	struct TableSectionTable {
-		unsigned elemtype;
-		struct Limits limits;
-	} *tables;
+	struct TableType *tables;
 };
 
 struct MemorySection {
