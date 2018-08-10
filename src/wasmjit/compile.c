@@ -35,23 +35,6 @@
 #include <stdio.h>
 #include <string.h>
 
-struct SizedBuffer {
-	size_t n_elts;
-	char *elts;
-};
-
-static DEFINE_VECTOR_GROW(buffer, struct SizedBuffer);
-
-static int output_buf(struct SizedBuffer *sstack, const char *buf,
-		      size_t n_elts)
-{
-	if (!buffer_grow(sstack, n_elts))
-		return 0;
-	memcpy(sstack->elts + sstack->n_elts - n_elts, buf,
-	       n_elts * sizeof(sstack->elts[0]));
-	return 1;
-}
-
 #define FUNC_EXIT_CONT SIZE_MAX
 
 static DEFINE_VECTOR_GROW(memrefs, struct MemoryReferences);

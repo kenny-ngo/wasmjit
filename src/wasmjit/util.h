@@ -25,6 +25,8 @@
 #ifndef __WASMJIT__UTIL_H__
 #define __WASMJIT__UTIL_H__
 
+#include <wasmjit/vector.h>
+
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -103,5 +105,15 @@ static int wasmjit_typelist_equal(size_t nelts, wasmjit_valtype_t *elts,
 	}
 	return 1;
 }
+
+struct SizedBuffer {
+	size_t n_elts;
+	char *elts;
+};
+
+DECLARE_VECTOR_GROW(buffer, struct SizedBuffer);
+
+int output_buf(struct SizedBuffer *sstack, const void *buf,
+	       size_t n_elts);
 
 #endif
