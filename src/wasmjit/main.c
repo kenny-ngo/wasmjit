@@ -123,6 +123,8 @@ int main(int argc, char *argv[])
 					  n_instructions, 1);
 			printf("\n");
 		}
+
+		return 0;
 	}
 
 	/* the most basic validation */
