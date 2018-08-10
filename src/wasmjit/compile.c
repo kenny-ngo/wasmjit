@@ -308,7 +308,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 	switch (instruction->opcode) {
 	case OPCODE_UNREACHABLE:
 		/* ud2 */
-		OUTS("\x0f\0b");
+		OUTS("\x0f\x0b");
 		break;
 	case OPCODE_NOP:
 		break;
