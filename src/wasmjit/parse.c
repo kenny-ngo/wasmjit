@@ -211,6 +211,33 @@ DEFINE_INT_READER(double);
 DEFINE_ULEB_READER(uint32_t);
 DEFINE_ULEB_READER(uint64_t);
 
+#define DEFINE_LEB_READER(type)						\
+	int read_leb_##type(struct ParseState *pstate, type *data)	\
+	{								\
+		uint8_t byt;						\
+		unsigned int shift;					\
+									\
+		*data = 0;						\
+		shift = 0;						\
+		while (1) {						\
+			int ret;					\
+			ret = read_uint8_t(pstate, &byt);		\
+			if (!ret) return ret;				\
+			*data |= ((type) (byt & 0x7f)) << shift;	\
+			shift += 7;					\
+			if (!(byt & 0x80)) {				\
+				break;					\
+			}						\
+		}							\
+									\
+		if (shift < (sizeof(type) * 8) && (byt & 0x40))		\
+			*data |= ((~((type) 0)) << shift);		\
+									\
+		return 1;						\
+	}
+DEFINE_LEB_READER(uint32_t);
+DEFINE_LEB_READER(uint64_t);
+
 int read_float(struct ParseState *pstate, float *data);
 int read_double(struct ParseState *pstate, double *data);
 
@@ -874,12 +901,12 @@ int read_instruction(struct ParseState *pstate, struct Instr *instr,
 
 		break;
 	case OPCODE_I32_CONST:
-		ret = read_uleb_uint32_t(pstate, &instr->data.i32_const.value);
+		ret = read_leb_uint32_t(pstate, &instr->data.i32_const.value);
 		if (!ret)
 			goto error;
 		break;
 	case OPCODE_I64_CONST:
-		ret = read_uleb_uint64_t(pstate, &instr->data.i64_const.value);
+		ret = read_leb_uint64_t(pstate, &instr->data.i64_const.value);
 		if (!ret)
 			goto error;
 		break;
