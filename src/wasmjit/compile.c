@@ -285,7 +285,6 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 				       struct StaticStack *sstack)
 {
 	char buf[0x100];
-	size_t *end_jumps = NULL;
 
 #define BUFFMT(...)						\
 	do {							\
@@ -525,10 +524,6 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 	case OPCODE_BR_TABLE: {
 		size_t table_offset, i, default_branch_offset;
 
-		end_jumps = wasmjit_alloc_vector(instruction->data.br_table.n_labelidxs, sizeof(size_t), NULL);
-		if (!end_jumps)
-			goto error;
-
 		/* jump to the right code based on the input value */
 
 		/* pop %rax */
@@ -574,10 +569,6 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			if (!emit_br_code(output, sstack, branches,
 					  instruction->data.br_table.labelidxs[i]))
 				goto error;
-
-			/* output jmp to end */
-			OUTS("\xe9\x90\x90\x90\x90");
-			end_jumps[i] = output->n_elts;
 		}
 
 		/* store ip offset, output default branch */
@@ -586,12 +577,6 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		if (!emit_br_code(output, sstack, branches,
 				  instruction->data.br_table.labelidx))
 			goto error;
-
-		/* store ip offsets of end */
-		for (i = 0; i < instruction->data.br_table.n_labelidxs; ++i) {
-			encode_le_uint32_t(output->n_elts - end_jumps[i],
-					   &output->elts[end_jumps[i] - 4]);
-		}
 
 		break;
 	}
