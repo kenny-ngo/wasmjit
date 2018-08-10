@@ -98,6 +98,10 @@ void dump_instruction(const struct Instr *instruction, int indent)
 					  indent + 1);
 		}
 		break;
+	case OPCODE_BR:
+		printf("%*sbr 0x%" PRIx32 "\n", sps, "",
+		       instruction->data.br.labelidx);
+		break;
 	case OPCODE_BR_IF:
 		printf("%*sbr_if 0x%" PRIx32 "\n", sps, "",
 		       instruction->data.br_if.labelidx);
