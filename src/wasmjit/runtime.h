@@ -196,4 +196,16 @@ int wasmjit_typecheck_memory(struct MemoryType *expected_type,
 int wasmjit_typecheck_global(struct GlobalType *expected_type,
 			     struct GlobalInst *mem);
 
+__attribute__ ((unused))
+static int wasmjit_typelist_equal(size_t nelts, wasmjit_valtype_t *elts,
+				  size_t onelts, wasmjit_valtype_t *oelts)
+{
+	size_t i;
+	if (nelts != onelts) return 0;
+	for (i = 0; i < nelts; ++i) {
+		if (elts[i] != oelts[i]) return 0;
+	}
+	return 1;
+}
+
 #endif
