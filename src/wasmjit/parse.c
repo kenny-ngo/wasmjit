@@ -299,15 +299,17 @@ int read_type_section(struct ParseState *pstate,
 			goto error;
 		}
 
-		ret = read_uleb_uint32_t(pstate, &type->n_inputs);
-		if (!ret)
-			goto error;
-
-		if (type->n_inputs) {
-			type->input_types = calloc(type->n_inputs, sizeof(int));
+		{
+			uint32_t n_inputs;
+			ret = read_uleb_uint32_t(pstate, &n_inputs);
 			if (!ret)
 				goto error;
+			if (n_inputs > FUNC_TYPE_MAX_INPUTS)
+				goto error;
+			type->n_inputs = n_inputs;
+		}
 
+		if (type->n_inputs) {
 			for (j = 0; j < type->n_inputs; ++j) {
 				uint8_t valtype;
 				ret = read_uint8_t(pstate, &valtype);
@@ -317,22 +319,24 @@ int read_type_section(struct ParseState *pstate,
 			}
 		}
 
-		ret = read_uleb_uint32_t(pstate, &type->n_outputs);
-		if (!ret)
-			goto error;
-
-		if (type->n_outputs) {
-			type->output_types =
-			    calloc(type->n_outputs, sizeof(int));
+		{
+			uint32_t n_outputs;
+			ret = read_uleb_uint32_t(pstate, &n_outputs);
 			if (!ret)
 				goto error;
+			if (n_outputs > FUNC_TYPE_MAX_OUTPUTS)
+				goto error;
+			type->output_type = n_outputs ? VALTYPE_I32 : VALTYPE_NULL;
+		}
 
-			for (j = 0; j < type->n_outputs; ++j) {
+
+		if (FUNC_TYPE_N_OUTPUTS(type)) {
+			for (j = 0; j < FUNC_TYPE_N_OUTPUTS(type); ++j) {
 				uint8_t valtype;
 				ret = read_uint8_t(pstate, &valtype);
 				if (!ret)
 					goto error;
-				type->output_types[j] = valtype;
+				FUNC_TYPE_OUTPUT_TYPES(type)[j] = valtype;
 			}
 		}
 	}
@@ -341,15 +345,6 @@ int read_type_section(struct ParseState *pstate,
 
  error:
 	if (type_section->types) {
-		for (i = 0; i < type_section->n_types; ++i) {
-			struct TypeSectionType *type = &type_section->types[i];
-			if (type->input_types) {
-				free(type->input_types);
-			}
-			if (type->output_types) {
-				free(type->output_types);
-			}
-		}
 		free(type_section->types);
 	}
 	return 0;

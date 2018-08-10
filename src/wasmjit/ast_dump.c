@@ -40,8 +40,8 @@ void dump_type_section(struct TypeSection *type_section)
 			printf("%d,", type->input_types[j]);
 		}
 		printf(") -> (");
-		for (j = 0; j < type->n_outputs; ++j) {
-			printf("%d,", type->output_types[j]);
+		for (j = 0; j < FUNC_TYPE_N_OUTPUTS(type); ++j) {
+			printf("%d,", FUNC_TYPE_OUTPUT_TYPES(type)[j]);
 		}
 		printf(")\n");
 	}

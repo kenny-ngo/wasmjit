@@ -143,7 +143,7 @@ static void encode_le_uint32_t(uint32_t val, char *buf)
 	while (0)
 
 struct LocalsMD {
-	uint8_t valtype;
+	wasmjit_valtype_t valtype;
 	int8_t fp_offset;
 };
 
@@ -610,17 +610,17 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 	case OPCODE_RETURN:
 		/* shift $arity values from top of stock to below */
 
-		if (type->n_outputs) {
+		if (FUNC_TYPE_N_OUTPUTS(type)) {
 			/* lea (arity - 1)*8(%rsp), %rsi */
 			OUTS("\x48\x8d\x74\x24");
-			OUTB(((intmax_t) (type->n_outputs - 1)) * 8);
+			OUTB(((intmax_t) (FUNC_TYPE_N_OUTPUTS(type) - 1)) * 8);
 
 			/* lea -8(%rbp), %rdi */
 			OUTS("\x48\x8d\x7d\xf8");
 
 			/* mov $arity, %rcx */
 			OUTS("\x48\xc7\xc1");
-			encode_le_uint32_t(type->n_outputs, buf);
+			encode_le_uint32_t(FUNC_TYPE_N_OUTPUTS(type), buf);
 			if (!output_buf(output, buf, sizeof(uint32_t)))
 				goto error;
 
@@ -634,7 +634,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		/* adjust stack to top of arity */
 		/* lea -arity * 8(%rbp), %rsp */
 		OUTS("\x48\x8d\x65");
-		OUTB(((intmax_t) type->n_outputs) * -8);
+		OUTB(((intmax_t) FUNC_TYPE_N_OUTPUTS(type)) * -8);
 
 		/* jmp <EPILOGUE> */
 		{
@@ -866,17 +866,17 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 				    ft->n_inputs))
 			goto error;
 
-		if (ft->n_outputs) {
-			assert(ft->n_outputs == 1);
-			if (ft->output_types[0] == VALTYPE_F32 ||
-			    ft->output_types[0] == VALTYPE_F64) {
+		if (FUNC_TYPE_N_OUTPUTS(ft)) {
+			assert(FUNC_TYPE_N_OUTPUTS(ft) == 1);
+			if (FUNC_TYPE_OUTPUT_TYPES(ft)[0] == VALTYPE_F32 ||
+			    FUNC_TYPE_OUTPUT_TYPES(ft)[0] == VALTYPE_F64) {
 				/* movq %xmm0, %rax */
 				OUTS("\x66\x48\x0f\x7e\xc0");
 			}
 			/* push %rax */
 			OUTS("\x50");
 
-			if (!push_stack(sstack, ft->output_types[0]))
+			if (!push_stack(sstack, FUNC_TYPE_OUTPUT_TYPES(ft)[0]))
 				goto error;
 		}
 		break;
@@ -2009,10 +2009,10 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 
 	/* output epilogue */
 
-	if (type->n_outputs) {
-		assert(type->n_outputs == 1);
+	if (FUNC_TYPE_N_OUTPUTS(type)) {
+		assert(FUNC_TYPE_N_OUTPUTS(type) == 1);
 		assert(sstack.n_elts == 1);
-		assert(peek_stack(&sstack) == type->output_types[0]);
+		assert(peek_stack(&sstack) == FUNC_TYPE_OUTPUT_TYPES(type)[0]);
 		pop_stack(&sstack);
 		/* pop %rax */
 		OUTS("\x58");

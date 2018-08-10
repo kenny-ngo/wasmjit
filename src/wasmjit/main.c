@@ -109,10 +109,9 @@ int main(int argc, char *argv[])
 							    input_types[j]));
 			}
 			printf("] -> [");
-			for (j = 0; j < type->n_outputs; ++j) {
+			for (j = 0; j < FUNC_TYPE_N_OUTPUTS(type); ++j) {
 				printf("%s,",
-				       wasmjit_valtype_repr(type->
-							    output_types[j]));
+				       wasmjit_valtype_repr(FUNC_TYPE_OUTPUT_IDX(type, j)));
 			}
 			printf("]\n");
 

@@ -45,9 +45,10 @@ int wasmjit_typecheck_func(struct FuncType *type,
 	return wasmjit_typelist_equal(type->n_inputs, type->input_types,
 				      funcinst->type.n_inputs,
 				      funcinst->type.input_types) &&
-		wasmjit_typelist_equal(type->n_outputs, type->output_types,
-				       funcinst->type.n_outputs,
-				       funcinst->type.output_types);
+		wasmjit_typelist_equal(FUNC_TYPE_N_OUTPUTS(type),
+				       FUNC_TYPE_OUTPUT_TYPES(type),
+				       FUNC_TYPE_N_OUTPUTS(&funcinst->type),
+				       FUNC_TYPE_OUTPUT_TYPES(&funcinst->type));
 }
 
 int wasmjit_typecheck_table(struct TableType *type,
@@ -80,31 +81,24 @@ int wasmjit_typecheck_global(struct GlobalType *globaltype,
 
 int _wasmjit_create_func_type(struct FuncType *ft,
 			      size_t n_inputs,
-			      unsigned *input_types,
+			      wasmjit_valtype_t *input_types,
 			      size_t n_outputs,
-			      unsigned *output_types)
+			      wasmjit_valtype_t *output_types)
 {
+	assert(n_outputs <= 1);
+	assert(n_inputs <= sizeof(ft->input_types) / sizeof(ft->input_types[0]));
 	memset(ft, 0, sizeof(*ft));
 
 	ft->n_inputs = n_inputs;
-	ft->input_types =
-		wasmjit_copy_buf(input_types,
-				 n_inputs,
-				 sizeof(input_types[0]));
-	if (!ft->input_types)
-		goto error;
-	ft->n_outputs = n_outputs;
-	ft->output_types =
-		wasmjit_copy_buf(output_types,
-				 n_outputs,
-				 sizeof(output_types[0]));
-	if (!ft->output_types)
-		goto error;
+	memcpy(ft->input_types, input_types, sizeof(input_types[0]) * n_inputs);
+
+	if (n_outputs) {
+		ft->output_type = output_types[0];
+	} else {
+		ft->output_type = VALTYPE_NULL;
+	}
 
 	return 1;
-
- error:
-	return 0;
 }
 
 wasmjit_addr_t _wasmjit_add_memory_to_store(struct Store *store,
@@ -144,8 +138,9 @@ wasmjit_addr_t _wasmjit_add_function_to_store(struct Store *store,
 					      struct ModuleInst *module_inst,
 					      void *code,
 					      size_t n_inputs,
-					      unsigned *input_types,
-					      size_t n_outputs, unsigned *output_types)
+					      wasmjit_valtype_t *input_types,
+					      size_t n_outputs,
+					      wasmjit_valtype_t *output_types)
 {
 	struct FuncInst *funcinst;
 	wasmjit_addr_t funcaddr = store->funcs.n_elts;
@@ -293,8 +288,9 @@ int wasmjit_import_function(struct Store *store,
 			    const char *name,
 			    void *funcptr,
 			    size_t n_inputs,
-			    unsigned *input_types,
-			    size_t n_outputs, unsigned *output_types)
+			    wasmjit_valtype_t *input_types,
+			    size_t n_outputs,
+			    wasmjit_valtype_t *output_types)
 {
 	wasmjit_addr_t funcaddr;
 

@@ -84,7 +84,6 @@ struct Store {
 		wasmjit_addr_t n_elts;
 		struct FuncInst {
 			struct ModuleInst *module_inst;
-			struct FuncType type;
 			size_t code_length;
 			struct Instr *code;
 			size_t n_locals;
@@ -93,6 +92,7 @@ struct Store {
 				uint8_t valtype;
 			} *locals;
 			void *compiled_code;
+			struct FuncType type;
 		} *elts;
 	} funcs;
 	struct TableFuncs {
@@ -133,8 +133,8 @@ DECLARE_VECTOR_GROW(store_globals, struct StoreGlobals);
 
 int _wasmjit_create_func_type(struct FuncType *ft,
 			      size_t n_inputs,
-			      unsigned *input_types,
-			      size_t n_outputs, unsigned *output_types);
+			      wasmjit_valtype_t *input_types,
+			      size_t n_outputs, wasmjit_valtype_t *output_types);
 
 wasmjit_addr_t _wasmjit_add_memory_to_store(struct Store *store,
 					    size_t size, size_t max);
@@ -142,8 +142,9 @@ wasmjit_addr_t _wasmjit_add_function_to_store(struct Store *store,
 					      struct ModuleInst *module_inst,
 					      void *code,
 					      size_t n_inputs,
-					      unsigned *input_types,
-					      size_t n_outputs, unsigned *output_types);
+					      wasmjit_valtype_t *input_types,
+					      size_t n_outputs,
+					      wasmjit_valtype_t *output_types);
 wasmjit_addr_t _wasmjit_add_table_to_store(struct Store *store,
 					   unsigned elemtype,
 					   size_t length,
@@ -162,8 +163,8 @@ int wasmjit_import_function(struct Store *store,
 			    const char *name,
 			    void *funcaddr,
 			    size_t n_inputs,
-			    unsigned *input_types,
-			    size_t n_outputs, unsigned *output_types);
+			    wasmjit_valtype_t *input_types,
+			    size_t n_outputs, wasmjit_valtype_t *output_types);
 
 wasmjit_addr_t wasmjit_import_memory(struct Store *store,
 				     const char *module_name,

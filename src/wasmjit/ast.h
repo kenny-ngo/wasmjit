@@ -228,8 +228,10 @@ enum {
 	VALTYPE_F64 = 0x7c,
 };
 
+typedef uint8_t wasmjit_valtype_t;
+
 __attribute__ ((unused))
-static const char *wasmjit_valtype_repr(unsigned valtype)
+static const char *wasmjit_valtype_repr(wasmjit_valtype_t valtype)
 {
 	switch (valtype) {
 	case VALTYPE_I32:
@@ -267,11 +269,17 @@ struct Limits {
 	uint32_t min, max;
 };
 
+#define FUNC_TYPE_N_OUTPUTS(ft) ((ft)->output_type == VALTYPE_NULL ? 0 : 1)
+#define FUNC_TYPE_OUTPUT_IDX(ft, idx) ((ft)->output_type)
+#define FUNC_TYPE_OUTPUT_TYPES(ft) (&((ft)->output_type))
+
+#define FUNC_TYPE_MAX_INPUTS 254
+#define FUNC_TYPE_MAX_OUTPUTS 1
+
 struct FuncType {
-	uint32_t n_inputs;
-	unsigned *input_types;
-	uint32_t n_outputs;
-	unsigned *output_types;
+	uint8_t n_inputs;
+	wasmjit_valtype_t input_types[FUNC_TYPE_MAX_INPUTS];
+	wasmjit_valtype_t output_type;
 };
 
 struct TableType {
@@ -430,7 +438,7 @@ struct CodeSection {
 		uint32_t n_locals;
 		struct CodeSectionCodeLocal {
 			uint32_t count;
-			uint8_t valtype;
+			wasmjit_valtype_t valtype;
 		} *locals;
 		size_t n_instructions;
 		struct Instr *instructions;
