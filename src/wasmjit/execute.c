@@ -64,17 +64,15 @@ void *_resolve_indirect_call(const struct TableInst *tableinst,
 			     const struct FuncType *expected_type,
 			     uint32_t idx)
 {
-	const struct Store *store = _get_store();
 	struct FuncInst *funcinst;
-	wasmjit_addr_t faddr;
+
 	if (idx >= tableinst->length)
 		trap();
 
-	faddr = tableinst->data[idx];
-	if (!faddr)
+	funcinst = tableinst->data[idx];
+	if (!funcinst)
 		trap();
 
-	funcinst = &store->funcs.elts[faddr];
 	if (!wasmjit_typecheck_func(expected_type, funcinst))
 		trap();
 

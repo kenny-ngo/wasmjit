@@ -186,7 +186,7 @@ wasmjit_addr_t _wasmjit_add_table_to_store(struct Store *store,
 	tableinst->max = max;
 
 	if (length) {
-		tableinst->data = calloc(length, sizeof(void *));
+		tableinst->data = calloc(length, sizeof(struct FuncInst *));
 		if (!tableinst->data)
 			goto error;
 	}
