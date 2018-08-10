@@ -30,6 +30,7 @@
 #include <wasmjit/instantiate.h>
 #include <wasmjit/execute.h>
 #include <wasmjit/emscripten_runtime.h>
+#include <wasmjit/elf_relocatable.h>
 
 #include <assert.h>
 #include <inttypes.h>
@@ -130,6 +131,14 @@ int main(int argc, char *argv[])
 		       module.function_section.n_typeidxs,
 		       module.code_section.n_codes);
 		return -1;
+	}
+
+	{
+		void *a_out;
+		size_t size;
+
+		a_out = wasmjit_output_elf_relocatable("env", &module, &size);
+		write(1, a_out, size);
 	}
 
 	return 0;
