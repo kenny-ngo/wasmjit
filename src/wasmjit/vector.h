@@ -28,7 +28,7 @@
 #include <assert.h>
 #include <string.h>
 
-void *wasmjit_vector_set_size(void *, size_t *, size_t, size_t);
+int wasmjit_vector_set_size(void *, size_t *, size_t, size_t);
 
 #define DECLARE_VECTOR_GROW(name, _type)					\
 	int name ## _grow(_type *sstack, size_t n_elts)
@@ -36,24 +36,20 @@ void *wasmjit_vector_set_size(void *, size_t *, size_t, size_t);
 
 #define DEFINE_VECTOR_GROW(name, _type)					\
 	int name ## _grow(_type *sstack, size_t n_elts) {		\
-		sstack->elts =						\
-			wasmjit_vector_set_size(sstack->elts,		\
-						&sstack->n_elts,	\
-						(sstack->n_elts + n_elts), \
-						sizeof(sstack->elts[0])); \
-		return sstack->elts || !(sstack->n_elts + n_elts) ? 1 : 0; \
+		return wasmjit_vector_set_size(&sstack->elts,		\
+					       &sstack->n_elts,		\
+					       (sstack->n_elts + n_elts), \
+					       sizeof(sstack->elts[0])); \
 	}
 
 #define DEFINE_VECTOR_TRUNCATE(name, _type)				\
 	int name ## _truncate(_type *sstack, size_t amt) {		\
 		assert(amt <= sstack->n_elts);				\
 									\
-		sstack->elts =						\
-			wasmjit_vector_set_size(sstack->elts,		\
-						&sstack->n_elts,	\
-						amt,			\
-						sizeof(sstack->elts[0])); \
-		return sstack->elts || !amt ? 1 : 0;			\
+		return wasmjit_vector_set_size(&sstack->elts,		\
+					       &sstack->n_elts,		\
+					       amt,			\
+					       sizeof(sstack->elts[0])); \
 	}
 
 #endif

@@ -25,9 +25,10 @@
 #include <stdlib.h>
 #include <stddef.h>
 
-void *wasmjit_vector_set_size(void *elts, size_t *n_elts, size_t new_n_elts,
-			      size_t elt_size)
+int wasmjit_vector_set_size(void *elts_, size_t *n_elts, size_t new_n_elts,
+			    size_t elt_size)
 {
+	void **elts = (void **)elts_;
 	void *newstackelts;
 	size_t total_elt_size;
 
@@ -35,15 +36,16 @@ void *wasmjit_vector_set_size(void *elts, size_t *n_elts, size_t new_n_elts,
 		goto error;
 	}
 
-	newstackelts = realloc(elts, total_elt_size);
+	newstackelts = realloc(*elts, total_elt_size);
 	if (!newstackelts && total_elt_size)
 		goto error;
 
+	*elts = newstackelts;
 	*n_elts = new_n_elts;
 
-	return newstackelts;
+	return 1;
 
  error:
-	free(elts);
-	return NULL;
+	free(*elts);
+	return 0;
 }
