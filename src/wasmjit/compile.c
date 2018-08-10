@@ -598,12 +598,21 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		/* shift $arity values from top of stock to below */
 
 		if (FUNC_TYPE_N_OUTPUTS(type)) {
+			int32_t out;
+
 			/* lea (arity - 1)*8(%rsp), %rsi */
 			OUTS("\x48\x8d\x74\x24");
 			OUTB(((intmax_t) (FUNC_TYPE_N_OUTPUTS(type) - 1)) * 8);
 
-			/* lea -8(%rbp), %rdi */
-			OUTS("\x48\x8d\x7d\xf8");
+			/* lea (-8 * n_frame_locals)(%rbp), %rdi */
+			OUTS("\x48\x8d\xbd");
+			if (n_frame_locals == SIZE_MAX)
+				goto error;
+			if (__builtin_mul_overflow(n_frame_locals + 1, -8, &out))
+				goto error;
+			encode_le_uint32_t(out, buf);
+			if (!output_buf(output, buf, sizeof(uint32_t)))
+				goto error;
 
 			/* mov $arity, %rcx */
 			OUTS("\x48\xc7\xc1");
@@ -619,9 +628,18 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		}
 
 		/* adjust stack to top of arity */
-		/* lea -arity * 8(%rbp), %rsp */
-		OUTS("\x48\x8d\x65");
-		OUTB(((intmax_t) FUNC_TYPE_N_OUTPUTS(type)) * -8);
+		/* lea (arity + n_frame_locals)*-8(%rbp), %rsp */
+		OUTS("\x48\x8d\xa5");
+		if (n_frame_locals > SIZE_MAX - FUNC_TYPE_N_OUTPUTS(type))
+			goto error;
+		{
+			int32_t out;
+			if (__builtin_mul_overflow(n_frame_locals + FUNC_TYPE_N_OUTPUTS(type), -8, &out))
+				goto error;
+			encode_le_uint32_t(out, buf);
+			if (!output_buf(output, buf, sizeof(uint32_t)))
+				goto error;
+		}
 
 		/* jmp <EPILOGUE> */
 		{
@@ -1877,7 +1895,7 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 	struct LabelContinuations labels = { 0, NULL };
 	struct LocalsMD *locals_md;
 	size_t n_frame_locals;
-	unsigned n_locals;
+	size_t n_locals;
 
 	{
 		size_t i;
@@ -1930,7 +1948,8 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 			}
 		}
 
-		assert(n_movs + n_xmm_movs +  (n_locals - type->n_inputs) <= INT_MAX);
+		if (n_locals - type->n_inputs > SIZE_MAX - (n_movs + n_xmm_movs))
+			goto error;
 		n_frame_locals = n_movs + n_xmm_movs + (n_locals - type->n_inputs);
 	}
 
@@ -1980,8 +1999,11 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 
 		/* sub $(8 * (n_frame_locals)), %rsp */
 		if (n_frame_locals) {
+			int32_t out;
 			OUTS("\x48\x81\xec");
-			encode_le_uint32_t(8 * n_frame_locals, buf);
+			if (__builtin_mul_overflow(n_frame_locals, 8, &out))
+				goto error;
+			encode_le_uint32_t(out, buf);
 			if (!output_buf(output, buf, sizeof(uint32_t)))
 				goto error;
 		}
@@ -2024,6 +2046,8 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 				OUTS("\x48\x31\xc0");
 				/* mov $n_locals, %rcx */
 				OUTS("\x48\xc7\xc1");
+				if (n_locals - type->n_inputs > INT32_MAX)
+					goto error;
 				encode_le_uint32_t(n_locals - type->n_inputs, buf);
 				if (!output_buf(output, buf, sizeof(uint32_t)))
 					goto error;
@@ -2072,8 +2096,11 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 
 	/* add $(8 * (n_frame_locals)), %rsp */
 	if (n_frame_locals) {
+		int32_t out;
 		OUTS("\x48\x81\xc4");
-		encode_le_uint32_t(8 * n_frame_locals, buf);
+		if (__builtin_mul_overflow(n_frame_locals, 8, &out))
+			goto error;
+		encode_le_uint32_t(out, buf);
 		if (!output_buf(output, buf, sizeof(uint32_t)))
 			goto error;
 	}
