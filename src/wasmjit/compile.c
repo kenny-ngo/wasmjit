@@ -69,8 +69,8 @@ struct StaticStack {
 		} type;
 		union {
 			struct {
-				int arity;
-				int continuation_idx;
+				size_t arity;
+				size_t continuation_idx;
 			} label;
 		} data;
 	} *elts;
@@ -152,7 +152,8 @@ static int emit_br_code(struct SizedBuffer *output,
 			uint32_t labelidx)
 {
 	char buf[0x100];
-	uint32_t arity, stack_shift;
+	uint32_t stack_shift;
+	size_t arity;
 	size_t je_offset_2, j;
 	/* find out bottom of stack to L */
 	j = sstack->n_elts;
@@ -311,7 +312,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		break;
 	case OPCODE_BLOCK:
 	case OPCODE_LOOP: {
-		int arity;
+		size_t arity;
 		size_t label_idx, stack_idx, output_idx;
 		struct StackElt *elt;
 
