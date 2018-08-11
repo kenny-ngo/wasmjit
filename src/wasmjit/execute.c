@@ -32,13 +32,6 @@
 
 #include <sys/mman.h>
 
-__attribute__((noreturn))
-static void trap(void)
-{
-	asm("int $4");
-	__builtin_unreachable();
-}
-
 wasmjit_tls_key_t store_key;
 
 __attribute__((constructor))
@@ -59,24 +52,6 @@ static const struct Store *_get_store(void)
 static int _set_store(const struct Store *store)
 {
 	return wasmjit_set_tls_key(store_key, store);
-}
-void *_resolve_indirect_call(const struct TableInst *tableinst,
-			     const struct FuncType *expected_type,
-			     uint32_t idx)
-{
-	struct FuncInst *funcinst;
-
-	if (idx >= tableinst->length)
-		trap();
-
-	funcinst = tableinst->data[idx];
-	if (!funcinst)
-		trap();
-
-	if (!wasmjit_typecheck_func(expected_type, funcinst))
-		trap();
-
-	return funcinst->compiled_code;
 }
 
 int wasmjit_execute(const struct Store *store, int argc, char *argv[])

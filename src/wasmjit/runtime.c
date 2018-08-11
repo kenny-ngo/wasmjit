@@ -369,3 +369,29 @@ int wasmjit_import_global(struct Store *store,
 	assert(0);
 	return 0;
 }
+
+__attribute__((noreturn))
+static void trap(void)
+{
+	asm("int $4");
+	__builtin_unreachable();
+}
+
+void *wasmjit_resolve_indirect_call(const struct TableInst *tableinst,
+				    const struct FuncType *expected_type,
+				    uint32_t idx)
+{
+	struct FuncInst *funcinst;
+
+	if (idx >= tableinst->length)
+		trap();
+
+	funcinst = tableinst->data[idx];
+	if (!funcinst)
+		trap();
+
+	if (!wasmjit_typecheck_func(expected_type, funcinst))
+		trap();
+
+	return funcinst->compiled_code;
+}

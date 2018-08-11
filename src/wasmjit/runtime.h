@@ -208,4 +208,8 @@ static int wasmjit_typelist_equal(size_t nelts, const wasmjit_valtype_t *elts,
 	return 1;
 }
 
+void *wasmjit_resolve_indirect_call(const struct TableInst *tableinst,
+				    const struct FuncType *expected_type,
+				    uint32_t idx);
+
 #endif
