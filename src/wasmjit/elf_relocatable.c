@@ -353,8 +353,8 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 	{
 		size_t string_offset;
 		string_offset = strtab->n_elts;
-		if (!output_buf(strtab, "resolve_indirect_call",
-				strlen("wasmjit_init_static_module") + 1))
+		if (!output_buf(strtab, "wasmjit_resolve_indirect_call",
+				strlen("wasmjit_resolve_indirect_call") + 1))
 			goto error;
 		if (!add_symbol(symbols, string_offset, 0, STB_LOCAL,
 				0, 0, 0, 0))
