@@ -415,7 +415,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 
 	n_imported_funcs = module_funcs.n_elts;
 	n_imported_tables = module_tables.n_elts;
-	n_imported_mems = module_tables.n_elts;
+	n_imported_mems = module_mems.n_elts;
 
 	/* align to 8 bytes */
 	if (output->n_elts % 8) {
