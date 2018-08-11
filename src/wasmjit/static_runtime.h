@@ -42,7 +42,6 @@ struct StaticGlobalInst {
 		struct Value constant;
 		struct WasmInst *global;
 	} init;
-	unsigned initted;
 	struct GlobalInst global;
 };
 
