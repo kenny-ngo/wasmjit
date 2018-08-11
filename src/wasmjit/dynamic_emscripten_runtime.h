@@ -22,30 +22,9 @@
   SOFTWARE.
  */
 
-#ifndef __WASMJIT__EMSCRIPTEN_RUNTIME_H__
-#define __WASMJIT__EMSCRIPTEN_RUNTIME_H__
+#ifndef __WASMJIT__DYNAMIC_EMSCRIPTEN_RUNTIME_H__
+#define __WASMJIT__DYNAMIC_EMSCRIPTEN_RUNTIME_H__
 
-#include <stdint.h>
-
-enum {
-	WASMJIT_EMSCRIPTEN_TOTAL_MEMORY = 16777216,
-};
-
-char *wasmjit_emscripten_get_base_address(void);
-
-void wasmjit_emscripten_abortStackOverflow(uint32_t allocSize);
-uint32_t wasmjit_emscripten_abortOnCannotGrowMemory();
-uint32_t wasmjit_emscripten_enlargeMemory();
-uint32_t wasmjit_emscripten_getTotalMemory();
-void wasmjit_emscripten_nullFunc_ii(uint32_t x);
-void wasmjit_emscripten_nullFunc_iiii(uint32_t x);
-void wasmjit_emscripten____lock(uint32_t x);
-void wasmjit_emscripten____setErrNo(uint32_t value);
-uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs);
-uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs);
-uint32_t wasmjit_emscripten____syscall54(uint32_t which, uint32_t varargs);
-uint32_t wasmjit_emscripten____syscall6(uint32_t which, uint32_t varargs);
-void wasmjit_emscripten____unlock(uint32_t x);
-uint32_t wasmjit_emscripten__emscripten_memcpy_big(uint32_t dest, uint32_t src, uint32_t num);
+int wasmjit_add_emscripten_runtime(struct Store *store);
 
 #endif

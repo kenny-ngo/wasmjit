@@ -112,4 +112,51 @@ struct StaticModuleInst {
 	void (*start_func)();
 };
 
+#define WASM_SYMBOL(_module, _name) (_module ## _ ## _name)
+
+#define DEFINE_WASM_GLOBAL(_module, _name, _init, _type, _member, _mut)    \
+	struct WasmInst _module ## _ ## _name = {			\
+		.type = IMPORT_DESC_TYPE_GLOBAL,			\
+		.u = {							\
+			.global = {					\
+				.init_type = GLOBAL_CONST_INIT,		\
+				.init = {				\
+					.constant = {			\
+						.type = _type,		\
+						.data = {		\
+							._member = _init, \
+						}			\
+					}				\
+				},					\
+				.global = {				\
+					.mut = _mut,			\
+				}					\
+			}						\
+		}							\
+	}
+
+#define DEFINE_WASM_I32_GLOBAL(_module, _name, _init, _mut)          \
+	DEFINE_WASM_GLOBAL(_module, _name, _init, VALTYPE_I32, i32, _mut)
+
+#define DEFINE_WASM_F64_GLOBAL(_module, _name, _init, _mut)          \
+	DEFINE_WASM_GLOBAL(_module, _name, _init, VALTYPE_F64, f64, _mut)
+
+#define NUMARGS(...)  (sizeof((wasmjit_valtype_t[]){__VA_ARGS__})/sizeof(wasmjit_valtype_t))
+
+#define DEFINE_WASM_FUNCTION(_module, _name, _fptr, _output, ...)	\
+	struct WasmInst _module ## _ ## _name = {			\
+		.type = IMPORT_DESC_TYPE_GLOBAL,			\
+		.u = {							\
+			.func = {					\
+				.compiled_code = _fptr,			\
+				.type = {				\
+					.n_inputs = NUMARGS(__VA_ARGS__), \
+					.input_types = { __VA_ARGS__ },	\
+					.output_type = _output,		\
+				}					\
+			}						\
+		}							\
+	}
+
+
 #endif
