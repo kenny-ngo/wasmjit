@@ -304,6 +304,14 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 	}					\
 	while (0)
 
+#define OUTNULL(n)					\
+	do {						\
+		memset(buf, 0, (n));			\
+		if (!output_buf(output, buf, (n)))	\
+			goto error;			\
+	}						\
+	while (0)
+
 	switch (instruction->opcode) {
 	case OPCODE_UNREACHABLE:
 		/* ud2 */
@@ -667,7 +675,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 				goto error;
 
 			/* mov $const, %rdi */
-			OUTS("\x48\xbf\x90\x90\x90\x90\x90\x90\x90\x90");
+			OUTS("\x48\xbf");
+			OUTNULL(8);
 			{
 				size_t memref_idx;
 				memref_idx = memrefs->n_elts;
@@ -683,7 +692,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			}
 
 			/* mov $const, %rsi */
-			OUTS("\x48\xbe\x90\x90\x90\x90\x90\x90\x90\x90");
+			OUTS("\x48\xbe");
+			OUTNULL(8);
 			{
 				size_t memref_idx;
 				memref_idx = memrefs->n_elts;
@@ -702,7 +712,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			OUTS("\x5a");
 
 			/* mov $const, %rax */
-			OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
+			OUTS("\x48\xb8");
+			OUTNULL(8);
 			// address of _resolve_indirect_call
 			{
 				size_t memref_idx;
@@ -733,6 +744,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			ft = &module_types->functypes[fidx];
 
 			/* movq $const, %rax */
+			OUTS("\x48\xb8");
+			OUTNULL(8);
 			{
 				size_t memref_idx;
 
@@ -743,10 +756,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 				memrefs->elts[memref_idx].type =
 					MEMREF_FUNC;
 				memrefs->elts[memref_idx].code_offset =
-					output->n_elts + 2;
+					output->n_elts - 8;
 				memrefs->elts[memref_idx].idx = fidx;
-
-				OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
 			}
 
 			/* mov compiled_code_off(%rax), %rax */
@@ -941,7 +952,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		unsigned type;
 
 		/* movq $const, %rax */
-		OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
+		OUTS("\x48\xb8");
+		OUTNULL(8);
 		{
 			size_t memref_idx;
 
@@ -1011,7 +1023,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			goto error;
 
 		/* movq $const, %rax */
-		OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
+		OUTS("\x48\xb8");
+		OUTNULL(8);
 		{
 			size_t memref_idx;
 
@@ -1142,7 +1155,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			/* LOGIC: size = store->mems.elts[maddr].size */
 
 			/* movq $const, %rax */
-			OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
+			OUTS("\x48\xb8");
+			OUTNULL(8);
 
 			/* add reference to max */
 			{
@@ -1178,7 +1192,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		/* LOGIC: data = store->mems.elts[maddr].data */
 		{
 			/* movq $const, %rax */
-			OUTS("\x48\xb8\x90\x90\x90\x90\x90\x90\x90\x90");
+			OUTS("\x48\xb8");
+			OUTNULL(8);
 
 			/* add reference to data */
 			{
