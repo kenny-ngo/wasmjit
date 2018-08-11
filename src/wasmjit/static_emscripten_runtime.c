@@ -35,6 +35,33 @@
 #define alignMemory(size, factor) \
 	(((size) % (factor)) ? ((size) - ((size) % (factor)) + (factor)) : (size))
 
+struct FuncInst *table_buffer[10];
+
+struct WasmInst WASM_SYMBOL(env, table) = {
+	.type = IMPORT_DESC_TYPE_TABLE,
+	.u = {
+		.table = {
+			.data = table_buffer,
+			.elemtype = ELEMTYPE_ANYFUNC,
+			.length = sizeof(table_buffer) / sizeof(table_buffer[0]),
+			.max = sizeof(table_buffer) / sizeof(table_buffer[0]),
+		},
+	},
+};
+
+char mem_buffer[256 * WASM_PAGE_SIZE];
+
+struct WasmInst WASM_SYMBOL(env, memory) = {
+	.type = IMPORT_DESC_TYPE_MEM,
+	.u = {
+		.mem = {
+			.data = mem_buffer,
+			.size = sizeof(mem_buffer),
+			.max = sizeof(mem_buffer),
+		},
+	},
+};
+
 enum {
 	TOTAL_STACK = 5242880,
 	STACK_ALIGN = 16,
@@ -54,6 +81,7 @@ DEFINE_WASM_I32_GLOBAL(env, DYNAMICTOP_PTR, DYNAMICTOP_PTR, 0);
 DEFINE_WASM_I32_GLOBAL(env, tempDoublePtr, tempDoublePtr, 0);
 DEFINE_WASM_I32_GLOBAL(env, ABORT, 0, 0);
 DEFINE_WASM_I32_GLOBAL(env, STACKTOP, STACKTOP, 0);
+DEFINE_WASM_I32_GLOBAL(env, STACK_MAX, STACK_MAX, 0);
 DEFINE_WASM_F64_GLOBAL(global, NaN, NAN, 0);
 DEFINE_WASM_F64_GLOBAL(global, Infinity, INFINITY, 0);
 
@@ -72,8 +100,8 @@ DEFINE_EMSCRIPTEN_FUNCTION(___syscall140, VALTYPE_I32, VALTYPE_I32, VALTYPE_I32)
 DEFINE_EMSCRIPTEN_FUNCTION(___syscall146, VALTYPE_I32, VALTYPE_I32, VALTYPE_I32);
 DEFINE_EMSCRIPTEN_FUNCTION(___syscall54, VALTYPE_I32, VALTYPE_I32, VALTYPE_I32);
 DEFINE_EMSCRIPTEN_FUNCTION(___syscall6, VALTYPE_I32, VALTYPE_I32, VALTYPE_I32);
-DEFINE_EMSCRIPTEN_FUNCTION(___unlock, VALTYPE_I32, VALTYPE_I32, VALTYPE_I32);
-DEFINE_EMSCRIPTEN_FUNCTION(_emscripten_memcpy_big, VALTYPE_I32, VALTYPE_I32, VALTYPE_I32);
+DEFINE_EMSCRIPTEN_FUNCTION(___unlock, VALTYPE_NULL, VALTYPE_I32);
+DEFINE_EMSCRIPTEN_FUNCTION(_emscripten_memcpy_big, VALTYPE_I32, VALTYPE_I32, VALTYPE_I32, VALTYPE_I32);
 
 char *wasmjit_emscripten_get_base_address(void) {
 	return WASM_SYMBOL(env, memoryBase).u.mem.data;
