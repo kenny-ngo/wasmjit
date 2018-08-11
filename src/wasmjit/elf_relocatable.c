@@ -673,6 +673,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		smi.n_tables = module_tables.n_elts;
 		smi.n_mems = module_mems.n_elts;
 		smi.n_globals = module_globals.n_elts;
+		smi.start_func = NULL;
 
 		ADD_DATA_PTR_RELOCATION(offsetof(struct StaticModuleInst, funcs),
 					&array_symbol_start);
