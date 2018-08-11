@@ -144,7 +144,7 @@ struct StaticModuleInst {
 
 #define DEFINE_WASM_FUNCTION(_module, _name, _fptr, _output, ...)	\
 	struct WasmInst _module ## _ ## _name = {			\
-		.type = IMPORT_DESC_TYPE_GLOBAL,			\
+		.type = IMPORT_DESC_TYPE_FUNC,				\
 		.u = {							\
 			.func = {					\
 				.compiled_code = _fptr,			\
