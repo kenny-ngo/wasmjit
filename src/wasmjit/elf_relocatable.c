@@ -1016,8 +1016,8 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		bss_sec.sh_addr = 0;
 		bss_sec.sh_offset = bss_section_start;
 		bss_sec.sh_size = bss_size;
-		bss_sec.sh_link = SYMTAB_SECTION_IDX;
-		bss_sec.sh_info = DATA_SECTION_IDX;
+		bss_sec.sh_link = 0;
+		bss_sec.sh_info = 0;
 		bss_sec.sh_addralign = 32;
 		bss_sec.sh_entsize = 0;
 		memcpy(&output->elts[section_header_start +
