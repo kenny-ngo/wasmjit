@@ -184,21 +184,21 @@ int wasmjit_import_global(struct Store *store,
 			  struct Value value,
 			  unsigned mut);
 
-int wasmjit_typecheck_func(struct FuncType *expected_type,
-			   struct FuncInst *func);
+int wasmjit_typecheck_func(const struct FuncType *expected_type,
+			   const struct FuncInst *func);
 
-int wasmjit_typecheck_table(struct TableType *expected_type,
-			    struct TableInst *table);
+int wasmjit_typecheck_table(const struct TableType *expected_type,
+			    const struct TableInst *table);
 
-int wasmjit_typecheck_memory(struct MemoryType *expected_type,
-			     struct MemInst *mem);
+int wasmjit_typecheck_memory(const struct MemoryType *expected_type,
+			     const struct MemInst *mem);
 
-int wasmjit_typecheck_global(struct GlobalType *expected_type,
-			     struct GlobalInst *mem);
+int wasmjit_typecheck_global(const struct GlobalType *expected_type,
+			     const struct GlobalInst *mem);
 
 __attribute__ ((unused))
-static int wasmjit_typelist_equal(size_t nelts, wasmjit_valtype_t *elts,
-				  size_t onelts, wasmjit_valtype_t *oelts)
+static int wasmjit_typelist_equal(size_t nelts, const wasmjit_valtype_t *elts,
+				  size_t onelts, const wasmjit_valtype_t *oelts)
 {
 	size_t i;
 	if (nelts != onelts) return 0;
