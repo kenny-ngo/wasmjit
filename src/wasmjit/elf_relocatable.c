@@ -1056,7 +1056,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		strtab_sec.sh_offset = strtab_section_start;
 		strtab_sec.sh_size = shstrtab_section_start - strtab_section_start;
 		strtab_sec.sh_link = 0;
-		strtab_sec.sh_info = symbols->n_elts;
+		strtab_sec.sh_info = 0;
 		strtab_sec.sh_addralign = 1;
 		strtab_sec.sh_entsize = 0;
 		memcpy(&output->elts[section_header_start +
