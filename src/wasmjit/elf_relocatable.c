@@ -561,7 +561,6 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 			_type ref;					\
 									\
 			ADD_DATA_PTR_RELOCATION_RAW(output->n_elts +	\
-						    i * sizeof(ref) +	\
 						    offsetof(_type, inst), \
 						    module_ ## _name.elts[i].symidx); \
 			ref.expected_type = module_ ## _name.elts[i].type; \
