@@ -123,6 +123,8 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		DATA_SECTION_IDX,
 		RELA_DATA_SECTION_IDX,
 		BSS_SECTION_IDX,
+		INIT_ARRAY_SECTION_IDX,
+		RELA_INIT_ARRAY_SECTION_IDX,
 		SYMTAB_SECTION_IDX,
 		STRTAB_SECTION_IDX,
 		SHSTRTAB_SECTION_IDX,
@@ -187,19 +189,23 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		text_sec, rela_text_sec,
 		data_sec, rela_data_sec,
 		bss_sec,
+		init_array_sec, rela_init_array_sec,
 		symtab_sec, strtab_sec, shstrtab_sec;
 	size_t i,
 		section_header_start,
 		data_section_start, text_section_start,
 		rela_text_section_start, rela_data_section_start,
 		bss_section_start, symtab_section_start,
+		init_array_section_start, rela_init_array_section_start,
 		strtab_section_start, shstrtab_section_start,
 		type_inst_start,
 		func_inst_start, table_inst_start,
 		mem_inst_start, global_inst_start,
 		array_symbol_start,
+		constructor_symbol,
 		data_symbol_start, data_struct_symbol_start,
 		element_symbol_start, element_struct_symbol_start,
+		static_module_symbol,
 		global_symbol_start,
 		func_code_start,
 		n_imported_funcs, n_imported_tables, n_imported_mems;
@@ -248,21 +254,15 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 	section_header_start = output->n_elts;
 	OUT(&zero_sec, sizeof(zero_sec));
 	/* section headers */
-	/* text section (code) */
 	OUT(&text_sec, sizeof(text_sec));
-	/* rela_text_sec */
 	OUT(&rela_text_sec, sizeof(rela_text_sec));
-	/* data section (runtime data + memories) */
 	OUT(&data_sec, sizeof(data_sec));
-	/* rela_data_sec */
 	OUT(&rela_data_sec, sizeof(rela_data_sec));
-	/* rela_text_sec */
 	OUT(&bss_sec, sizeof(bss_sec));
-	/* symtab */
+	OUT(&init_array_sec, sizeof(init_array_sec));
+	OUT(&rela_init_array_sec, sizeof(rela_init_array_sec));
 	OUT(&symtab_sec, sizeof(symtab_sec));
-	/* strtab */
 	OUT(&strtab_sec, sizeof(strtab_sec));
-	/* shstrtab */
 	OUT(&shstrtab_sec, sizeof(shstrtab_sec));
 
 #define ADD_DATA_SYMBOL_OFF_STR(_str, _off, size_)				\
@@ -338,6 +338,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 	if (!output_buf(strtab, buf, 1))
 		goto error;
 
+#define INIT_STATIC_MODULE_SYMBOL 1
 	{
 		size_t string_offset;
 		string_offset = strtab->n_elts;
@@ -661,6 +662,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 	}
 
 	/* add StaticModuleInst */
+	static_module_symbol = symbols->n_elts;
 	{
 		struct StaticModuleInst smi;
 
@@ -684,11 +686,44 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 					    offsetof(struct StaticModuleInst, elements),
 					    element_struct_symbol_start);
 
+		{
+			size_t string_offset = strtab->n_elts;
+			if (!output_buf(strtab, "module_inst", 12))
+				goto error;
+			ADD_DATA_SYMBOL_STR(string_offset, sizeof(smi));
+		}
+
 		OUT(&smi, sizeof(smi));
 	}
 
 	/* compile codes */
 	text_section_start = output->n_elts;
+
+	/* output constructor */
+
+	constructor_symbol = symbols->n_elts;
+	{
+		size_t code_size = 22;
+		size_t string_offset = strtab->n_elts;
+		if (!output_buf(strtab, "module_init", 12))
+			goto error;
+		ADD_FUNC_SYMBOL_STR(string_offset, code_size);
+
+		ADD_FUNC_PTR_RELOCATION_RAW(output->n_elts + 2,
+					    static_module_symbol);
+		ADD_FUNC_PTR_RELOCATION_RAW(output->n_elts + 12,
+					    INIT_STATIC_MODULE_SYMBOL);
+
+		/* mov $const, %rdi */
+		memcpy(buf, "\x48\xbf\x00\x00\x00\x00\x00\x00\x00\x00", 10);
+		/* mov $const, %rax */
+		memcpy(buf + 10, "\x48\xb8\x00\x00\x00\x00\x00\x00\x00\x00", 10);
+		/* jmp *%rax */
+		memcpy(buf + 20, "\xff\xe0", 2);
+		if (!output_buf(output, buf, code_size))
+			goto error;
+	}
+
 	module_types.functypes = malloc(module_funcs.n_elts *
 					sizeof(struct FuncType));
 	if (!module_types.functypes)
@@ -917,6 +952,33 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 			goto error;
 	}
 
+	init_array_section_start = output->n_elts;
+	memset(buf, 0, 8);
+	OUT(buf, 8);
+
+	/* align to 8 */
+	if (output->n_elts % 8) {
+		if (!output_buf(output, buf, 8 - output->n_elts % 8))
+			goto error;
+	}
+
+	rela_init_array_section_start = output->n_elts;
+	{
+		Elf64_Rela reloc = {
+			.r_offset = 0,
+			.r_info = ELF64_R_INFO(constructor_symbol, R_X86_64_64),
+			.r_addend = 0,
+		};
+		OUT(&reloc, sizeof(reloc));
+	}
+
+
+	/* align to 8 */
+	if (output->n_elts % 8) {
+		if (!output_buf(output, buf, 8 - output->n_elts % 8))
+			goto error;
+	}
+
 	symtab_section_start = output->n_elts;
 	OUTE(symbols->elts, symbols->n_elts,
 	     sizeof(symbols->elts[0]));
@@ -995,7 +1057,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		rela_data_sec.sh_flags = SHF_INFO_LINK;
 		rela_data_sec.sh_addr = 0;
 		rela_data_sec.sh_offset = rela_data_section_start;
-		rela_data_sec.sh_size = symtab_section_start - rela_data_section_start;
+		rela_data_sec.sh_size = init_array_section_start - rela_data_section_start;
 		rela_data_sec.sh_link = SYMTAB_SECTION_IDX;
 		rela_data_sec.sh_info = DATA_SECTION_IDX;
 		rela_data_sec.sh_addralign = 8;
@@ -1026,6 +1088,44 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		       sizeof(bss_sec));
 
 		OUT(".bss", strlen(".bss") + 1);
+	}
+
+	{
+		init_array_sec.sh_name = output->n_elts - shstrtab_section_start;
+		init_array_sec.sh_type = SHT_INIT_ARRAY;
+		init_array_sec.sh_flags = SHF_WRITE | SHF_ALLOC;
+		init_array_sec.sh_addr = 0;
+		init_array_sec.sh_offset = init_array_section_start;
+		init_array_sec.sh_size = rela_init_array_section_start - init_array_section_start;
+		init_array_sec.sh_link = 0;
+		init_array_sec.sh_info = 0;
+		init_array_sec.sh_addralign = 8;
+		init_array_sec.sh_entsize = 8;
+		memcpy(&output->elts[section_header_start +
+				     INIT_ARRAY_SECTION_IDX * sizeof(Elf64_Shdr)],
+		       &init_array_sec,
+		       sizeof(init_array_sec));
+
+		OUT(".init_array", strlen(".init_array") + 1);
+	}
+
+	{
+		rela_init_array_sec.sh_name = output->n_elts - shstrtab_section_start;
+		rela_init_array_sec.sh_type = SHT_RELA;
+		rela_init_array_sec.sh_flags = SHF_INFO_LINK;
+		rela_init_array_sec.sh_addr = 0;
+		rela_init_array_sec.sh_offset = rela_init_array_section_start;
+		rela_init_array_sec.sh_size = symtab_section_start - rela_init_array_section_start;
+		rela_init_array_sec.sh_link = SYMTAB_SECTION_IDX;
+		rela_init_array_sec.sh_info = INIT_ARRAY_SECTION_IDX;
+		rela_init_array_sec.sh_addralign = 8;
+		rela_init_array_sec.sh_entsize = sizeof(Elf64_Rela);
+		memcpy(&output->elts[section_header_start +
+				     RELA_INIT_ARRAY_SECTION_IDX * sizeof(Elf64_Shdr)],
+		       &rela_init_array_sec,
+		       sizeof(rela_init_array_sec));
+
+		OUT(".rela.init_array", strlen(".rela.init_array") + 1);
 	}
 
 	{
