@@ -1293,10 +1293,6 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		       sizeof(shstrtab_sec));
 	}
 
-	/* TODO: startup func
-	   : call startup code
-	 */
-
 	if (outsize)
 		*outsize = output->n_elts;
 
