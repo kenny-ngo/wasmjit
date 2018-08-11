@@ -200,6 +200,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		array_symbol_start,
 		data_symbol_start, data_struct_symbol_start,
 		element_symbol_start, element_struct_symbol_start,
+		global_symbol_start,
 		func_code_start,
 		n_imported_funcs, n_imported_tables, n_imported_mems;
 	size_t bss_size = 0;
@@ -847,6 +848,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 	}
 
 	/* add external symbols */
+	global_symbol_start = symbols->n_elts;
 	for (i = 0; i < module->export_section.n_exports; ++i) {
 		char buf[0x100];
 		struct ExportSectionExport *export =
@@ -881,7 +883,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		Elf64_Sym *symbol = &symbols->elts[sidx];
 		if (!add_symbol(symbols, string_offset,
 				ELF64_ST_TYPE(symbol->st_info),
-				ELF64_ST_BIND(symbol->st_info),
+				STB_GLOBAL,
 				symbol->st_other,
 				symbol->st_shndx,
 				symbol->st_value,
@@ -1035,7 +1037,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		symtab_sec.sh_offset = symtab_section_start;
 		symtab_sec.sh_size = strtab_section_start - symtab_section_start;
 		symtab_sec.sh_link = STRTAB_SECTION_IDX;
-		symtab_sec.sh_info = symbols->n_elts;
+		symtab_sec.sh_info = global_symbol_start;
 		symtab_sec.sh_addralign = 8;
 		assert(sizeof(symbols->elts[0]) == 24);
 		symtab_sec.sh_entsize = sizeof(symbols->elts[0]);
