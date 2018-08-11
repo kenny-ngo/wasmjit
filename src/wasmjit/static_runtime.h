@@ -157,5 +157,6 @@ struct StaticModuleInst {
 		}							\
 	}
 
+void wasmjit_init_static_module(struct StaticModuleInst *smi);
 
 #endif
