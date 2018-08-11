@@ -208,7 +208,8 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		static_module_symbol,
 		global_symbol_start,
 		func_code_start,
-		n_imported_funcs, n_imported_tables, n_imported_mems;
+		n_imported_funcs, n_imported_tables,
+		n_imported_mems, n_imported_globals;
 	size_t bss_size = 0;
 	struct ModuleTypes module_types;
 	struct _ObjectIter {
@@ -416,6 +417,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 	n_imported_funcs = module_funcs.n_elts;
 	n_imported_tables = module_tables.n_elts;
 	n_imported_mems = module_mems.n_elts;
+	n_imported_globals = module_globals.n_elts;
 
 	/* align to 8 bytes */
 	if (output->n_elts % 8) {
@@ -666,6 +668,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 	{
 		struct StaticModuleInst smi;
 
+		smi.n_imported_globals = n_imported_globals;
 		smi.n_funcs = module_funcs.n_elts;
 		smi.n_tables = module_tables.n_elts;
 		smi.n_mems = module_mems.n_elts;
