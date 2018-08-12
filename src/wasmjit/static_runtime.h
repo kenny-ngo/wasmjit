@@ -128,6 +128,12 @@ struct StaticModuleInst {
 					}				\
 				},					\
 				.global = {				\
+					.value = {			\
+						.type = _type,		\
+						.data = {		\
+							._member = _init, \
+						},			\
+					},				\
 					.mut = _mut,			\
 				}					\
 			}						\
