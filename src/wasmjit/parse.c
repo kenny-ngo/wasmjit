@@ -760,6 +760,16 @@ int read_instruction(struct ParseState *pstate, struct Instr *instr,
 		if (!ret)
 			goto error;
 
+		{
+			uint8_t nullb;
+			ret = read_uint8_t(pstate, &nullb);
+			if (!ret)
+				goto error;
+
+			if (nullb)
+				goto error;
+		}
+
 		break;
 	case OPCODE_GET_LOCAL:
 	case OPCODE_SET_LOCAL:
