@@ -938,7 +938,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 				 tee_local.localidx].valtype);
 
 		/* movq (%rsp), %rax */
-		OUTS("\x48\\x85");
+		OUTS("\x48\x85");
 		/* movq %rax, fp_offset(%rbp) */
 		OUTS("\x48\x89\x45");
 		encode_le_uint32_t(locals_md
@@ -1689,7 +1689,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		case OPCODE_I32_SHL:
 		case OPCODE_I64_SHL:
 			/* shl(l|q)   %cl,(%rsp) */
-			OUTS("\xd3x24\x24");
+			OUTS("\xd3\x24\x24");
 			break;
 		case OPCODE_I32_SHR_S:
 		case OPCODE_I64_SHR_S:
