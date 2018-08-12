@@ -104,7 +104,7 @@ DEFINE_EMSCRIPTEN_FUNCTION(___unlock, VALTYPE_NULL, VALTYPE_I32);
 DEFINE_EMSCRIPTEN_FUNCTION(_emscripten_memcpy_big, VALTYPE_I32, VALTYPE_I32, VALTYPE_I32, VALTYPE_I32);
 
 char *wasmjit_emscripten_get_base_address(void) {
-	return WASM_SYMBOL(env, memoryBase).u.mem.data;
+	return WASM_SYMBOL(env, memory).u.mem.data;
 }
 
 extern struct WasmInst WASM_SYMBOL(env, _main);
