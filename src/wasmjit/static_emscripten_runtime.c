@@ -113,6 +113,7 @@ extern struct WasmInst WASM_SYMBOL(env, _main);
 int main(int argc, char *argv[]) {
 	/* TODO: put argv into memory */
 	int (*_main)(int, char *[]);
+	/* TODO: type check _main */
 	_main = WASM_SYMBOL(env, _main).u.func.compiled_code;
 	return _main(argc, argv);
 }
