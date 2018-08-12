@@ -108,7 +108,7 @@ struct StaticModuleInst {
 	struct GlobalReference *globals;
 	struct DataInst *datas;
 	struct ElementInst *elements;
-	void (*start_func)();
+	struct WasmInst *start_func;
 };
 
 #define WASM_SYMBOL(_module, _name) (_module ## _ ## _name)

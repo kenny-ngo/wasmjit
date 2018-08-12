@@ -142,6 +142,15 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi)
 	}
 
 	if (smi->start_func) {
-		smi->start_func();
+		struct FuncType expected_type;
+		void (*start)(void);
+		if (smi->start_func->type != IMPORT_DESC_TYPE_FUNC)
+			ltrap();
+		if (!_wasmjit_create_func_type(&expected_type, 0, NULL, 0, NULL))
+			ltrap();
+		if (!wasmjit_typecheck_func(&expected_type, &smi->start_func->u.func))
+			ltrap();
+		start = smi->start_func->u.func.compiled_code;
+		start();
 	}
 }

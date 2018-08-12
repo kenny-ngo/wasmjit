@@ -944,6 +944,14 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 					    module_globals.elts[data_sec->instructions[0].data.get_global.globalidx].symidx);
 	}
 
+	/* add startfunc reference */
+	if (module->start_section.has_start) {
+		ADD_DATA_PTR_RELOCATION_RAW(data_section_start +
+					    symbols->elts[static_module_symbol].st_value +
+					    offsetof(struct StaticModuleInst, start_func),
+					    module_funcs.elts[module->start_section.funcidx].symidx);
+	}
+
 	/* add constructor reference */
 	ADD_FUNC_PTR_RELOCATION_RAW(text_section_start +
 				    symbols->elts[constructor_symbol].st_value +
