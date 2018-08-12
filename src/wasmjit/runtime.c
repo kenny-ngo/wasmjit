@@ -75,8 +75,8 @@ int wasmjit_typecheck_memory(const struct MemoryType *type,
 int wasmjit_typecheck_global(const struct GlobalType *globaltype,
 			     const struct GlobalInst *globalinst)
 {
-	return globalinst->value.type != globaltype->valtype ||
-		globalinst->mut != globaltype->mut;
+	return globalinst->value.type == globaltype->valtype &&
+		globalinst->mut == globaltype->mut;
 }
 
 int _wasmjit_create_func_type(struct FuncType *ft,
