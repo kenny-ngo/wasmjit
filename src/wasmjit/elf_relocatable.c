@@ -325,13 +325,13 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 	}								\
 	while (0)
 
-#define ADD_FUNC_PTR_RELOCATION_RAW(_raw_offset, _rsymidx)	\
+#define ADD_FUNC_PTR_RELOCATION_RAW(_raw_offset, _rsymidx, _addend)	\
 	do {							\
 		if (!add_relocation(text_relocations,		\
 				    (_raw_offset) -		\
 				    text_section_start,		\
 				    R_X86_64_64,		\
-				    (_rsymidx), 0))		\
+				    (_rsymidx), (_addend)))	\
 			goto error;			\
 	}						\
 	while (0)
@@ -680,7 +680,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		ADD_FUNC_SYMBOL_STR(string_offset, code_size);
 
 		ADD_FUNC_PTR_RELOCATION_RAW(output->n_elts + 2,
-					    static_module_symbol);
+					    static_module_symbol, 0);
 
 		/* mov $const, %rdi */
 		memcpy(buf, "\x48\xbf\x00\x00\x00\x00\x00\x00\x00\x00", 10);
@@ -948,7 +948,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 	ADD_FUNC_PTR_RELOCATION_RAW(text_section_start +
 				    symbols->elts[constructor_symbol].st_value +
 				    12,
-				    init_static_module_symbol);
+				    init_static_module_symbol, 0);
 
 	/* add code relocations */
 	for (i = 0; i < module->function_section.n_typeidxs; ++i) {
@@ -960,22 +960,33 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 			struct MemoryReferenceElt *elt =
 				&memrefs->elts[j];
 			size_t symidx;
+			size_t addend;
 
 			switch (elt->type) {
 			case MEMREF_TYPE:
 				symidx = type_inst_start + elt->idx;
+				addend = 0;
 				break;
 			case MEMREF_FUNC:
 				symidx = module_funcs.elts[elt->idx].symidx;
+				addend = (offsetof(struct WasmInst, u) +
+					  offsetof(union WasmInstUnion, func));
 				break;
 			case MEMREF_TABLE:
 				symidx = module_tables.elts[elt->idx].symidx;
+				addend = (offsetof(struct WasmInst, u) +
+					  offsetof(union WasmInstUnion, table));
 				break;
 			case MEMREF_MEM:
 				symidx = module_mems.elts[elt->idx].symidx;
+				addend = (offsetof(struct WasmInst, u) +
+					  offsetof(union WasmInstUnion, mem));
 				break;
 			case MEMREF_GLOBAL:
 				symidx = module_globals.elts[elt->idx].symidx;
+				addend = (offsetof(struct WasmInst, u) +
+					  offsetof(union WasmInstUnion, global) +
+					  offsetof(struct StaticGlobalInst, global));
 				break;
 			case MEMREF_RESOLVE_INDIRECT_CALL:
 				symidx = resolve_indirect_call_symbol;
@@ -985,7 +996,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 			}
 
 			ADD_FUNC_PTR_RELOCATION_RAW(offset + elt->code_offset,
-						    symidx);
+						    symidx, addend);
 		}
 	}
 
