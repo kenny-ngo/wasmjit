@@ -39,54 +39,50 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi)
 {
 	size_t i;
 
-	/* type-check all module objects */
+	/* type-check all imports */
 
-	for (i = 0; i < smi->n_funcs; ++i) {
-		struct FuncReference *ref = &smi->funcs[i];
-		if (ref->inst->type != IMPORT_DESC_TYPE_FUNC)
-			ltrap();
-		if (!wasmjit_typecheck_func(&ref->expected_type, &ref->inst->u.func))
+	for (i = 0; i < smi->func_types.n_elts; ++i) {
+		struct FuncInst *ref = smi->module.funcs.elts[i];
+		struct FuncType *expected_type = &smi->func_types.elts[i];
+		if (!wasmjit_typecheck_func(expected_type, ref))
 			ltrap();
 	}
 
-	for (i = 0; i < smi->n_tables; ++i) {
-		struct TableReference *ref = &smi->tables[i];
-		if (ref->inst->type != IMPORT_DESC_TYPE_TABLE)
-			ltrap();
-		if (!wasmjit_typecheck_table(&ref->expected_type, &ref->inst->u.table))
-			ltrap();
-	}
-
-	for (i = 0; i < smi->n_mems; ++i) {
-		struct MemReference *ref = &smi->mems[i];
-		if (ref->inst->type != IMPORT_DESC_TYPE_MEM)
-			ltrap();
-		if (!wasmjit_typecheck_memory(&ref->expected_type, &ref->inst->u.mem))
+	for (i = 0; i < smi->table_types.n_elts; ++i) {
+		struct TableInst *ref = smi->module.tables.elts[i];
+		struct TableType *expected_type = &smi->table_types.elts[i];
+		if (!wasmjit_typecheck_table(expected_type, ref))
 			ltrap();
 	}
 
-	for (i = 0; i < smi->n_mems; ++i) {
-		struct GlobalReference *ref = &smi->globals[i];
-		if (ref->inst->type != IMPORT_DESC_TYPE_GLOBAL)
-			ltrap();
-		if (!wasmjit_typecheck_global(&ref->expected_type, &ref->inst->u.global.global))
+	for (i = 0; i < smi->mem_types.n_elts; ++i) {
+		struct MemInst *ref = smi->module.mems.elts[i];
+		struct MemoryType *expected_type = &smi->mem_types.elts[i];
+		if (!wasmjit_typecheck_memory(expected_type, ref))
 			ltrap();
 	}
 
-	/* init globals */
-	for (i = smi->n_imported_globals; i < smi->n_globals; ++i) {
-		struct StaticGlobalInst *my_global = &smi->globals[i].inst->u.global;
-		struct StaticGlobalInst *gitr = my_global;
+	for (i = 0; i < smi->global_types.n_elts; ++i) {
+		struct GlobalInst *ref = smi->module.globals.elts[i];
+		struct GlobalType *expected_type = &smi->global_types.elts[i];
+		if (!wasmjit_typecheck_global(expected_type, ref))
+			ltrap();
+	}
+
+	/* init non-imported globals */
+	for (i = 0; i < smi->global_inits.n_elts; ++i) {
+		// smi->global_types.n_elts
+		struct GlobalInst *my_global = smi->module.globals.elts[smi->global_types.n_elts + i];
+		struct GlobalInit *gitr = &smi->global_inits.elts[i];
 		while (gitr->init_type == GLOBAL_GLOBAL_INIT) {
-			gitr = &gitr->init.global->u.global;
+			gitr = gitr->init.parent;
 		}
-		my_global->global.value = gitr->init.constant;
+		my_global->value = gitr->init.constant;
 	}
 
-	for (i = 0; i < smi->n_elements; ++i) {
-		struct ElementInst *element = &smi->elements[i];
-		struct TableReference *ref = &smi->tables[element->tableidx];
-		struct TableInst *table = &ref->inst->u.table;
+	for (i = 0; i < smi->elements.n_elts; ++i) {
+		struct ElementInst *element = &smi->elements.elts[i];
+		struct TableInst *table = smi->module.tables.elts[element->tableidx];
 		size_t j;
 		uint32_t offset;
 
@@ -95,9 +91,9 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi)
 				ltrap();
 			offset = element->offset.constant.data.i32;
 		} else {
-			struct StaticGlobalInst *gitr = &element->offset.global->u.global;
+			struct GlobalInit *gitr = element->offset.global;
 			while (gitr->init_type == GLOBAL_GLOBAL_INIT) {
-				gitr = &gitr->init.global->u.global;
+				gitr = gitr->init.parent;
 			}
 			if (gitr->init.constant.type != VALTYPE_I32)
 				ltrap();
@@ -108,14 +104,13 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi)
 			ltrap();
 
 		for (j = 0; j < element->n_funcidxs; ++j) {
-			table->data[offset + j] = &smi->funcs[element->funcidxs[j]].inst->u.func;
+			table->data[offset + j] = smi->module.funcs.elts[element->funcidxs[j]];
 		}
 	}
 
-	for (i = 0; i < smi->n_datas; ++i) {
-		struct DataInst *data = &smi->datas[i];
-		struct MemReference *ref = &smi->mems[data->memidx];
-		struct MemInst *mem = &ref->inst->u.mem;
+	for (i = 0; i < smi->datas.n_elts; ++i) {
+		struct DataInst *data = &smi->datas.elts[i];
+		struct MemInst *mem = smi->module.mems.elts[data->memidx];
 
 		uint32_t offset;
 
@@ -124,9 +119,9 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi)
 				ltrap();
 			offset = data->offset.constant.data.i32;
 		} else {
-			struct StaticGlobalInst *gitr = &data->offset.global->u.global;
+			struct GlobalInit *gitr = data->offset.global;
 			while (gitr->init_type == GLOBAL_GLOBAL_INIT) {
-				gitr = &gitr->init.global->u.global;
+				gitr = gitr->init.parent;
 			}
 			if (gitr->init.constant.type != VALTYPE_I32)
 				ltrap();
@@ -144,13 +139,11 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi)
 	if (smi->start_func) {
 		struct FuncType expected_type;
 		void (*start)(void);
-		if (smi->start_func->type != IMPORT_DESC_TYPE_FUNC)
-			ltrap();
 		if (!_wasmjit_create_func_type(&expected_type, 0, NULL, 0, NULL))
 			ltrap();
-		if (!wasmjit_typecheck_func(&expected_type, &smi->start_func->u.func))
+		if (!wasmjit_typecheck_func(&expected_type, smi->start_func))
 			ltrap();
-		start = smi->start_func->u.func.compiled_code;
+		start = smi->start_func->compiled_code;
 		start();
 	}
 }

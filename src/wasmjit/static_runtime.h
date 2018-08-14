@@ -29,50 +29,17 @@
 
 #include <stdint.h>
 
-struct WasmInst;
-
 enum {
 	GLOBAL_CONST_INIT,
 	GLOBAL_GLOBAL_INIT,
 };
 
-struct StaticGlobalInst {
+struct GlobalInit {
 	unsigned init_type;
-	union StaticGlobalInstUnion {
+	union GlobalInitUnion {
 		struct Value constant;
-		struct WasmInst *global;
+		struct GlobalInit *parent;
 	} init;
-	struct GlobalInst global;
-};
-
-struct WasmInst {
-	size_t type;
-	union WasmInstUnion {
-		struct FuncInst func;
-		struct TableInst table;
-		struct MemInst mem;
-		struct StaticGlobalInst global;
-	} u;
-};
-
-struct FuncReference {
-	struct FuncType expected_type;
-	struct WasmInst *inst;
-};
-
-struct TableReference {
-	struct TableType expected_type;
-	struct WasmInst *inst;
-};
-
-struct MemReference {
-	struct MemoryType expected_type;
-	struct WasmInst *inst;
-};
-
-struct GlobalReference {
-	struct GlobalType expected_type;
-	struct WasmInst *inst;
 };
 
 struct ElementInst {
@@ -80,7 +47,7 @@ struct ElementInst {
 	unsigned offset_source_type;
 	union ElementInstUnion {
 		struct Value constant;
-		struct WasmInst *global;
+		struct GlobalInit *global;
 	} offset;
 	size_t n_funcidxs;
 	uint32_t *funcidxs;
@@ -91,53 +58,54 @@ struct DataInst {
 	unsigned offset_source_type;
 	union DataInstUnion {
 		struct Value constant;
-		struct WasmInst *global;
+		struct GlobalInit *global;
 	} offset;
 	size_t buf_size;
 	char *buf;
 };
 
 struct StaticModuleInst {
-	size_t n_funcs, n_tables,
-		n_mems, n_globals,
-		n_datas, n_elements,
-		n_imported_globals;
-	struct FuncReference *funcs;
-	struct TableReference *tables;
-	struct MemReference *mems;
-	struct GlobalReference *globals;
-	struct DataInst *datas;
-	struct ElementInst *elements;
-	struct WasmInst *start_func;
+	struct ModuleInst module;
+
+	DEFINE_ANON_VECTOR(struct FuncType) func_types;
+	DEFINE_ANON_VECTOR(struct TableType) table_types;
+	DEFINE_ANON_VECTOR(struct MemoryType) mem_types;
+	DEFINE_ANON_VECTOR(struct GlobalType) global_types;
+
+	DEFINE_ANON_VECTOR(struct GlobalInit) global_inits;
+	DEFINE_ANON_VECTOR(struct DataInst) datas;
+	DEFINE_ANON_VECTOR(struct ElementInst) elements;
+
+	struct FuncInst *start_func;
 };
 
-#define WASM_SYMBOL(_module, _name) (_module ## _ ## _name)
+#define WASM_SYMBOL(_module, _name, _type) (_module ## __ ## _name ## __ ##  _type)
 
-#define DEFINE_WASM_GLOBAL(_module, _name, _init, _type, _member, _mut)    \
-	struct WasmInst _module ## _ ## _name = {			\
-		.type = IMPORT_DESC_TYPE_GLOBAL,			\
-		.u = {							\
-			.global = {					\
-				.init_type = GLOBAL_CONST_INIT,		\
-				.init = {				\
-					.constant = {			\
-						.type = _type,		\
-						.data = {		\
-							._member = _init, \
-						}			\
-					}				\
-				},					\
-				.global = {				\
-					.value = {			\
-						.type = _type,		\
-						.data = {		\
-							._member = _init, \
-						},			\
-					},				\
-					.mut = _mut,			\
+#define WASM_FUNC_SYMBOL(_module, _name) WASM_SYMBOL(_module, _name, func)
+#define WASM_TABLE_SYMBOL(_module, _name) WASM_SYMBOL(_module, _name, table)
+#define WASM_MEMORY_SYMBOL(_module, _name) WASM_SYMBOL(_module, _name, mem)
+
+#define DEFINE_WASM_GLOBAL(_module, _name, _init, _type, _member, _mut)	\
+	struct GlobalInit WASM_SYMBOL(_module, _name, global_init) = {	\
+		.init_type = GLOBAL_CONST_INIT,				\
+		.init = {						\
+			.constant = {					\
+				.type = (_type),			\
+				.data = {				\
+					._member = (_init),		\
 				}					\
 			}						\
 		}							\
+	};								\
+									\
+	struct GlobalInst WASM_SYMBOL(_module, _name, global) = {	\
+		.value = {						\
+			.type = (_type),				\
+			.data = {					\
+				._member = (_init),			\
+			},						\
+		},							\
+		.mut = (_mut),						\
 	}
 
 #define DEFINE_WASM_I32_GLOBAL(_module, _name, _init, _mut)          \
@@ -148,18 +116,13 @@ struct StaticModuleInst {
 
 #define NUMARGS(...)  (sizeof((wasmjit_valtype_t[]){__VA_ARGS__})/sizeof(wasmjit_valtype_t))
 
-#define DEFINE_WASM_FUNCTION(_module, _name, _fptr, _output, ...)	\
-	struct WasmInst _module ## _ ## _name = {			\
-		.type = IMPORT_DESC_TYPE_FUNC,				\
-		.u = {							\
-			.func = {					\
-				.compiled_code = _fptr,			\
-				.type = {				\
-					.n_inputs = NUMARGS(__VA_ARGS__), \
-					.input_types = { __VA_ARGS__ },	\
-					.output_type = _output,		\
-				}					\
-			}						\
+#define DEFINE_WASM_FUNCTION(_module, _name, _fptr, _output, ...) \
+	struct FuncInst WASM_FUNC_SYMBOL(_module, _name) = {		\
+		.compiled_code = _fptr,					\
+		.type = {						\
+			.n_inputs = NUMARGS(__VA_ARGS__),		\
+			.input_types = { __VA_ARGS__ },			\
+			.output_type = _output,				\
 		}							\
 	}
 

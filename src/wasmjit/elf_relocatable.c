@@ -175,6 +175,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 			size_t symidx;
 			size_t offset;
 			struct GlobalType type;
+			size_t init_symidx;
 		} *elts;
 	} module_globals = {0, NULL};
 	Elf64_Ehdr hdr = {
@@ -207,8 +208,10 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		mem_inst_start, global_inst_start,
 		array_symbol_start,
 		constructor_symbol,
+		global_inits_start,
 		data_symbol_start, data_struct_symbol_start,
 		element_symbol_start, element_struct_symbol_start,
+		module_symbol,
 		static_module_symbol,
 		global_symbol_start,
 		init_static_module_symbol,
@@ -217,7 +220,8 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		n_imported_funcs, n_imported_tables,
 		n_imported_mems, n_imported_globals,
 		funcs_offset, tables_offset,
-		mems_offset, globals_offset;
+		mems_offset, globals_offset,
+		types_symbol_start;
 	size_t bss_size = 0;
 	struct ModuleTypes module_types;
 	struct _ObjectIter {
@@ -423,19 +427,24 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		*(pitr->inst_start) = output->n_elts;
 		for (j = 0; j < pitr->nelts; ++j) {
 			size_t ret, string_offset;
-			struct WasmInst inst;
 
-			memset(&inst, 0, sizeof(inst));
-
-			inst.type = pitr->type;
+			string_offset = strtab->n_elts;
+			ret = snprintf(buf, sizeof(buf), "%s_%zu",
+				       pitr->inst_type, j);
+			if (!output_buf(strtab, buf, ret + 1))
+				goto error;
 
 			switch (pitr->type) {
 			case IMPORT_DESC_TYPE_FUNC: {
-				struct FuncInst *funcinst = &inst.u.func;
+				struct FuncInst funcinstv;
+				struct FuncInst *funcinst = &funcinstv;
 				uint32_t tidx = module->function_section.typeidxs[j];
+
+				memset(funcinst, 0, sizeof(*funcinst));
 
 				funcinst->type = module->type_section.types[tidx];
 
+				/* Fill module pointer later */
 				/* Fill compile_code pointer later */
 
 				size_t idx = module_funcs.n_elts;
@@ -444,11 +453,17 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 				module_funcs.elts[idx].symidx = symbols->n_elts;
 				module_funcs.elts[idx].type = module->type_section.types[tidx];
 
+				ADD_DATA_SYMBOL_STR(string_offset, sizeof(*funcinst));
+				OUT(funcinst, sizeof(*funcinst));
+
 				break;
 			}
 			case IMPORT_DESC_TYPE_TABLE: {
-				struct TableInst *tableinst = &inst.u.table;
+				struct TableInst tableinstv;
+				struct TableInst *tableinst = &tableinstv;
 				struct TableType *tt = &module->table_section.tables[j];
+
+				memset(tableinst, 0, sizeof(*tableinst));
 
 				tableinst->elemtype = tt->elemtype;
 				tableinst->length = tt->limits.min;
@@ -462,11 +477,18 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 				module_tables.elts[idx].symidx = symbols->n_elts;
 				module_tables.elts[idx].type = *tt;
 
+				ADD_DATA_SYMBOL_STR(string_offset, sizeof(*tableinst));
+				OUT(tableinst, sizeof(*tableinst));
+
 				break;
 			}
 			case IMPORT_DESC_TYPE_MEM: {
-				struct MemInst *meminst = &inst.u.mem;
+				struct MemInst meminstv;
+				struct MemInst *meminst = &meminstv;
 				struct MemoryType *mt = &module->memory_section.memories[j].memtype;
+
+				memset(meminst, 0, sizeof(*meminst));
+
 				meminst->size = mt->limits.min * WASM_PAGE_SIZE;
 				meminst->max = mt->limits.max * WASM_PAGE_SIZE;
 				/* fill in data pointer later */
@@ -477,32 +499,28 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 				module_mems.elts[idx].symidx = symbols->n_elts;
 				module_mems.elts[idx].type = *mt;
 
+				ADD_DATA_SYMBOL_STR(string_offset, sizeof(*meminst));
+				OUT(meminst, sizeof(*meminst));
+
 				break;
 			}
 			case IMPORT_DESC_TYPE_GLOBAL: {
-				struct StaticGlobalInst *globalinst = &inst.u.global;
+				struct GlobalInst globalinstv;
+				struct GlobalInst *globalinst = &globalinstv;
 				struct GlobalSectionGlobal *global = &module->global_section.globals[j];
 
-				if (global->n_instructions != 1)
-					goto error;
+				memset(globalinst, 0, sizeof(*globalinst));
 
-				if (global->instructions[0].opcode == OPCODE_GET_GLOBAL) {
-					/* fill in global pointer later */
-					globalinst->init_type = GLOBAL_GLOBAL_INIT;
-				} else {
-					globalinst->init_type = GLOBAL_CONST_INIT;
-					read_constant_expression(&globalinst->init.constant,
-								 global->n_instructions,
-								 global->instructions);
-				}
-
-				globalinst->global.value.type = global->type.valtype,
-				globalinst->global.mut = global->type.mut;
+				globalinst->value.type = global->type.valtype,
+				globalinst->mut = global->type.mut;
 
 				size_t idx = module_globals.n_elts;
 				LVECTOR_GROW(&module_globals, 1);
 				module_globals.elts[idx].symidx = symbols->n_elts;
 				module_globals.elts[idx].type = global->type;
+
+				ADD_DATA_SYMBOL_STR(string_offset, sizeof(*globalinst));
+				OUT(globalinst, sizeof(*globalinst));
 
 				break;
 			}
@@ -510,16 +528,6 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 				assert(0);
 				break;
 			}
-
-			string_offset = strtab->n_elts;
-			ret = snprintf(buf, sizeof(buf), "%s_%zu",
-				       pitr->inst_type, j);
-			if (!output_buf(strtab, buf, ret + 1))
-				goto error;
-
-			ADD_DATA_SYMBOL_STR(string_offset, sizeof(inst));
-
-			OUT(&inst, sizeof(inst));
 		}
 	}
 
@@ -534,7 +542,6 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 				    module_ ## _name .n_elts * sizeof(_type)); \
 		for (i = 0; i < module_ ## _name .n_elts; ++i) {	\
 			_type ref;					\
-			ref.expected_type = module_ ## _name.elts[i].type; \
 			OUT(&ref, sizeof(ref));				\
 		}							\
 	}								\
@@ -542,13 +549,62 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 
 	array_symbol_start = symbols->n_elts;
 	funcs_offset = output->n_elts;
-	OUTPUT_REF_ARRAY(funcs, struct FuncReference);
+	OUTPUT_REF_ARRAY(funcs, struct FuncInst *);
 	tables_offset = output->n_elts;
-	OUTPUT_REF_ARRAY(tables, struct TableReference);
+	OUTPUT_REF_ARRAY(tables, struct TableInst *);
 	mems_offset = output->n_elts;
-	OUTPUT_REF_ARRAY(mems, struct MemReference);
+	OUTPUT_REF_ARRAY(mems, struct MemInst *);
 	globals_offset = output->n_elts;
-	OUTPUT_REF_ARRAY(globals, struct GlobalReference);
+	OUTPUT_REF_ARRAY(globals, struct GlobalInst *);
+
+#define OUTPUT_TYPE_ARRAY(_name, _type)					\
+	do {								\
+		size_t string_offset;					\
+		string_offset = strtab->n_elts;				\
+		if (!output_buf(strtab, #_name "_types",		\
+				strlen(#_name "_types") + 1))		\
+			goto error;					\
+		ADD_DATA_SYMBOL_STR(string_offset, 			\
+				    (n_imported_ ## _name ## s) *	\
+				    sizeof(_type));			\
+		for (i = 0; i < (n_imported_ ## _name ## s); ++i) {	\
+			_type ref;					\
+			ref = (module_ ## _name ## s).elts[i].type;	\
+			OUT(&ref, sizeof(ref));				\
+		}							\
+	}								\
+	while (0)
+
+	types_symbol_start = symbols->n_elts;
+	OUTPUT_TYPE_ARRAY(func, struct FuncType);
+	OUTPUT_TYPE_ARRAY(table, struct TableType);
+	OUTPUT_TYPE_ARRAY(mem, struct MemoryType);
+	OUTPUT_TYPE_ARRAY(global, struct GlobalType);
+
+	/* output global inits */
+	global_inits_start = symbols->n_elts;
+	ADD_DATA_SYMBOL(sizeof(struct GlobalInit) * module->global_section.n_globals);
+	for (i = 0; i < module->global_section.n_globals; ++i) {
+		struct GlobalSectionGlobal *global = &module->global_section.globals[i];
+		struct GlobalInit global_init;
+
+		if (global->n_instructions != 1)
+			goto error;
+
+		if (global->instructions[0].opcode == OPCODE_GET_GLOBAL) {
+			/* fill in global pointer later */
+			global_init.init_type = GLOBAL_GLOBAL_INIT;
+		} else {
+			global_init.init_type = GLOBAL_CONST_INIT;
+			read_constant_expression(&global_init.init.constant,
+						 global->n_instructions,
+						 global->instructions);
+		}
+
+		module_globals.elts[i + n_imported_globals].init_symidx = symbols->n_elts;
+		ADD_DATA_SYMBOL(sizeof(global_init));
+		OUT(&global_init, sizeof(global_init));
+	}
 
 	/* add element data */
 	element_symbol_start = symbols->n_elts;
@@ -628,34 +684,77 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 	}
 
 	/* add StaticModuleInst */
-	static_module_symbol = symbols->n_elts;
 	{
 		struct StaticModuleInst smi;
 
-		smi.n_imported_globals = n_imported_globals;
-		smi.n_funcs = module_funcs.n_elts;
-		smi.n_tables = module_tables.n_elts;
-		smi.n_mems = module_mems.n_elts;
-		smi.n_globals = module_globals.n_elts;
-		smi.n_datas = module->data_section.n_datas;
-		smi.n_elements = module->element_section.n_elements;
-		smi.start_func = NULL;
+#define MEMBER_OFFSET(s, e) (((char *) (e)) - ((char *) (s)))
 
-		ADD_DATA_PTR_RELOCATION(offsetof(struct StaticModuleInst, funcs),
-					&array_symbol_start);
-		ADD_DATA_PTR_RELOCATION(offsetof(struct StaticModuleInst, tables),
-					&array_symbol_start);
-		ADD_DATA_PTR_RELOCATION(offsetof(struct StaticModuleInst, mems),
-					&array_symbol_start);
-		ADD_DATA_PTR_RELOCATION(offsetof(struct StaticModuleInst, globals),
-					&array_symbol_start);
+		smi.module.types.n_elts = module->type_section.n_types;
 		ADD_DATA_PTR_RELOCATION_RAW(output->n_elts +
-					    offsetof(struct StaticModuleInst, datas),
+					    MEMBER_OFFSET(&smi, &smi.module.types.elts),
+					    type_inst_start);
+
+		smi.module.funcs.n_elts = module_funcs.n_elts;
+		ADD_DATA_PTR_RELOCATION(MEMBER_OFFSET(&smi, &smi.module.funcs.elts),
+					&array_symbol_start);
+
+		smi.module.tables.n_elts = module_tables.n_elts;
+		ADD_DATA_PTR_RELOCATION(MEMBER_OFFSET(&smi, &smi.module.tables.elts),
+					&array_symbol_start);
+
+		smi.module.mems.n_elts = module_mems.n_elts;
+		ADD_DATA_PTR_RELOCATION(MEMBER_OFFSET(&smi, &smi.module.mems.elts),
+					&array_symbol_start);
+
+		smi.module.globals.n_elts = module_globals.n_elts;
+		ADD_DATA_PTR_RELOCATION(MEMBER_OFFSET(&smi, &smi.module.globals.elts),
+					&array_symbol_start);
+
+		smi.func_types.n_elts = n_imported_funcs;
+		ADD_DATA_PTR_RELOCATION(MEMBER_OFFSET(&smi,
+						      &smi.func_types.elts),
+					&types_symbol_start);
+
+		smi.table_types.n_elts = n_imported_tables;
+		ADD_DATA_PTR_RELOCATION(MEMBER_OFFSET(&smi,
+						      &smi.table_types.elts),
+					&types_symbol_start);
+
+		smi.mem_types.n_elts = n_imported_mems;
+		ADD_DATA_PTR_RELOCATION(MEMBER_OFFSET(&smi,
+						      &smi.mem_types.elts),
+					&types_symbol_start);
+
+		smi.global_types.n_elts = n_imported_globals;
+		ADD_DATA_PTR_RELOCATION(MEMBER_OFFSET(&smi,
+						      &smi.global_types.elts),
+					&types_symbol_start);
+
+		smi.global_inits.n_elts = module_globals.n_elts - n_imported_globals;
+		ADD_DATA_PTR_RELOCATION_RAW(output->n_elts +
+					    MEMBER_OFFSET(&smi,
+							  &smi.global_inits.elts),
+					    global_inits_start);
+
+		smi.datas.n_elts = module->data_section.n_datas;
+		ADD_DATA_PTR_RELOCATION_RAW(output->n_elts +
+					    MEMBER_OFFSET(&smi, &smi.datas.elts),
 					    data_struct_symbol_start);
+
+		smi.elements.n_elts = module->element_section.n_elements;
 		ADD_DATA_PTR_RELOCATION_RAW(output->n_elts +
-					    offsetof(struct StaticModuleInst, elements),
+					    MEMBER_OFFSET(&smi, &smi.elements.elts),
 					    element_struct_symbol_start);
 
+		smi.start_func = NULL;
+
+		module_symbol = symbols->n_elts;
+		{
+			ADD_DATA_SYMBOL_OFF(MEMBER_OFFSET(&smi, &smi.module),
+					    sizeof(smi.module));
+		}
+
+		static_module_symbol = symbols->n_elts;
 		{
 			size_t string_offset = strtab->n_elts;
 			if (!output_buf(strtab, "module_inst", 12))
@@ -664,6 +763,8 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		}
 
 		OUT(&smi, sizeof(smi));
+
+#undef MEMBER_OFFSET
 	}
 
 	/* compile codes */
@@ -763,8 +864,10 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		size_t off = module_funcs.elts[i].offset;
 
 		ADD_DATA_PTR_RELOCATION_RAW(off +
-					    offsetof(struct WasmInst, u) +
-					    offsetof(union WasmInstUnion, func) +
+					    offsetof(struct FuncInst, module_inst),
+					    module_symbol);
+
+		ADD_DATA_PTR_RELOCATION_RAW(off +
 					    offsetof(struct FuncInst, compiled_code),
 					    func_code_start + i - n_imported_funcs);
 	}
@@ -792,8 +895,6 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 			goto error;
 
 		ADD_DATA_PTR_RELOCATION_RAW(off +
-					    offsetof(struct WasmInst, u) +
-					    offsetof(union WasmInstUnion, table) +
 					    offsetof(struct TableInst, data),
 					    sidx);
 
@@ -814,8 +915,6 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 			goto error;
 
 		ADD_DATA_PTR_RELOCATION_RAW(off +
-					    offsetof(struct WasmInst, u) +
-					    offsetof(union WasmInstUnion, mem) +
 					    offsetof(struct MemInst, data),
 					    sidx);
 
@@ -852,17 +951,17 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 	/* add imported symbols */
 #define ADD_IMPORTED_SYMBOLS(_name)		\
 	do {							\
-		for (i = 0; i < (n_imported_ ## _name); ++i) {	\
+		for (i = 0; i < (n_imported_ ## _name ## s); ++i) {	\
 			int ret;				\
 			size_t string_offset;				\
-			size_t import_idx = (module_ ## _name).elts[i].import_idx; \
+			size_t import_idx = (module_ ## _name ## s).elts[i].import_idx; \
 			struct ImportSectionImport *import =		\
 				&module->import_section.imports[import_idx]; \
 									\
-			(module_ ## _name).elts[i].symidx = symbols->n_elts; \
+			(module_ ## _name ## s).elts[i].symidx = symbols->n_elts; \
 									\
 			string_offset = strtab->n_elts;			\
-			ret = snprintf(buf, sizeof(buf), "%s_%s", import->module, import->name); \
+			ret = snprintf(buf, sizeof(buf), "%s__%s__" #_name, import->module, import->name); \
 			if (!output_buf(strtab, buf, ret + 1))		\
 				goto error;				\
 			if (!add_symbol(symbols, string_offset, 0, STB_GLOBAL,\
@@ -872,10 +971,30 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 	}								\
 	while (0)
 
-	ADD_IMPORTED_SYMBOLS(funcs);
-	ADD_IMPORTED_SYMBOLS(tables);
-	ADD_IMPORTED_SYMBOLS(mems);
-	ADD_IMPORTED_SYMBOLS(globals);
+	ADD_IMPORTED_SYMBOLS(func);
+	ADD_IMPORTED_SYMBOLS(table);
+	ADD_IMPORTED_SYMBOLS(mem);
+	ADD_IMPORTED_SYMBOLS(global);
+
+	/* add imported global inits */
+	for (i = 0; i < n_imported_globals; ++i) {
+		int ret;
+		size_t string_offset;
+		size_t import_idx = module_globals.elts[i].import_idx;
+		struct ImportSectionImport *import =
+			&module->import_section.imports[import_idx];
+
+		module_globals.elts[i].init_symidx = symbols->n_elts;
+
+		string_offset = strtab->n_elts;
+		ret = snprintf(buf, sizeof(buf), "%s__%s__global_init",
+			       import->module, import->name);
+		if (!output_buf(strtab, buf, ret + 1))
+			goto error;
+		if (!add_symbol(symbols, string_offset, 0, STB_GLOBAL,
+				0, 0, 0, 0))
+			goto error;
+	}
 
 	/* we now have all module symbols, add back relocations */
 
@@ -883,8 +1002,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 	do {								\
 		size_t ref_offset = (_name ## _offset);\
 		for (i = 0; i < (module_ ## _name).n_elts; ++i) {	\
-			ADD_DATA_PTR_RELOCATION_RAW(ref_offset +	\
-						    offsetof(_type, inst),	\
+			ADD_DATA_PTR_RELOCATION_RAW(ref_offset,	\
 						    (module_ ## _name).elts[i].symidx); \
 			ref_offset += sizeof(_type);			\
 		}							\
@@ -892,26 +1010,24 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 	while (0)
 
 	/* add module array relocations */
-	ADD_REF_ARRAY_RELOCATIONS(funcs, struct FuncReference);
-	ADD_REF_ARRAY_RELOCATIONS(tables, struct TableReference);
-	ADD_REF_ARRAY_RELOCATIONS(mems, struct MemReference);
-	ADD_REF_ARRAY_RELOCATIONS(globals, struct GlobalReference);
+	ADD_REF_ARRAY_RELOCATIONS(funcs, struct FuncInst *);
+	ADD_REF_ARRAY_RELOCATIONS(tables, struct TableInst *);
+	ADD_REF_ARRAY_RELOCATIONS(mems, struct MemInst *);
+	ADD_REF_ARRAY_RELOCATIONS(globals, struct GlobalInst *);
 
 	/* add global relocations */
 	for (i = n_imported_globals; i < module_globals.n_elts; ++i) {
 		struct GlobalSectionGlobal *global = &module->global_section.globals[i - n_imported_globals];
-		size_t offset = symbols->elts[module_globals.elts[i].symidx].st_value;
+		size_t offset = symbols->elts[module_globals.elts[i].init_symidx].st_value;
 
 		if (global->instructions[0].opcode != OPCODE_GET_GLOBAL)
 			continue;
 
 		ADD_DATA_PTR_RELOCATION_RAW(data_section_start +
 					    offset +
-					    offsetof(struct WasmInst, u) +
-					    offsetof(union WasmInstUnion, global) +
-					    offsetof(struct StaticGlobalInst, init) +
-					    offsetof(union StaticGlobalInstUnion, global),
-					    module_globals.elts[global->instructions[0].data.get_global.globalidx].symidx);
+					    offsetof(struct GlobalInit, init) +
+					    offsetof(union GlobalInitUnion, parent),
+					    module_globals.elts[global->instructions[0].data.get_global.globalidx].init_symidx);
 	}
 
 
@@ -927,7 +1043,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 					    offset +
 					    offsetof(struct ElementInst, offset) +
 					    offsetof(union ElementInstUnion, global),
-					    module_globals.elts[elt_sec->instructions[0].data.get_global.globalidx].symidx);
+					    module_globals.elts[elt_sec->instructions[0].data.get_global.globalidx].init_symidx);
 	}
 
 	for (i = 0; i < module->data_section.n_datas; ++i) {
@@ -941,7 +1057,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 					    offset +
 					    offsetof(struct DataInst, offset) +
 					    offsetof(union DataInstUnion, global),
-					    module_globals.elts[data_sec->instructions[0].data.get_global.globalidx].symidx);
+					    module_globals.elts[data_sec->instructions[0].data.get_global.globalidx].init_symidx);
 	}
 
 	/* add startfunc reference */
@@ -968,33 +1084,22 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 			struct MemoryReferenceElt *elt =
 				&memrefs->elts[j];
 			size_t symidx;
-			size_t addend;
 
 			switch (elt->type) {
 			case MEMREF_TYPE:
 				symidx = type_inst_start + elt->idx;
-				addend = 0;
 				break;
 			case MEMREF_FUNC:
 				symidx = module_funcs.elts[elt->idx].symidx;
-				addend = (offsetof(struct WasmInst, u) +
-					  offsetof(union WasmInstUnion, func));
 				break;
 			case MEMREF_TABLE:
 				symidx = module_tables.elts[elt->idx].symidx;
-				addend = (offsetof(struct WasmInst, u) +
-					  offsetof(union WasmInstUnion, table));
 				break;
 			case MEMREF_MEM:
 				symidx = module_mems.elts[elt->idx].symidx;
-				addend = (offsetof(struct WasmInst, u) +
-					  offsetof(union WasmInstUnion, mem));
 				break;
 			case MEMREF_GLOBAL:
 				symidx = module_globals.elts[elt->idx].symidx;
-				addend = (offsetof(struct WasmInst, u) +
-					  offsetof(union WasmInstUnion, global) +
-					  offsetof(struct StaticGlobalInst, global));
 				break;
 			case MEMREF_RESOLVE_INDIRECT_CALL:
 				symidx = resolve_indirect_call_symbol;
@@ -1004,7 +1109,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 			}
 
 			ADD_FUNC_PTR_RELOCATION_RAW(offset + elt->code_offset,
-						    symidx, addend);
+						    symidx, 0);
 		}
 	}
 
@@ -1015,19 +1120,24 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		size_t sidx;
 		size_t string_offset;
 		int ret;
+		char *type_string;
 
 		switch (export->idx_type) {
 		case IMPORT_DESC_TYPE_FUNC:
 			sidx = module_funcs.elts[export->idx].symidx;
+			type_string = "func";
 			break;
 		case IMPORT_DESC_TYPE_TABLE:
 			sidx = module_tables.elts[export->idx].symidx;
+			type_string = "table";
 			break;
 		case IMPORT_DESC_TYPE_MEM:
 			sidx = module_mems.elts[export->idx].symidx;
+			type_string = "mem";
 			break;
 		case IMPORT_DESC_TYPE_GLOBAL:
 			sidx = module_globals.elts[export->idx].symidx;
+			type_string = "global";
 			break;
 		default:
 			assert(0);
@@ -1035,7 +1145,8 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		}
 
 		string_offset = strtab->n_elts;
-		ret = snprintf(buf, sizeof(buf), "%s_%s", module_name, export->name);
+		ret = snprintf(buf, sizeof(buf), "%s__%s__%s",
+			       module_name, export->name, type_string);
 		if (!output_buf(strtab, buf, ret + 1))
 			goto error;
 
@@ -1048,6 +1159,26 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 				symbol->st_value,
 				symbol->st_size))
 			goto error;
+
+		/* also export global inits */
+		if (export->idx_type == IMPORT_DESC_TYPE_GLOBAL) {
+			string_offset = strtab->n_elts;
+			ret = snprintf(buf, sizeof(buf), "%s__%s__global_init",
+				       module_name, export->name);
+			if (!output_buf(strtab, buf, ret + 1))
+				goto error;
+
+			sidx = module_globals.elts[export->idx].init_symidx;
+			symbol = &symbols->elts[sidx];
+			if (!add_symbol(symbols, string_offset,
+					ELF64_ST_TYPE(symbol->st_info),
+					STB_GLOBAL,
+					symbol->st_other,
+					symbol->st_shndx,
+					symbol->st_value,
+					symbol->st_size))
+				goto error;
+		}
 	}
 
 	/* align to 8 */

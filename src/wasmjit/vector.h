@@ -30,6 +30,12 @@
 
 int wasmjit_vector_set_size(void *, size_t *, size_t, size_t);
 
+#define DEFINE_ANON_VECTOR(type) \
+	struct {		 \
+		size_t n_elts;	 \
+		type *elts;	 \
+	}
+
 #define VECTOR_GROW(sstack, _n_elts)					\
 	wasmjit_vector_set_size(&(sstack)->elts,			\
 				&(sstack)->n_elts,			\

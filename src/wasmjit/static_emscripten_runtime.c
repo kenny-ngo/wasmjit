@@ -37,29 +37,19 @@
 
 struct FuncInst *table_buffer[10];
 
-struct WasmInst WASM_SYMBOL(env, table) = {
-	.type = IMPORT_DESC_TYPE_TABLE,
-	.u = {
-		.table = {
-			.data = table_buffer,
-			.elemtype = ELEMTYPE_ANYFUNC,
-			.length = sizeof(table_buffer) / sizeof(table_buffer[0]),
-			.max = sizeof(table_buffer) / sizeof(table_buffer[0]),
-		},
-	},
+struct TableInst WASM_TABLE_SYMBOL(env, table) = {
+	.data = table_buffer,
+	.elemtype = ELEMTYPE_ANYFUNC,
+	.length = sizeof(table_buffer) / sizeof(table_buffer[0]),
+	.max = sizeof(table_buffer) / sizeof(table_buffer[0]),
 };
 
 char mem_buffer[256 * WASM_PAGE_SIZE];
 
-struct WasmInst WASM_SYMBOL(env, memory) = {
-	.type = IMPORT_DESC_TYPE_MEM,
-	.u = {
-		.mem = {
-			.data = mem_buffer,
-			.size = sizeof(mem_buffer),
-			.max = sizeof(mem_buffer),
-		},
-	},
+struct MemInst WASM_MEMORY_SYMBOL(env, memory) = {
+	.data = mem_buffer,
+	.size = sizeof(mem_buffer),
+	.max = sizeof(mem_buffer),
 };
 
 enum {
@@ -104,16 +94,15 @@ DEFINE_EMSCRIPTEN_FUNCTION(___unlock, VALTYPE_NULL, VALTYPE_I32);
 DEFINE_EMSCRIPTEN_FUNCTION(_emscripten_memcpy_big, VALTYPE_I32, VALTYPE_I32, VALTYPE_I32, VALTYPE_I32);
 
 char *wasmjit_emscripten_get_base_address(void) {
-	return WASM_SYMBOL(env, memory).u.mem.data;
+	return WASM_MEMORY_SYMBOL(env, memory).data;
 }
 
-extern struct WasmInst WASM_SYMBOL(env, _main);
-
+extern struct FuncInst WASM_FUNC_SYMBOL(env, _main);
 
 int main(int argc, char *argv[]) {
 	/* TODO: put argv into memory */
 	int (*_main)(int, char *[]);
 	/* TODO: type check _main */
-	_main = WASM_SYMBOL(env, _main).u.func.compiled_code;
+	_main = WASM_FUNC_SYMBOL(env, _main).compiled_code;
 	return _main(argc, argv);
 }

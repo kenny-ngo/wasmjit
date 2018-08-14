@@ -46,10 +46,10 @@ struct ModuleInst {
 		size_t n_elts;
 		struct FuncType *elts;
 	} types;
-	struct Addrs funcaddrs;
-	struct Addrs tableaddrs;
-	struct Addrs memaddrs;
-	struct Addrs globaladdrs;
+	DEFINE_ANON_VECTOR(struct FuncInst *) funcs;
+	DEFINE_ANON_VECTOR(struct TableInst *) tables;
+	DEFINE_ANON_VECTOR(struct MemInst *) mems;
+	DEFINE_ANON_VECTOR(struct GlobalInst *) globals;
 };
 
 DECLARE_VECTOR_GROW(func_types, struct FuncTypeVector);
