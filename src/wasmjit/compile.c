@@ -2105,10 +2105,10 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 	}
 
 	/* output epilogue */
+	assert(sstack.n_elts == FUNC_TYPE_N_OUTPUTS(type));
 
 	if (FUNC_TYPE_N_OUTPUTS(type)) {
 		assert(FUNC_TYPE_N_OUTPUTS(type) == 1);
-		assert(sstack.n_elts == 1);
 		assert(peek_stack(&sstack) == FUNC_TYPE_OUTPUT_TYPES(type)[0]);
 		pop_stack(&sstack);
 		/* pop %rax */
