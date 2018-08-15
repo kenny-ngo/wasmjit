@@ -68,7 +68,7 @@ static void encode_le_uint64_t(uint64_t val, char *buf)
 	memcpy(buf, &le_val, sizeof(le_val));
 }
 
-__attribute__ ((unused))
+__attribute__ ((unused, malloc))
 static void *wasmjit_alloc_vector(size_t n_elts, size_t elt_size, size_t *alloced) {
 	size_t size;
 	if (__builtin_umull_overflow(n_elts, elt_size, &size)) {
@@ -81,7 +81,7 @@ static void *wasmjit_alloc_vector(size_t n_elts, size_t elt_size, size_t *alloce
 	return malloc(size);
 }
 
-__attribute__ ((unused))
+__attribute__ ((unused, malloc))
 static void *wasmjit_copy_buf(void *buf, size_t n_elts, size_t elt_size)
 {
 	void *newbuf;
