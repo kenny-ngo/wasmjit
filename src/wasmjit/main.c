@@ -29,7 +29,7 @@
 #include <wasmjit/runtime.h>
 #include <wasmjit/instantiate.h>
 #include <wasmjit/execute.h>
-#include <wasmjit/emscripten_runtime.h>
+#include <wasmjit/dynamic_emscripten_runtime.h>
 #include <wasmjit/elf_relocatable.h>
 
 #include <assert.h>
@@ -49,12 +49,16 @@ int main(int argc, char *argv[])
 	struct ParseState pstate;
 	struct Module module;
 	//struct Store store;
-	int dump_module, opt;
+	int dump_module, create_relocatable, opt;
 	//char error_buffer[0x1000];
 
 	dump_module =  0;
-	while ((opt = getopt(argc, argv, "d")) != -1) {
+	create_relocatable =  0;
+	while ((opt = getopt(argc, argv, "do")) != -1) {
 		switch (opt) {
+		case 'o':
+			create_relocatable = 1;
+			break;
 		case 'd':
 			dump_module = 1;
 			break;
@@ -135,29 +139,35 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	{
+	if (create_relocatable) {
 		void *a_out;
 		size_t size;
 
 		a_out = wasmjit_output_elf_relocatable("env", &module, &size);
 		write(1, a_out, size);
+
+		return 0;
 	}
 
-	return 0;
+	{
+		struct NamedModule *modules;
+		size_t n_modules, i;
 
-#if 0
-	/* initialize store */
-	memset(&store, 0, sizeof(store));
+		modules = wasmjit_instantiate_emscripten_runtime(&n_modules);
 
-	if (!wasmjit_add_emscripten_runtime(&store))
-		return -1;
+		if (!modules)
+			return -1;
 
-	if (!wasmjit_instantiate("env", &module, &store, error_buffer, sizeof(error_buffer))) {
-		printf("Error instantiating: %s\n", error_buffer);
-		return -1;
+		for (i = 0; i < n_modules; ++i) {
+			size_t j;
+			printf("module: %s\n", modules[i].name);
+			for (j = 0; j < modules[i].module->exports.n_elts; ++j) {
+				printf("  export %s: %s\n",
+				       wasmjit_desc_repr(modules[i].module->exports.elts[j].type),
+				       modules[i].module->exports.elts[j].name);
+			}
+		}
+
+		return 0;
 	}
-
-	/* go to entry point */
-	return wasmjit_execute(&store, optind + 1, &argv[optind + 1]);
-#endif
 }

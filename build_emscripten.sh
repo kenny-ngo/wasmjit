@@ -6,7 +6,7 @@ make clean
 
 make wasmjit
 
-./wasmjit "$1" > "$1.o"
+./wasmjit -o "$1" > "$1.o"
 
 SUPPORT="static_runtime emscripten_runtime_posix runtime vector static_emscripten_runtime"
 SUPPORT_FILES=""

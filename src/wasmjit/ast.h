@@ -257,6 +257,25 @@ enum {
 	IMPORT_DESC_TYPE_LAST,
 };
 
+
+__attribute__ ((unused))
+static const char *wasmjit_desc_repr(wasmjit_desc_t desc)
+{
+	switch (desc) {
+	case IMPORT_DESC_TYPE_FUNC:
+		return "func";
+	case IMPORT_DESC_TYPE_TABLE:
+		return "table";
+	case IMPORT_DESC_TYPE_MEM:
+		return "mem";
+	case IMPORT_DESC_TYPE_GLOBAL:
+		return "global";
+	default:
+		assert(0);
+		return NULL;
+	}
+}
+
 enum {
 	ELEMTYPE_ANYFUNC = 0x70,
 };
