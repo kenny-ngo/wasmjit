@@ -436,6 +436,10 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			/* jmp after_else_offset */
 			OUTS("\xe9\x90\x90\x90\x90");
 		}
+		else {
+			/* appease gcc */
+			jump_to_after_else_offset = 0;
+		}
 
 		/* fix up jump_to_else_offset */
 		jump_to_else_offset = output->n_elts - jump_to_else_offset;
@@ -506,6 +510,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		}
 		else {
 			extra = &instruction->data.br;;
+			/* appease gcc */
+			je_offset = 0;
 		}
 
 		if (!emit_br_code(output, sstack, branches, extra->labelidx))
@@ -1593,6 +1599,10 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		case OPCODE_I64_REM_S:
 		case OPCODE_I64_REM_U:
 			stack_type = STACK_I64;
+			break;
+		default:
+			assert(0);
+			stack_type = 0;
 			break;
 		}
 

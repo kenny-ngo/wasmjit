@@ -541,7 +541,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		ADD_DATA_SYMBOL_STR(string_offset,			\
 				    module_ ## _name .n_elts * sizeof(_type)); \
 		for (i = 0; i < module_ ## _name .n_elts; ++i) {	\
-			_type ref;					\
+			_type ref = NULL;				\
 			OUT(&ref, sizeof(ref));				\
 		}							\
 	}								\
