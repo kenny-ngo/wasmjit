@@ -1,4 +1,4 @@
-#include <wasmjit/runtime.h>
+/* -*-mode:c; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*- */
 
 /*
   Copyright (c) 2018 Rian Hunter
@@ -22,131 +22,208 @@
   SOFTWARE.
  */
 
-wasmjit_tls_key_t baseaddr_key;
+#include <wasmjit/runtime.h>
+#include <wasmjit/emscripten_runtime.h>
+#include <wasmjit/util.h>
 
-__attribute__((constructor))
-static void init_baseaddr_key(void)
+#include <math.h>
+#include <stdlib.h>
+
+void wasmjit_free_module_inst(struct ModuleInst *module)
 {
-	if (!wasmjit_init_tls_key(&baseaddr_key, NULL))
-		abort();
+	size_t i;
+	for (i = 0; i < module->funcs.n_elts; ++i) {
+		free(module->funcs.elts[i]);
+	}
+	for (i = 0; i < module->tables.n_elts; ++i) {
+		free(module->tables.elts[i]->data);
+		free(module->tables.elts[i]);
+	}
+	for (i = 0; i < module->mems.n_elts; ++i) {
+		free(module->mems.elts[i]->data);
+		free(module->mems.elts[i]);
+	}
+	for (i = 0; i < module->globals.n_elts; ++i) {
+		free(module->globals.elts[i]);
+	}
+	free(module);
 }
 
-static void *wasmjit_get_base_address(void)
+struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t *amt)
 {
-	void *addr;
-	if (!wasmjit_get_tls_key(baseaddr_key, &addr))
-		return NULL;
-	return addr;
-}
+	struct {
+		size_t n_elts;
+		struct NamedModule *elts;
+	} modules = {0, NULL};
+	struct FuncInst *tmp_func = NULL;
+	struct FuncInst **tmp_table_buf = NULL;
+	struct TableInst *tmp_table = NULL;
+	char *tmp_mem_buf = NULL;
+	struct MemInst *tmp_mem = NULL;
+	struct GlobalInst *tmp_global = NULL;
+	struct ModuleInst *module = NULL;
+	struct NamedModule *ret;
 
-static int _wasmjit_set_base_address(void *addr)
-{
-	return wasmjit_set_tls_key(baseaddr_key, addr);
-}
+	/* TODO: add exports */
 
-int wasmjit_add_emscripten_runtime(struct Store *store)
-{
-	wasmjit_addr_t memaddr;
-	uint32_t TOTAL_STACK = 5242880;
-	uint32_t STACK_ALIGN = 16;
-	uint32_t GLOBAL_BASE = 1024;
-	uint32_t STATIC_BASE = GLOBAL_BASE;
-	uint32_t STATICTOP = STATIC_BASE + 5472, tmp;
-#define staticAlloc(s) \
-	(tmp = STATICTOP, \
-	 STATICTOP = ((STATICTOP + (s) + 15) & ((uint32_t) -16)), \
-	 tmp)
-	uint32_t tempDoublePtr = STATICTOP; STATICTOP += 16;
-	uint32_t DYNAMICTOP_PTR = staticAlloc(4);
-	uint32_t STACKTOP = alignMemory(STATICTOP, STACK_ALIGN);
-	uint32_t STACK_BASE = STACKTOP;
-	uint32_t STACK_MAX = STACK_BASE + TOTAL_STACK;
-
-	assert(tempDoublePtr % 8 == 0);
-
-	memaddr = wasmjit_import_memory(store, "env", "memory",
-					256 * WASM_PAGE_SIZE, 256 * WASM_PAGE_SIZE);
-	if (memaddr == INVALID_ADDR)
-		goto error;
-	_wasmjit_set_base_address(store->mems.elts[memaddr].data);
-
-	if (!wasmjit_import_table(store, "env", "table",
-				  ELEMTYPE_ANYFUNC,
-				  10, 10))
-		goto error;
-
-#define ADD_I32_GLOBAL(ns, s, v, m)				\
-	do {							\
-		struct Value value;				\
-		value.type = VALTYPE_I32;			\
-		value.data.i32 = v;				\
-		if (!wasmjit_import_global(store, ns, s,	\
-					   value, m))		\
-			goto error;				\
-	}							\
+#define LVECTOR_GROW(sstack, n_elts)		      \
+	do {					      \
+		if (!VECTOR_GROW((sstack), (n_elts))) \
+			goto error;		      \
+	}					      \
 	while (0)
 
-#define ADD_F64_GLOBAL(ns, s, v, m)				\
-	do {							\
-		struct Value value;				\
-		value.type = VALTYPE_F64;			\
-		value.data.f64 = v;				\
-		if (!wasmjit_import_global(store, ns, s,	\
-					   value, m))		\
+#define START_MODULE()						\
+	{							\
+		module = calloc(1, sizeof(struct ModuleInst));	\
+		if (!module)					\
 			goto error;				\
-	}							\
-	while (0)
+	}
 
-	ADD_I32_GLOBAL("env", "memoryBase", STATIC_BASE, 0);
-	ADD_I32_GLOBAL("env", "tableBase", 0, 0);
-	ADD_I32_GLOBAL("env", "DYNAMICTOP_PTR", DYNAMICTOP_PTR, 0);
-	ADD_I32_GLOBAL("env", "tempDoublePtr", tempDoublePtr, 0);
-	ADD_I32_GLOBAL("env", "ABORT", 0, 0);
-	ADD_I32_GLOBAL("env", "STACKTOP", STACKTOP, 0);
-	ADD_I32_GLOBAL("env", "STACK_MAX", STACK_MAX, 0);
-	ADD_F64_GLOBAL("global", "NaN", NAN, 0);
-	ADD_F64_GLOBAL("global", "Infinity", INFINITY, 0);
+#define STR(x) #x
+#define XSTR(x) STR(x)
 
-#undef ADD_I32_GLOBAL
+#define END_MODULE()							\
+	{								\
+		LVECTOR_GROW(&modules, 1);				\
+		modules.elts[modules.n_elts - 1].name = strdup(XSTR(CURRENT_MODULE)); \
+		modules.elts[modules.n_elts - 1].module = module;	\
+		module = NULL;						\
+	}
 
-#define ADD_FUNCTION(m, fname, its, ots)				\
-	do {								\
-		unsigned input_types[] = its;				\
-		unsigned output_types[] = ots;				\
-		if (!wasmjit_import_function(store,			\
-					     m, #fname,			\
-					     &fname,			\
-					     sizeof(input_types) / sizeof(input_types[0]), \
-					     input_types,		\
-					     sizeof(output_types) / sizeof(output_types[0]), \
-					     output_types))		\
+#define START_TABLE_DEFS()
+#define END_TABLE_DEFS()
+#define START_MEMORY_DEFS()
+#define END_MEMORY_DEFS()
+#define START_GLOBAL_DEFS()
+#define END_GLOBAL_DEFS()
+#define START_FUNCTION_DEFS()
+#define END_FUNCTION_DEFS()
+
+#define DEFINE_WASM_FUNCTION(_name, _fptr, _output, ...)	  \
+	{							  \
+		wasmjit_valtype_t inputs[] = { __VA_ARGS__ };		\
+		tmp_func = calloc(1, sizeof(struct FuncInst));		\
+		if (!tmp_func)						\
 			goto error;					\
-	}								\
-	while (0)
+		tmp_func->module_inst = module;				\
+		tmp_func->host_function = _fptr;			\
+		tmp_func->type.n_inputs = ARRAY_LEN(inputs);		\
+		memcpy(tmp_func->type.input_types, inputs, ARRAY_LEN(inputs)); \
+		tmp_func->type.output_type = _output;			\
+		LVECTOR_GROW(&module->funcs, 1);			\
+		module->funcs.elts[module->funcs.n_elts - 1] = tmp_func; \
+		tmp_func = NULL;					\
+									\
+		LVECTOR_GROW(&module->exports, 1);			\
+		module->exports.elts[module->exports.n_elts - 1].name = strdup(#_name); \
+		module->exports.elts[module->exports.n_elts - 1].type = IMPORT_DESC_TYPE_FUNC; \
+		module->exports.elts[module->exports.n_elts - 1].value.func = module->funcs.elts[module->funcs.n_elts - 1]; \
+	}
 
-#define SEP ,
+#define DEFINE_WASM_TABLE(_name, _elemtype, _min, _max)		\
+	{								\
+		tmp_table_buf = calloc(_min, sizeof(tmp_table_buf[0]));	\
+		if (!tmp_table_buf)					\
+			goto error;					\
+		tmp_table = calloc(1, sizeof(struct TableInst));	\
+		if (!tmp_table)						\
+			goto error;					\
+		tmp_table->data = tmp_table_buf;			\
+		tmp_table_buf = NULL;					\
+		tmp_table->elemtype = (_elemtype);			\
+		tmp_table->length = (_min);				\
+		tmp_table->max = (_max);				\
+		LVECTOR_GROW(&module->tables, 1);			\
+		module->tables.elts[module->tables.n_elts - 1] = tmp_table; \
+		tmp_table = NULL;					\
+									\
+		LVECTOR_GROW(&module->exports, 1);			\
+		module->exports.elts[module->exports.n_elts - 1].name = strdup(#_name); \
+		module->exports.elts[module->exports.n_elts - 1].type = IMPORT_DESC_TYPE_TABLE; \
+		module->exports.elts[module->exports.n_elts - 1].value.table = module->tables.elts[module->tables.n_elts - 1]; \
+	}
 
-	ADD_FUNCTION("env", enlargeMemory, {}, {VALTYPE_I32});
-	ADD_FUNCTION("env", getTotalMemory, {}, {VALTYPE_I32});
-	ADD_FUNCTION("env", abortOnCannotGrowMemory, {}, {VALTYPE_I32});
-	ADD_FUNCTION("env", abortStackOverflow, {VALTYPE_I32}, {});
-	ADD_FUNCTION("env", nullFunc_ii, {VALTYPE_I32}, {});
-	ADD_FUNCTION("env", nullFunc_iiii, {VALTYPE_I32}, {});
-	ADD_FUNCTION("env", ___lock, {VALTYPE_I32}, {});
-	ADD_FUNCTION("env", ___setErrNo, {VALTYPE_I32}, {});
-	ADD_FUNCTION("env", ___syscall140, {VALTYPE_I32 SEP VALTYPE_I32}, {VALTYPE_I32});
-	ADD_FUNCTION("env", ___syscall146, {VALTYPE_I32 SEP VALTYPE_I32}, {VALTYPE_I32});
-	ADD_FUNCTION("env", ___syscall54, {VALTYPE_I32 SEP VALTYPE_I32}, {VALTYPE_I32});
-	ADD_FUNCTION("env", ___syscall6, {VALTYPE_I32 SEP VALTYPE_I32}, {VALTYPE_I32});
-	ADD_FUNCTION("env", ___unlock, {VALTYPE_I32}, {});
-	ADD_FUNCTION("env", _emscripten_memcpy_big, {VALTYPE_I32 SEP VALTYPE_I32 SEP VALTYPE_I32}, {VALTYPE_I32});
+#define DEFINE_WASM_MEMORY(_name, _min, _max)	\
+	{						\
+		tmp_mem_buf = calloc((_min) * WASM_PAGE_SIZE, 1);	\
+		if (!tmp_mem_buf)				\
+			goto error;				\
+		tmp_mem = calloc(1, sizeof(struct MemInst));	\
+		tmp_mem->data = tmp_mem_buf;			\
+		tmp_mem_buf = NULL;				\
+		tmp_mem->size = (_min) * WASM_PAGE_SIZE;	\
+		tmp_mem->max = (_max) * WASM_PAGE_SIZE;		\
+		LVECTOR_GROW(&module->mems, 1);			\
+		module->mems.elts[module->mems.n_elts - 1] = tmp_mem; \
+		tmp_mem = NULL;					\
+									\
+		LVECTOR_GROW(&module->exports, 1);			\
+		module->exports.elts[module->exports.n_elts - 1].name = strdup(#_name); \
+		module->exports.elts[module->exports.n_elts - 1].type = IMPORT_DESC_TYPE_MEM; \
+		module->exports.elts[module->exports.n_elts - 1].value.mem = module->mems.elts[module->mems.n_elts - 1]; \
+	}
 
-#undef SEP
-#undef ADD_FUNCTION
+#define DEFINE_WASM_GLOBAL(_name, _init, _type, _member, _mut)	\
+	{								\
+		tmp_global = calloc(1, sizeof(struct GlobalInst));	\
+		if (!tmp_global)					\
+			goto error;					\
+		tmp_global->value.type = (_type);			\
+		tmp_global->value.data._member = (_init);		\
+		tmp_global->mut = (_mut);				\
+		LVECTOR_GROW(&module->globals, 1);			\
+		module->globals.elts[module->globals.n_elts - 1] = tmp_global; \
+		tmp_global = NULL;					\
+									\
+		LVECTOR_GROW(&module->exports, 1);			\
+		module->exports.elts[module->exports.n_elts - 1].name = strdup(#_name); \
+		module->exports.elts[module->exports.n_elts - 1].type = IMPORT_DESC_TYPE_GLOBAL; \
+		module->exports.elts[module->exports.n_elts - 1].value.global = module->globals.elts[module->globals.n_elts - 1]; \
+	}
 
-	return 1;
- error:
-	/* TODO: handle cleanup */
-	assert(0);
-	return 0;
+#include <wasmjit/emscripten_runtime_def.h>
+
+	if (0) {
+	error:
+		ret = NULL;
+
+		if (modules.elts) {
+			size_t i;
+			for (i = 0; i < modules.n_elts; i++) {
+				struct NamedModule *nm = &modules.elts[i];
+				free(nm->name);
+				wasmjit_free_module_inst(nm->module);
+			}
+			free(modules.elts);
+		}
+	}
+	else {
+		ret = modules.elts;
+		if (amt) {
+			*amt = modules.n_elts;
+		}
+	}
+
+	if (module) {
+		wasmjit_free_module_inst(module);
+	}
+	if (tmp_func)
+		free(tmp_func);
+	if (tmp_table_buf)
+		free(tmp_table_buf);
+	if (tmp_table) {
+		free(tmp_table->data);
+		free(tmp_table);
+	}
+	if (tmp_mem_buf)
+		free(tmp_mem_buf);
+	if (tmp_mem) {
+		free(tmp_mem->data);
+		free(tmp_mem);
+	}
+	if (tmp_global)
+		free(tmp_global);
+
+	return ret;
 }

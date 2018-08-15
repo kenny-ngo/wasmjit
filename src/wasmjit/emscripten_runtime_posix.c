@@ -44,48 +44,59 @@ static void my_abort(const char *msg)
 	abort();
 }
 
-void wasmjit_emscripten_abortStackOverflow(uint32_t allocSize)
+char *wasmjit_emscripten_get_base_address(struct FuncInst *funcinst) {
+	return funcinst->module_inst->mems.elts[0]->data;
+}
+
+void wasmjit_emscripten_abortStackOverflow(uint32_t allocSize, struct FuncInst *funcinst)
 {
+	(void)funcinst;
 	(void)allocSize;
 	my_abort("Stack overflow!");
 }
 
-uint32_t wasmjit_emscripten_abortOnCannotGrowMemory()
+uint32_t wasmjit_emscripten_abortOnCannotGrowMemory(struct FuncInst *funcinst)
 {
+	(void)funcinst;
 	my_abort("Cannot enlarge memory arrays.");
 	return 0;
 }
 
-uint32_t wasmjit_emscripten_enlargeMemory()
+uint32_t wasmjit_emscripten_enlargeMemory(struct FuncInst *funcinst)
 {
-	wasmjit_emscripten_abortOnCannotGrowMemory();
+	wasmjit_emscripten_abortOnCannotGrowMemory(funcinst);
 	return 0;
 }
 
-uint32_t wasmjit_emscripten_getTotalMemory()
+uint32_t wasmjit_emscripten_getTotalMemory(struct FuncInst *funcinst)
 {
+	(void)funcinst;
 	return WASMJIT_EMSCRIPTEN_TOTAL_MEMORY;
 }
 
-void wasmjit_emscripten_nullFunc_ii(uint32_t x)
+void wasmjit_emscripten_nullFunc_ii(uint32_t x, struct FuncInst *funcinst)
 {
+	(void)funcinst;
 	(void)x;
 	my_abort("Invalid function pointer called with signature 'ii'. Perhaps this is an invalid value (e.g. caused by calling a virtual method on a NULL pointer)? Or calling a function with an incorrect type, which will fail? (it is worth building your source files with -Werror (warnings are errors), as warnings can indicate undefined behavior which can cause this)");
 }
 
-void wasmjit_emscripten_nullFunc_iiii(uint32_t x)
+void wasmjit_emscripten_nullFunc_iiii(uint32_t x, struct FuncInst *funcinst)
 {
+	(void)funcinst;
 	(void)x;
 	my_abort("Invalid function pointer called with signature 'iiii'. Perhaps this is an invalid value (e.g. caused by calling a virtual method on a NULL pointer)? Or calling a function with an incorrect type, which will fail? (it is worth building your source files with -Werror (warnings are errors), as warnings can indicate undefined behavior which can cause this)");
 }
 
-void wasmjit_emscripten____lock(uint32_t x)
+void wasmjit_emscripten____lock(uint32_t x, struct FuncInst *funcinst)
 {
+	(void)funcinst;
 	(void)x;
 }
 
-void wasmjit_emscripten____setErrNo(uint32_t value)
+void wasmjit_emscripten____setErrNo(uint32_t value, struct FuncInst *funcinst)
 {
+	(void)funcinst;
 	(void)value;
 	// TODO: get errno location from memory
 	// struct Value value;
@@ -95,7 +106,7 @@ void wasmjit_emscripten____setErrNo(uint32_t value)
 }
 
 /*  _llseek */
-uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs)
+uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
 {
 	char *base;
 	struct {
@@ -107,7 +118,7 @@ uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs)
 	(void)which;
 	assert(which == 140);
 
-	base = wasmjit_emscripten_get_base_address();
+	base = wasmjit_emscripten_get_base_address(funcinst);
 
 	memcpy(&args, base + varargs, sizeof(args));
 	// emscripten off_t is 32-bits, offset_high is useless
@@ -127,8 +138,9 @@ uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs)
 }
 
 /* writev */
-uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs)
+uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
 {
+	(void)funcinst;
 	char *base;
 	struct {
 		uint32_t fd, iov, iovcnt;
@@ -140,7 +152,7 @@ uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs)
 
 	(void)which;
 	assert(which == 146);
-	base = wasmjit_emscripten_get_base_address();
+	base = wasmjit_emscripten_get_base_address(funcinst);
 
 	memcpy(&args, base + varargs, sizeof(args));
 
@@ -178,8 +190,9 @@ uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs)
 }
 
 /* ioctl */
-uint32_t wasmjit_emscripten____syscall54(uint32_t which, uint32_t varargs)
+uint32_t wasmjit_emscripten____syscall54(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
 {
+	(void)funcinst;
 	/* TODO: need to define non-no filesystem case */
 	assert(which == 54);
 	(void)which;
@@ -188,8 +201,9 @@ uint32_t wasmjit_emscripten____syscall54(uint32_t which, uint32_t varargs)
 }
 
 /* close */
-uint32_t wasmjit_emscripten____syscall6(uint32_t which, uint32_t varargs)
+uint32_t wasmjit_emscripten____syscall6(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
 {
+	(void)funcinst;
 	/* TODO: need to define non-no filesystem case */
 	char *base;
 	struct {
@@ -200,21 +214,22 @@ uint32_t wasmjit_emscripten____syscall6(uint32_t which, uint32_t varargs)
 	assert(which == 6);
 	(void)which;
 
-	base = wasmjit_emscripten_get_base_address();
+	base = wasmjit_emscripten_get_base_address(funcinst);
 
 	memcpy(&args, base + varargs, sizeof(args));
 	ret = close(args.fd);
 	return ret ? -1 : 0;
 }
 
-void wasmjit_emscripten____unlock(uint32_t x)
+void wasmjit_emscripten____unlock(uint32_t x, struct FuncInst *funcinst)
 {
+	(void)funcinst;
 	(void)x;
 }
 
-uint32_t wasmjit_emscripten__emscripten_memcpy_big(uint32_t dest, uint32_t src, uint32_t num)
+uint32_t wasmjit_emscripten__emscripten_memcpy_big(uint32_t dest, uint32_t src, uint32_t num, struct FuncInst *funcinst)
 {
-	char *base = wasmjit_emscripten_get_base_address();
+	char *base = wasmjit_emscripten_get_base_address(funcinst);
 	memcpy(dest + base, src + base, num);
 	return dest;
 }

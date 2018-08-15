@@ -104,4 +104,10 @@ DECLARE_VECTOR_GROW(buffer, struct SizedBuffer);
 int output_buf(struct SizedBuffer *sstack, const void *buf,
 	       size_t n_elts);
 
+#define ARRAY_LEN(arr) (sizeof(arr) / sizeof(arr[0]))
+#define NUMVALS(...)  (sizeof((int[]){__VA_ARGS__})/sizeof(int))
+
+#define CATAGAIN(a, b) a ## b
+#define CAT(a, b) CATAGAIN(a, b)
+
 #endif

@@ -229,6 +229,7 @@ enum {
 };
 
 typedef uint8_t wasmjit_valtype_t;
+typedef uint8_t wasmjit_desc_t;
 
 __attribute__ ((unused))
 static const char *wasmjit_valtype_repr(wasmjit_valtype_t valtype)

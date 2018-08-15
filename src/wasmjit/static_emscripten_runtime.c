@@ -24,78 +24,93 @@
 
 #include <wasmjit/ast.h>
 #include <wasmjit/static_runtime.h>
-
-#include <wasmjit/emscripten_runtime.h>
+#include <wasmjit/util.h>
 
 #include <math.h>
 
-#define staticAlloc(_top , s)                   \
-	(((_top) + (s) + 15) & ((uint32_t) -16))
+#include <wasmjit/emscripten_runtime.h>
 
-#define alignMemory(size, factor) \
-	(((size) % (factor)) ? ((size) - ((size) % (factor)) + (factor)) : (size))
+#define START_MODULE()				\
+	extern struct ModuleInst WASM_MODULE_SYMBOL(CURRENT_MODULE);
 
-struct FuncInst *table_buffer[10];
+#define END_MODULE()
+#define START_TABLE_DEFS()
+#define END_TABLE_DEFS()
+#define START_MEMORY_DEFS()
+#define END_MEMORY_DEFS()
+#define START_GLOBAL_DEFS()
+#define END_GLOBAL_DEFS()
+#define START_FUNCTION_DEFS()
+#define END_FUNCTION_DEFS()
 
-struct TableInst WASM_TABLE_SYMBOL(env, table) = {
-	.data = table_buffer,
-	.elemtype = ELEMTYPE_ANYFUNC,
-	.length = sizeof(table_buffer) / sizeof(table_buffer[0]),
-	.max = sizeof(table_buffer) / sizeof(table_buffer[0]),
-};
+#include <wasmjit/emscripten_runtime_def.h>
 
-char mem_buffer[256 * WASM_PAGE_SIZE];
+#undef START_MODULE
+#undef END_MODULE
+#undef DEFINE_WASM_GLOBAL
+#undef DEFINE_WASM_FUNCTION
+#undef DEFINE_WASM_TABLE
+#undef DEFINE_WASM_MEMORY
+#undef START_TABLE_DEFS
+#undef END_TABLE_DEFS
+#undef START_MEMORY_DEFS
+#undef END_MEMORY_DEFS
+#undef START_GLOBAL_DEFS
+#undef END_GLOBAL_DEFS
+#undef START_FUNCTION_DEFS
+#undef END_FUNCTION_DEFS
 
-struct MemInst WASM_MEMORY_SYMBOL(env, memory) = {
-	.data = mem_buffer,
-	.size = sizeof(mem_buffer),
-	.max = sizeof(mem_buffer),
-};
+#define START_MODULE()
 
-enum {
-	TOTAL_STACK = 5242880,
-	STACK_ALIGN = 16,
-	GLOBAL_BASE = 1024,
-	STATIC_BASE = GLOBAL_BASE,
-	STATICTOP = STATIC_BASE + 5472 - 16,
-	tempDoublePtr = staticAlloc(STATICTOP, 16),
-	DYNAMICTOP_PTR = staticAlloc(tempDoublePtr, 4),
-	STACKTOP = alignMemory(DYNAMICTOP_PTR, STACK_ALIGN),
-	STACK_BASE = STACKTOP,
-	STACK_MAX = STACK_BASE + TOTAL_STACK,
-};
+#define START_TABLE_DEFS(n)						\
+	static struct TableInst *CAT(CURRENT_MODULE, _tables)[] = {
+#define DEFINE_WASM_TABLE(_name, ...)			\
+	&WASM_TABLE_SYMBOL(CURRENT_MODULE, _name),
+#define END_TABLE_DEFS()			\
+	};
 
-DEFINE_WASM_I32_GLOBAL(env, memoryBase, STATIC_BASE, 0);
-DEFINE_WASM_I32_GLOBAL(env, tableBase, 0, 0);
-DEFINE_WASM_I32_GLOBAL(env, DYNAMICTOP_PTR, DYNAMICTOP_PTR, 0);
-DEFINE_WASM_I32_GLOBAL(env, tempDoublePtr, tempDoublePtr, 0);
-DEFINE_WASM_I32_GLOBAL(env, ABORT, 0, 0);
-DEFINE_WASM_I32_GLOBAL(env, STACKTOP, STACKTOP, 0);
-DEFINE_WASM_I32_GLOBAL(env, STACK_MAX, STACK_MAX, 0);
-DEFINE_WASM_F64_GLOBAL(global, NaN, NAN, 0);
-DEFINE_WASM_F64_GLOBAL(global, Infinity, INFINITY, 0);
+#define START_MEMORY_DEFS(n)					\
+	static struct MemInst *CAT(CURRENT_MODULE, _mems)[] = {
+#define DEFINE_WASM_MEMORY(_name, ...)			\
+	&WASM_MEMORY_SYMBOL(CURRENT_MODULE, _name),
+#define END_MEMORY_DEFS()			\
+	};
 
-#define DEFINE_EMSCRIPTEN_FUNCTION(_name, ...) \
-	DEFINE_WASM_FUNCTION(env, _name, &(wasmjit_emscripten_ ## _name), __VA_ARGS__)
+#define START_GLOBAL_DEFS(n)						\
+	static struct GlobalInst *CAT(CURRENT_MODULE,  _globals)[] = {
+#define DEFINE_WASM_GLOBAL(_name, ...)			\
+	&WASM_GLOBAL_SYMBOL(CURRENT_MODULE, _name),
+#define END_GLOBAL_DEFS()			\
+	};
 
-DEFINE_EMSCRIPTEN_FUNCTION(enlargeMemory, VALTYPE_I32);
-DEFINE_EMSCRIPTEN_FUNCTION(getTotalMemory, VALTYPE_I32);
-DEFINE_EMSCRIPTEN_FUNCTION(abortOnCannotGrowMemory, VALTYPE_I32);
-DEFINE_EMSCRIPTEN_FUNCTION(abortStackOverflow, VALTYPE_NULL, VALTYPE_I32);
-DEFINE_EMSCRIPTEN_FUNCTION(nullFunc_ii, VALTYPE_NULL, VALTYPE_I32);
-DEFINE_EMSCRIPTEN_FUNCTION(nullFunc_iiii, VALTYPE_NULL, VALTYPE_I32);
-DEFINE_EMSCRIPTEN_FUNCTION(___lock, VALTYPE_NULL, VALTYPE_I32);
-DEFINE_EMSCRIPTEN_FUNCTION(___setErrNo, VALTYPE_NULL, VALTYPE_I32);
-DEFINE_EMSCRIPTEN_FUNCTION(___syscall140, VALTYPE_I32, VALTYPE_I32, VALTYPE_I32);
-DEFINE_EMSCRIPTEN_FUNCTION(___syscall146, VALTYPE_I32, VALTYPE_I32, VALTYPE_I32);
-DEFINE_EMSCRIPTEN_FUNCTION(___syscall54, VALTYPE_I32, VALTYPE_I32, VALTYPE_I32);
-DEFINE_EMSCRIPTEN_FUNCTION(___syscall6, VALTYPE_I32, VALTYPE_I32, VALTYPE_I32);
-DEFINE_EMSCRIPTEN_FUNCTION(___unlock, VALTYPE_NULL, VALTYPE_I32);
-DEFINE_EMSCRIPTEN_FUNCTION(_emscripten_memcpy_big, VALTYPE_I32, VALTYPE_I32, VALTYPE_I32, VALTYPE_I32);
+#define START_FUNCTION_DEFS(n)					\
+	static struct FuncInst *CAT(CURRENT_MODULE,  _funcs)[] = {
+#define DEFINE_WASM_FUNCTION(_name, ...)		\
+	&WASM_FUNC_SYMBOL(CURRENT_MODULE, _name),
+#define END_FUNCTION_DEFS()			\
+		};
 
-char *wasmjit_emscripten_get_base_address(void) {
-	return WASM_MEMORY_SYMBOL(env, memory).data;
-}
+#define END_MODULE()							\
+	struct ModuleInst WASM_MODULE_SYMBOL(CURRENT_MODULE) = {	\
+		.funcs = {						\
+			.n_elts = ARRAY_LEN(CAT(CURRENT_MODULE, _funcs)), \
+			.elts = CAT(CURRENT_MODULE, _funcs),		\
+		},							\
+		.tables = {						\
+			.n_elts = ARRAY_LEN(CAT(CURRENT_MODULE, _tables)), \
+			.elts = CAT(CURRENT_MODULE, _tables),		\
+		},							\
+		.mems = {						\
+			.n_elts = ARRAY_LEN(CAT(CURRENT_MODULE, _mems)),	\
+			.elts = CAT(CURRENT_MODULE, _mems),		\
+		},							\
+		.globals = {						\
+			.n_elts = ARRAY_LEN(CAT(CURRENT_MODULE, _globals)), \
+			.elts = CAT(CURRENT_MODULE, _globals),		\
+		},							\
+	};
+
+#include <wasmjit/emscripten_runtime_def.h>
 
 extern struct FuncInst WASM_FUNC_SYMBOL(env, _main);
 

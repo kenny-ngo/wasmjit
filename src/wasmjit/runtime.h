@@ -31,6 +31,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+struct NamedModule {
+	char *name;
+	struct ModuleInst *module;
+};
+
 typedef size_t wasmjit_addr_t;
 #define INVALID_ADDR ((wasmjit_addr_t) -1)
 
@@ -41,6 +46,17 @@ struct Addrs {
 
 DECLARE_VECTOR_GROW(addrs, struct Addrs);
 
+struct Export {
+	char *name;
+	wasmjit_desc_t type;
+	union {
+		struct FuncInst *func;
+		struct TableInst *table;
+		struct MemInst *mem;
+		struct GlobalInst *global;
+	} value;
+};
+
 struct ModuleInst {
 	struct FuncTypeVector {
 		size_t n_elts;
@@ -50,6 +66,7 @@ struct ModuleInst {
 	DEFINE_ANON_VECTOR(struct TableInst *) tables;
 	DEFINE_ANON_VECTOR(struct MemInst *) mems;
 	DEFINE_ANON_VECTOR(struct GlobalInst *) globals;
+	DEFINE_ANON_VECTOR(struct Export) exports;
 };
 
 DECLARE_VECTOR_GROW(func_types, struct FuncTypeVector);
@@ -64,7 +81,7 @@ struct Value {
 	} data;
 };
 
-#define IS_HOST(funcinst) (!(funcinst)->module_inst)
+#define IS_HOST(funcinst) ((funcinst)->host_function)
 
 struct Store {
 	struct ModuleInstances {
@@ -91,7 +108,20 @@ struct Store {
 				uint32_t count;
 				uint8_t valtype;
 			} *locals;
+			/*
+			  the function signature of compiled_code
+			  pointers mirrors that of the WASM input
+			  types.
+			 */
 			void *compiled_code;
+			/*
+			   host_function pointers are like
+			   compiled_code pointers except their
+			   argument list is followed by a struct
+			   FuncInst *, the runtime is expected to be
+			   able to translate between the two ABIs
+			*/
+			void *host_function;
 			struct FuncType type;
 		} *elts;
 	} funcs;

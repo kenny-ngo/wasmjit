@@ -25,6 +25,8 @@
 #ifndef __WASMJIT__DYNAMIC_EMSCRIPTEN_RUNTIME_H__
 #define __WASMJIT__DYNAMIC_EMSCRIPTEN_RUNTIME_H__
 
-int wasmjit_add_emscripten_runtime(struct Store *store);
+#include <wasmjit/runtime.h>
+
+struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t *amt);
 
 #endif
