@@ -29,26 +29,6 @@
 #include <math.h>
 #include <stdlib.h>
 
-void wasmjit_free_module_inst(struct ModuleInst *module)
-{
-	size_t i;
-	for (i = 0; i < module->funcs.n_elts; ++i) {
-		free(module->funcs.elts[i]);
-	}
-	for (i = 0; i < module->tables.n_elts; ++i) {
-		free(module->tables.elts[i]->data);
-		free(module->tables.elts[i]);
-	}
-	for (i = 0; i < module->mems.n_elts; ++i) {
-		free(module->mems.elts[i]->data);
-		free(module->mems.elts[i]);
-	}
-	for (i = 0; i < module->globals.n_elts; ++i) {
-		free(module->globals.elts[i]);
-	}
-	free(module);
-}
-
 struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t *amt)
 {
 	struct {

@@ -27,6 +27,6 @@
 
 #include <wasmjit/runtime.h>
 
-int wasmjit_execute(const struct Store *store, int argc, char *argv[]);
+int wasmjit_invoke_function(struct FuncInst *funcinst, union ValueUnion *values);
 
 #endif

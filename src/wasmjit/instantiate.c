@@ -28,43 +28,55 @@
 #include <wasmjit/runtime.h>
 #include <wasmjit/compile.h>
 #include <wasmjit/util.h>
+#include <wasmjit/execute.h>
 
 #include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
 
-static struct Addrs *addrs_for_section(struct ModuleInst *module_inst, unsigned section) {
-	switch (section) {
-	case IMPORT_DESC_TYPE_FUNC: return &module_inst->funcaddrs;
-	case IMPORT_DESC_TYPE_TABLE: return &module_inst->tableaddrs;
-	case IMPORT_DESC_TYPE_MEM: return &module_inst->memaddrs;
-	case IMPORT_DESC_TYPE_GLOBAL: return &module_inst->globaladdrs;
-	default: assert(0); return NULL;
-	}
+/* platform code */
+
+#include <sys/mman.h>
+
+static void *map_code_segment(size_t code_size)
+{
+	void *newcode;
+	newcode = mmap(NULL, code_size, PROT_READ | PROT_WRITE,
+		       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (newcode == MAP_FAILED)
+		return NULL;
+	return newcode;
 }
 
-static int func_sig_repr(char *why, size_t why_size,
-			 size_t n_inputs, unsigned *input_types,
-			 size_t n_outputs, unsigned *output_types) {
+static int mark_code_segment_executable(void *code, size_t code_size)
+{
+	return !mprotect(code, code_size, PROT_READ | PROT_EXEC);
+}
+
+
+/* end platform code */
+
+static int func_sig_repr(char *why, size_t why_size, struct FuncType *type)
+{
 	int ret ;
 	size_t k;
 
 	ret = snprintf(why, why_size, "[");
-	for (k = 0; k < n_inputs; ++k) {
+	for (k = 0; k < type->n_inputs; ++k) {
 		ret += snprintf(why + ret, why_size - ret, "%s,",
-				wasmjit_valtype_repr(input_types[k]));
+				wasmjit_valtype_repr(type->input_types[k]));
 	}
 	ret += snprintf(why + ret, why_size - ret, "] -> [");
-	for (k = 0; k < n_outputs; ++k) {
+	for (k = 0; k < FUNC_TYPE_N_OUTPUTS(type); ++k) {
 		ret += snprintf(why + ret, why_size - ret, "%s,",
-				wasmjit_valtype_repr(output_types[k]));
+				wasmjit_valtype_repr(FUNC_TYPE_OUTPUT_IDX(type, k)));
 	}
 	ret += snprintf(why + ret, why_size - ret, "]");
 
 	return ret;
 }
 
-static int read_constant_expression(struct Store *store,
-				    struct ModuleInst *module_inst,
+static int read_constant_expression(struct ModuleInst *module_inst,
 				    unsigned valtype, struct Value *value,
 				    size_t n_instructions, struct Instr *instructions)
 {
@@ -72,10 +84,8 @@ static int read_constant_expression(struct Store *store,
 		goto error;
 
 	if (instructions[0].opcode == OPCODE_GET_GLOBAL) {
-		wasmjit_addr_t globaladdr =
-			module_inst->globaladdrs.elts[instructions[0].data.get_global.globalidx];
 		struct GlobalInst *global =
-			&store->globals.elts[globaladdr];
+			module_inst->globals.elts[instructions[0].data.get_global.globalidx];
 
 		if (global->mut)
 			goto error;
@@ -121,40 +131,101 @@ static int read_constant_expression(struct Store *store,
 	return 0;
 }
 
-int wasmjit_instantiate(const char *module_name,
-			const struct Module *module,
-			struct Store *store,
-			char *why, size_t why_size)
+static int fill_module_types(struct ModuleInst *module_inst,
+			     struct ModuleTypes *module_types)
 {
-	uint32_t i;
-	struct ModuleInst *module_inst;
-	struct Addrs *addrs;
-	size_t internal_func_idx;
+	size_t i;
 
-	if (!store_module_insts_grow(&store->modules, 1))
+	module_types->functypes =
+		calloc(module_inst->funcs.n_elts,
+		       sizeof(module_types->functypes[0]));
+	if (!module_types->functypes)
 		goto error;
 
-	module_inst = &store->modules.elts[store->modules.n_elts - 1];
+	module_types->tabletypes =
+		calloc(module_inst->tables.n_elts,
+		       sizeof(module_types->tabletypes[0]));
+	if (!module_types->tabletypes)
+		goto error;
 
-	memset(module_inst, 0, sizeof(*module_inst));
+	module_types->memorytypes =
+		calloc(module_inst->mems.n_elts,
+		       sizeof(module_types->memorytypes[0]));
+	if (!module_types->memorytypes)
+		goto error;
+
+	module_types->globaltypes =
+		calloc(module_inst->globals.n_elts,
+		       sizeof(module_types->globaltypes[0]));
+	if (!module_types->globaltypes)
+		goto error;
+
+
+	for (i = 0; i < module_inst->funcs.n_elts; ++i) {
+		module_types->functypes[i] = module_inst->funcs.elts[i]->type;
+	}
+
+	for (i = 0; i < module_inst->tables.n_elts; ++i) {
+		module_types->tabletypes[i].elemtype =
+			module_inst->tables.elts[i]->elemtype;
+		module_types->tabletypes[i].limits.min =
+			module_inst->tables.elts[i]->length;
+		module_types->tabletypes[i].limits.max =
+			module_inst->tables.elts[i]->max;
+	}
+
+	for (i = 0; i < module_inst->mems.n_elts; ++i) {
+		module_types->memorytypes[i].limits.min =
+			module_inst->mems.elts[i]->size / WASM_PAGE_SIZE;
+		module_types->memorytypes[i].limits.max =
+			module_inst->mems.elts[i]->max / WASM_PAGE_SIZE;
+	}
+
+	for (i = 0; i < module_inst->globals.n_elts; ++i) {
+		module_types->globaltypes[i].valtype =
+			module_inst->globals.elts[i]->value.type;
+		module_types->globaltypes[i].mut =
+			module_inst->globals.elts[i]->mut;
+	}
+
+	return 1;
+
+ error:
+	return 0;
+}
+
+struct ModuleInst *wasmjit_instantiate(const struct Module *module,
+				       size_t n_imports,
+				       const struct NamedModule *imports,
+				       char *why, size_t why_size)
+{
+	uint32_t i;
+	struct ModuleInst *module_inst = NULL;
+	size_t internal_func_idx;
+	struct ModuleTypes module_types;
+	struct FuncInst *tmp_func = NULL;
+	struct TableInst *tmp_table = NULL;
+	struct MemInst *tmp_mem = NULL;
+	struct GlobalInst *tmp_global = NULL;
+	void *unmapped = NULL, *mapped = NULL;
+	struct MemoryReferences memrefs = {0, NULL};
+	size_t code_size;
+
+	memset(&module_types, 0, sizeof(module_types));
+	module_inst = calloc(1, sizeof(*module_inst));
+
+#define LVECTOR_GROW(sstack, n_elts)		      \
+	do {					      \
+		if (!VECTOR_GROW((sstack), (n_elts))) \
+			goto error;		      \
+	}					      \
+	while (0)
 
 	for (i = 0; i < module->type_section.n_types; ++i) {
-		struct TypeSectionType *type;
-		struct FuncTypeVector *types;
-		struct FuncType *ft;
+		LVECTOR_GROW(&module_inst->types, 1);
 
-		type = &module->type_section.types[i];
-
-		types = &module_inst->types;
-		if (!func_types_grow(types, 1))
-			goto error;
-
-		ft = &types->elts[types->n_elts - 1];
-
-		if (!_wasmjit_create_func_type(ft,
-					       type->n_inputs, type->input_types,
-					       type->n_outputs, type->output_types))
-			goto error;
+		module_inst->types.elts[module_inst->types.n_elts - 1] =
+			module->type_section.types[i];
 	}
 
 	/* load imports */
@@ -162,25 +233,39 @@ int wasmjit_instantiate(const char *module_name,
 		size_t j;
 		struct ImportSectionImport *import =
 		    &module->import_section.imports[i];
+		struct ModuleInst *import_module = NULL;
 
-		/* look for import */
-		for (j = 0; j < store->names.n_elts; ++j) {
-			struct NamespaceEntry *entry = &store->names.elts[j];
-			if (strcmp(entry->module_name, import->module) ||
-			    strcmp(entry->name, import->name))
+
+		/* look for import module */
+		for (j = 0; j < n_imports; ++j) {
+			if (strcmp(imports[j].name, import->module))
+				continue;
+			import_module = imports[j].module;
+		}
+
+		if (!import_module) {
+			if (why)
+				snprintf(why, why_size,
+					 "Couldn't find module: %s", import->module);
+			goto error;
+		}
+
+		for (j = 0; j < import_module->exports.n_elts; ++j) {
+			struct Export *export = &import_module->exports.elts[j];
+
+			if (strcmp(export->name, import->name))
 				continue;
 
-			if (entry->type != import->desc_type) {
+			if (export->type != import->desc_type) {
 				/* bad import type */
 				if (why)
 					snprintf(why, why_size, "bad import type");
 				goto error;
 			}
 
-			switch (entry->type) {
+			switch (export->type) {
 			case IMPORT_DESC_TYPE_FUNC: {
-				assert(entry->addr < store->funcs.n_elts);
-				struct FuncInst *funcinst = &store->funcs.elts[entry->addr];
+				struct FuncInst *funcinst = export->value.func;
 				struct TypeSectionType *type = &module->type_section.types[import->desc.functypeidx];
 				if (!wasmjit_typecheck_func(type, funcinst)) {
 					int ret;
@@ -189,24 +274,21 @@ int wasmjit_instantiate(const char *module_name,
 						       import->module,
 						       import->name);
 					ret += func_sig_repr(why + ret, why_size - ret,
-							     funcinst->type.n_inputs,
-							     funcinst->type.input_types,
-							     funcinst->type.n_outputs,
-							     funcinst->type.output_types);
+							     &funcinst->type);
 					ret += snprintf(why + ret, why_size - ret,
 							" vs ");
 					ret += func_sig_repr(why + ret, why_size - ret,
-							     type->n_inputs,
-							     type->input_types,
-							     type->n_outputs,
-							     type->output_types);
+							     type);
 					goto error;
 				}
+
+				/* add funcinst to func table */
+				LVECTOR_GROW(&module_inst->funcs, 1);
+				module_inst->funcs.elts[module_inst->funcs.n_elts - 1] = funcinst;
 				break;
 			}
-			case IMPORT_DESC_TYPE_TABLE:
-				assert(entry->addr < store->tables.n_elts);
-				struct TableInst *tableinst = &store->tables.elts[entry->addr];
+			case IMPORT_DESC_TYPE_TABLE: {
+				struct TableInst *tableinst = export->value.table;
 
 				if (!wasmjit_typecheck_table(&import->desc.tabletype,
 							    tableinst)) {
@@ -214,7 +296,7 @@ int wasmjit_instantiate(const char *module_name,
 						snprintf(why, why_size,
 							 "Mismatched table import for import "
 							 "%s.%s: {%u, %zu,%zu} vs {%u, %" PRIu32 ",%" PRIu32 "}",
-							 entry->module_name, entry->name,
+							 import->module, import->name,
 							 tableinst->elemtype,
 							 tableinst->length,
 							 tableinst->max,
@@ -223,10 +305,15 @@ int wasmjit_instantiate(const char *module_name,
 							 import->desc.tabletype.limits.max);
 					goto error;
 				}
+
+				/* add tableinst to table table */
+				LVECTOR_GROW(&module_inst->tables, 1);
+				module_inst->tables.elts[module_inst->tables.n_elts - 1] = tableinst;
+
 				break;
+			}
 			case IMPORT_DESC_TYPE_MEM: {
-				assert(entry->addr < store->mems.n_elts);
-				struct MemInst *meminst = &store->mems.elts[entry->addr];
+				struct MemInst *meminst = export->value.mem;
 
 				if (!wasmjit_typecheck_memory(&import->desc.memtype,
 							      meminst)) {
@@ -234,18 +321,22 @@ int wasmjit_instantiate(const char *module_name,
 						snprintf(why, why_size,
 							 "Mismatched memory size for import "
 							 "%s.%s: {%zu,%zu} vs {%" PRIu32 ",%" PRIu32 "}",
-							 entry->module_name, entry->name,
+							 import->module, import->name,
 							 meminst->size / WASM_PAGE_SIZE,
 							 meminst->max / WASM_PAGE_SIZE,
 							 import->desc.memtype.limits.min,
 							 import->desc.memtype.limits.max);
 					goto error;
 				}
+
+				/* add meminst to mems table */
+				LVECTOR_GROW(&module_inst->mems, 1);
+				module_inst->mems.elts[module_inst->mems.n_elts - 1] = meminst;
+
 				break;
 			}
 			case IMPORT_DESC_TYPE_GLOBAL: {
-				assert(entry->addr < store->globals.n_elts);
-				struct GlobalInst *globalinst = &store->globals.elts[entry->addr];
+				struct GlobalInst *globalinst = export->value.global;
 
 				if (!wasmjit_typecheck_global(&import->desc.globaltype,
 							      globalinst)) {
@@ -253,14 +344,19 @@ int wasmjit_instantiate(const char *module_name,
 						snprintf(why, why_size,
 							 "Mismatched global for import "
 							 "%s.%s: %s%s vs %s%s",
-							 entry->module_name,
-							 entry->name,
+							 import->module,
+							 import->name,
 							 wasmjit_valtype_repr(globalinst->value.type),
 							 globalinst->mut ? " mut" : "",
 							 wasmjit_valtype_repr(import->desc.globaltype.valtype),
 							 import->desc.globaltype.mut ? " mut" : "");
 					goto error;
 				}
+
+				/* add globalinst to globals tables */
+				LVECTOR_GROW(&module_inst->globals, 1);
+				module_inst->globals.elts[module_inst->globals.n_elts - 1] = globalinst;
+
 				break;
 			}
 			default:
@@ -268,15 +364,10 @@ int wasmjit_instantiate(const char *module_name,
 				break;
 			}
 
-			addrs = addrs_for_section(module_inst, entry->type);
-
-			if (!addrs_grow(addrs, 1))
-				goto error;
-			addrs->elts[addrs->n_elts - 1] = entry->addr;
 			break;
 		}
 
-		if (j == store->names.n_elts) {
+		if (j == import_module->exports.n_elts) {
 			/* couldn't find import */
 			if (why)
 				switch (import->desc_type) {
@@ -289,10 +380,7 @@ int wasmjit_instantiate(const char *module_name,
 						       import->name);
 
 					func_sig_repr(why + ret, why_size - ret,
-						      type->n_inputs,
-						      type->input_types,
-						      type->n_outputs,
-						      type->output_types);
+						      type);
 
 					break;
 				}
@@ -326,58 +414,55 @@ int wasmjit_instantiate(const char *module_name,
 		}
 	}
 
-	internal_func_idx = module_inst->funcaddrs.n_elts;
+	internal_func_idx = module_inst->funcs.n_elts;
 	for (i = 0; i < module->function_section.n_typeidxs; ++i) {
-		struct TypeSectionType *type;
-		size_t funcaddr;
-
-		addrs = &module_inst->funcaddrs;
-
-		type =
-		    &module->type_section.types[module->
-						function_section.typeidxs[i]];
-		funcaddr = _wasmjit_add_function_to_store(store,
-							  module_inst,
-							  NULL, 0,
-							  type->n_inputs,
-							  type->input_types,
-							  type->n_outputs,
-							  type->output_types);
-		if (funcaddr == INVALID_ADDR)
+		assert(tmp_func == NULL);
+		tmp_func = calloc(1, sizeof(*tmp_func));
+		if (!tmp_func)
 			goto error;
 
-		if (!addrs_grow(addrs, 1))
-			goto error;
+		tmp_func->module_inst = module_inst;
+		tmp_func->compiled_code = NULL;
+		tmp_func->host_function = NULL;
+		tmp_func->type =
+			module->type_section.types[module->
+						   function_section.typeidxs[i]];
 
-		addrs->elts[addrs->n_elts - 1] = funcaddr;
+		LVECTOR_GROW(&module_inst->funcs, 1);
+		module_inst->funcs.elts[module_inst->funcs.n_elts - 1] = tmp_func;
+		tmp_func = NULL;
 	}
 
 	for (i = 0; i < module->table_section.n_tables; ++i) {
 		struct TableSectionTable *table =
 		    &module->table_section.tables[i];
 
-		size_t tableaddr;
-		addrs = &module_inst->tableaddrs;
-
 		assert(!table->limits.max
 		       || table->limits.min <= table->limits.max);
 
-		tableaddr =
-			_wasmjit_add_table_to_store(store,
-						    table->elemtype,
-						    table->limits.min,
-						    table->limits.max);
 
-		if (!addrs_grow(addrs, 1))
+		assert(tmp_table == NULL);
+		tmp_table = calloc(1, sizeof(*tmp_table));
+		if (!tmp_table)
 			goto error;
-		addrs->elts[addrs->n_elts - 1] = tableaddr;
+
+		tmp_table->data = calloc(tmp_table->length,
+					 sizeof(tmp_table->data[0]));
+		if (!tmp_table->data)
+			goto error;
+
+		tmp_table->elemtype = table->elemtype;
+		tmp_table->length = table->limits.min;
+		tmp_table->max = table->limits.max;
+
+		LVECTOR_GROW(&module_inst->tables, 1);
+		module_inst->tables.elts[module_inst->tables.n_elts - 1] = tmp_table;
+		tmp_table = NULL;
 	}
 
 	for (i = 0; i < module->memory_section.n_memories; ++i) {
 		struct MemorySectionMemory *memory =
 		    &module->memory_section.memories[i];
-		addrs = &module_inst->memaddrs;
-		wasmjit_addr_t memaddr;
 		size_t size, max;
 
 		assert(!memory->memtype.limits.max
@@ -393,133 +478,208 @@ int wasmjit_instantiate(const char *module_name,
 			goto error;
 		}
 
-		memaddr = _wasmjit_add_memory_to_store(store, size, max);
-
-		if (!addrs_grow(addrs, 1))
+		assert(tmp_mem == NULL);
+		tmp_mem = calloc(1, sizeof(*tmp_mem));
+		if (!tmp_mem)
 			goto error;
-		addrs->elts[addrs->n_elts - 1] = memaddr;
+
+		if (size) {
+			tmp_mem->data = calloc(size, 1);
+			if (!tmp_mem->data) {
+				free(tmp_mem);
+				goto error;
+			}
+		}
+
+		tmp_mem->size = size;
+		tmp_mem->max = max;
+
+		LVECTOR_GROW(&module_inst->mems, 1);
+		module_inst->mems.elts[module_inst->mems.n_elts - 1] = tmp_mem;
+		tmp_mem = NULL;
 	}
 
 	for (i = 0; i < module->global_section.n_globals; ++i) {
 		struct GlobalSectionGlobal *global =
 			&module->global_section.globals[i];
-		wasmjit_addr_t globaladdr;
 		struct Value value;
 		int rrr;
 
-		rrr = read_constant_expression(store,
-					       module_inst,
+		rrr = read_constant_expression(module_inst,
 					       global->type.valtype, &value,
 					       global->n_instructions,
 					       global->instructions);
 		if (!rrr)
 			goto error;
-		globaladdr = _wasmjit_add_global_to_store(store,
-							  value,
-							  global->type.mut);
 
-		{
-			struct Addrs *addrs = &module_inst->globaladdrs;
-			if (!addrs_grow(addrs, 1))
-				goto error;
-			addrs->elts[addrs->n_elts - 1] = globaladdr;
-		}
+		assert(tmp_global == NULL);
+		tmp_global = calloc(1, sizeof(*tmp_global));
+		if (!tmp_global)
+			goto error;
+
+		tmp_global->value = value;
+		tmp_global->mut = global->type.mut;
+
+		LVECTOR_GROW(&module_inst->globals, 1);
+		module_inst->globals.elts[module_inst->globals.n_elts - 1] = tmp_global;
+		tmp_global = NULL;
 	}
 
 
 	for (i = 0; i < module->export_section.n_exports; ++i) {
+		struct Export *exportinst;
 		struct ExportSectionExport *export =
 		    &module->export_section.exports[i];
 
-		addrs = addrs_for_section(module_inst, export->idx_type);
+		LVECTOR_GROW(&module_inst->exports, 1);
+		exportinst = &module_inst->exports.elts[module_inst->exports.n_elts - 1];
 
-		assert(export->idx < addrs->n_elts);
-		if (!_wasmjit_add_to_namespace(store, module_name,
-					       export->name,
-					       export->idx_type,
-					       addrs->elts[export->idx]))
-		    goto error;
-	}
-
-	/* add start function */
-	if (module->start_section.has_start) {
-		if (!addrs_grow(&store->startfuncs, 1))
+		exportinst->name = strdup(export->name);
+		if (!exportinst->name)
 			goto error;
 
-		store->startfuncs.elts[store->startfuncs.n_elts - 1] =
-			module_inst->funcaddrs.elts[module->start_section.funcidx];
+		exportinst->type = export->idx_type;
+
+		switch (export->idx_type) {
+		case IMPORT_DESC_TYPE_FUNC:
+			exportinst->value.func =
+				module_inst->funcs.elts[export->idx_type];
+			break;
+		case IMPORT_DESC_TYPE_TABLE:
+			exportinst->value.table =
+				module_inst->tables.elts[export->idx_type];
+			break;
+		case IMPORT_DESC_TYPE_MEM:
+			exportinst->value.mem =
+				module_inst->mems.elts[export->idx_type];
+			break;
+		case IMPORT_DESC_TYPE_GLOBAL:
+			exportinst->value.global =
+				module_inst->globals.elts[export->idx_type];
+			break;
+		default:
+			assert(0);
+			break;
+		}
 	}
 
 	for (i = 0; i < module->element_section.n_elements; ++i) {
 		struct ElementSectionElement *element = &module->element_section.elements[i];
-		wasmjit_addr_t tableaddr;
 		struct TableInst *tableinst;
 		int rrr;
 		struct Value value;
 		size_t j;
 
-		rrr = read_constant_expression(store, module_inst,
+		rrr = read_constant_expression(module_inst,
 					       VALTYPE_I32, &value,
 					       element->n_instructions,
 					       element->instructions);
 		if (!rrr)
 			goto error;
 
-		assert(element->tableidx < module_inst->tableaddrs.n_elts);
-		tableaddr = module_inst->tableaddrs.elts[element->tableidx];
-
-		assert(tableaddr < store->tables.n_elts);
-		tableinst = &store->tables.elts[tableaddr];
+		assert(element->tableidx < module_inst->tables.n_elts);
+		tableinst = module_inst->tables.elts[element->tableidx];
 
 		if (value.data.i32 + element->n_funcidxs > tableinst->length)
 			goto error;
 
 		for (j = 0; j < element->n_funcidxs; ++j) {
-			assert(element->funcidxs[j] < module_inst->funcaddrs.n_elts);
-			tableinst->data[value.data.i32 + j] = module_inst->funcaddrs.elts[element->funcidxs[j]];
+			assert(element->funcidxs[j] < module_inst->funcs.n_elts);
+			tableinst->data[value.data.i32 + j] = module_inst->funcs.elts[element->funcidxs[j]];
 		}
 	}
+
+	if (!fill_module_types(module_inst, &module_types))
+		goto error;
 
 	for (i = 0; i < module->code_section.n_codes; ++i) {
 		struct CodeSectionCode *code = &module->code_section.codes[i];
 		struct FuncInst *funcinst;
+		size_t j;
 
-		funcinst = &store->funcs.elts[module_inst->funcaddrs.elts[i + internal_func_idx]];
+		funcinst = module_inst->funcs.elts[i + internal_func_idx];
 
-		funcinst->code_length = code->n_instructions;
-		funcinst->code = wasmjit_copy_buf(code->instructions,
-						  code->n_instructions,
-						  sizeof(code->instructions[0]));
-		if (!funcinst->code)
+		if (memrefs.elts) {
+			free(memrefs.elts);
+			memrefs.n_elts = 0;
+			memrefs.elts = NULL;
+		}
+
+		if (unmapped)
+			free(unmapped);
+
+		assert(mapped == NULL);
+		unmapped = wasmjit_compile_function(module_inst->types.elts,
+						    &module_types,
+						    &funcinst->type,
+						    code,
+						    &memrefs,
+						    &code_size);
+		if (!unmapped)
 			goto error;
-		funcinst->n_locals = code->n_locals;
-		funcinst->locals = wasmjit_copy_buf(code->locals,
-						    code->n_locals,
-						    sizeof(code->locals[0]));
-		if (!funcinst->locals)
+
+		mapped = map_code_segment(code_size);
+		if (!mapped)
 			goto error;
+
+		memcpy(mapped, unmapped, code_size);
+
+		/* resolve code references */
+		for (j = 0; j < memrefs.n_elts; ++j) {
+			uint64_t val;
+
+			switch (memrefs.elts[j].type) {
+			case MEMREF_TYPE:
+				val = (uintptr_t) &module_inst->types.elts[memrefs.elts[j].idx];
+				break;
+			case MEMREF_FUNC:
+				val = (uintptr_t) module_inst->funcs.elts[memrefs.elts[j].idx];
+				break;
+			case MEMREF_TABLE:
+				val = (uintptr_t) module_inst->tables.elts[memrefs.elts[j].idx];
+				break;
+			case MEMREF_MEM:
+				val = (uintptr_t) module_inst->mems.elts[memrefs.elts[j].idx];
+				break;
+			case MEMREF_GLOBAL:
+				val = (uintptr_t) module_inst->globals.elts[memrefs.elts[j].idx];
+				break;
+			case MEMREF_RESOLVE_INDIRECT_CALL:
+				val = (uintptr_t) &wasmjit_resolve_indirect_call;
+				break;
+			}
+
+			encode_le_uint64_t(val, &((char *) mapped)[memrefs.elts[j].code_offset]);
+		}
+
+
+		if (!mark_code_segment_executable(mapped, code_size)) {
+			goto error;
+		}
+
+		funcinst->compiled_code = mapped;
+		funcinst->compiled_code_size = code_size;
+		mapped = NULL;
 	}
 
 	for (i = 0; i < module->data_section.n_datas; ++i) {
 		struct DataSectionData *data = &module->data_section.datas[i];
 		struct MemInst *meminst =
-		    &store->mems.elts[module_inst->memaddrs.elts[data->memidx]];
+		    module_inst->mems.elts[data->memidx];
 		struct Value value;
 		int rrr;
 
-		rrr = read_constant_expression(store, module_inst,
+		rrr = read_constant_expression(module_inst,
 					       VALTYPE_I32, &value,
 					       data->n_instructions,
 					       data->instructions);
 		if (!rrr)
 			goto error;
 
-#if UINT32_MAX > SIZE_MAX
-		if (data->buf_size > SIZE_MAX)
+		if (data->buf_size > meminst->size)
 			goto error;
-#endif
 
-		if (data->buf_size + value.data.i32 > meminst->size)
+		if (value.data.i32 > meminst->size - data->buf_size)
 			goto error;
 
 		memcpy(meminst->data +
@@ -527,14 +687,48 @@ int wasmjit_instantiate(const char *module_name,
 		       data->buf_size);
 	}
 
-	return 1;
-
- error:
-	/* cleanup module_inst */
-	for (i = 0; i < IMPORT_DESC_TYPE_LAST; ++i) {
-		addrs = addrs_for_section(module_inst, i);
-		free(addrs->elts);
+	/* add start function */
+	if (module->start_section.has_start) {
+		wasmjit_invoke_function(module_inst->funcs.elts[module->start_section.funcidx],
+					NULL);
 	}
 
-	return 0;
+	if (0) {
+	error:
+		if (module_inst)
+			wasmjit_free_module_inst(module_inst);
+		module_inst = NULL;
+	}
+
+	if (tmp_func)
+		free(tmp_func);
+	if (tmp_table) {
+		if (tmp_table->data)
+			free(tmp_table->data);
+		free(tmp_table);
+	}
+	if (tmp_mem) {
+		if (tmp_mem->data)
+			free(tmp_mem->data);
+		free(tmp_mem);
+	}
+	if (tmp_global)
+		free(tmp_global);
+	if (mapped)
+		wasmjit_unmap_code_segment(mapped, code_size);
+	if (unmapped)
+		free(unmapped);
+	if (memrefs.elts)
+		free(memrefs.elts);
+	if (module_types.functypes)
+		free(module_types.functypes);
+	if (module_types.tabletypes)
+		free(module_types.tabletypes);
+	if (module_types.memorytypes)
+		free(module_types.memorytypes);
+	if (module_types.globaltypes)
+		free(module_types.globaltypes);
+
+
+	return module_inst;
 }

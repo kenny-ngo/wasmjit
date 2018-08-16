@@ -28,6 +28,8 @@
 #include <wasmjit/util.h>
 
 #include <assert.h>
+#include <stdlib.h>
+
 
 DEFINE_VECTOR_GROW(addrs, struct Addrs);
 DEFINE_VECTOR_GROW(func_types, struct FuncTypeVector);
@@ -38,6 +40,43 @@ DEFINE_VECTOR_GROW(store_tables, struct TableFuncs);
 DEFINE_VECTOR_GROW(store_mems, struct StoreMems);
 DEFINE_VECTOR_GROW(store_globals, struct StoreGlobals);
 
+/* platform specific */
+
+#include <sys/mman.h>
+
+int wasmjit_unmap_code_segment(void *code, size_t code_size)
+{
+	return !munmap(code, code_size);
+}
+
+/* end platform specific */
+
+void wasmjit_free_module_inst(struct ModuleInst *module)
+{
+	size_t i;
+	for (i = 0; i < module->funcs.n_elts; ++i) {
+		if (module->funcs.elts[i]->compiled_code)
+			wasmjit_unmap_code_segment(module->funcs.elts[i]->compiled_code,
+						   module->funcs.elts[i]->compiled_code_size);
+		free(module->funcs.elts[i]);
+	}
+	for (i = 0; i < module->tables.n_elts; ++i) {
+		free(module->tables.elts[i]->data);
+		free(module->tables.elts[i]);
+	}
+	for (i = 0; i < module->mems.n_elts; ++i) {
+		free(module->mems.elts[i]->data);
+		free(module->mems.elts[i]);
+	}
+	for (i = 0; i < module->globals.n_elts; ++i) {
+		free(module->globals.elts[i]);
+	}
+	for (i = 0; i < module->exports.n_elts; ++i) {
+		if (module->exports.elts[i].name)
+			free(module->exports.elts[i].name);
+	}
+	free(module);
+}
 
 int wasmjit_typecheck_func(const struct FuncType *type,
 			   const struct FuncInst *funcinst)

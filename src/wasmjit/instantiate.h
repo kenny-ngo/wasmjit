@@ -28,9 +28,9 @@
 #include <wasmjit/ast.h>
 #include <wasmjit/runtime.h>
 
-int wasmjit_instantiate(const char *module_name,
-			const struct Module *module,
-			struct Store *store,
-			char *why, size_t why_size);
+struct ModuleInst *wasmjit_instantiate(const struct Module *module,
+				       size_t n_imports,
+				       const struct NamedModule *imports,
+				       char *why, size_t why_size);
 
 #endif

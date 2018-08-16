@@ -101,19 +101,13 @@ struct Store {
 		wasmjit_addr_t n_elts;
 		struct FuncInst {
 			struct ModuleInst *module_inst;
-			size_t code_length;
-			struct Instr *code;
-			size_t n_locals;
-			struct {
-				uint32_t count;
-				uint8_t valtype;
-			} *locals;
 			/*
 			  the function signature of compiled_code
 			  pointers mirrors that of the WASM input
 			  types.
 			 */
 			void *compiled_code;
+			size_t compiled_code_size;
 			/*
 			   host_function pointers are like
 			   compiled_code pointers except their
@@ -241,5 +235,9 @@ static int wasmjit_typelist_equal(size_t nelts, const wasmjit_valtype_t *elts,
 void *wasmjit_resolve_indirect_call(const struct TableInst *tableinst,
 				    const struct FuncType *expected_type,
 				    uint32_t idx);
+
+void wasmjit_free_module_inst(struct ModuleInst *module);
+
+int wasmjit_unmap_code_segment(void *code, size_t code_size);
 
 #endif
