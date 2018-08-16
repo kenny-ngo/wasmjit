@@ -48,9 +48,8 @@ int main(int argc, char *argv[])
 	int ret;
 	struct ParseState pstate;
 	struct Module module;
-	//struct Store store;
 	int dump_module, create_relocatable, opt;
-	//char error_buffer[0x1000];
+	char error_buffer[0x1000] = {0};
 
 	dump_module =  0;
 	create_relocatable =  0;
@@ -151,6 +150,7 @@ int main(int argc, char *argv[])
 
 	{
 		struct NamedModule *modules;
+		struct ModuleInst *module_inst;
 		size_t n_modules, i;
 
 		modules = wasmjit_instantiate_emscripten_runtime(&n_modules);
@@ -166,6 +166,21 @@ int main(int argc, char *argv[])
 				       wasmjit_desc_repr(modules[i].module->exports.elts[j].type),
 				       modules[i].module->exports.elts[j].name);
 			}
+		}
+
+		module_inst = wasmjit_instantiate(&module, n_modules, modules,
+						  error_buffer, sizeof(error_buffer));
+		if (!module_inst) {
+			fprintf(stderr,
+				"Failure to instantiate module: %s",
+				error_buffer);
+			return -1;
+		}
+
+		for (i = 0; i < module_inst->exports.n_elts; ++i) {
+			printf("Export %s: %s\n",
+			       wasmjit_desc_repr(module_inst->exports.elts[i].type),
+			       module_inst->exports.elts[i].name);
 		}
 
 		return 0;
