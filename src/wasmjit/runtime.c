@@ -36,6 +36,22 @@ DEFINE_VECTOR_GROW(func_types, struct FuncTypeVector);
 
 #include <sys/mman.h>
 
+void *wasmjit_map_code_segment(size_t code_size)
+{
+	void *newcode;
+	newcode = mmap(NULL, code_size, PROT_READ | PROT_WRITE,
+		       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (newcode == MAP_FAILED)
+		return NULL;
+	return newcode;
+}
+
+int wasmjit_mark_code_segment_executable(void *code, size_t code_size)
+{
+	return !mprotect(code, code_size, PROT_READ | PROT_EXEC);
+}
+
+
 int wasmjit_unmap_code_segment(void *code, size_t code_size)
 {
 	return !munmap(code, code_size);

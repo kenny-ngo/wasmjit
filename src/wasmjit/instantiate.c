@@ -34,28 +34,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* platform code */
-
-#include <sys/mman.h>
-
-static void *map_code_segment(size_t code_size)
-{
-	void *newcode;
-	newcode = mmap(NULL, code_size, PROT_READ | PROT_WRITE,
-		       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-	if (newcode == MAP_FAILED)
-		return NULL;
-	return newcode;
-}
-
-static int mark_code_segment_executable(void *code, size_t code_size)
-{
-	return !mprotect(code, code_size, PROT_READ | PROT_EXEC);
-}
-
-
-/* end platform code */
-
 static int func_sig_repr(char *why, size_t why_size, struct FuncType *type)
 {
 	int ret ;
@@ -423,7 +401,6 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 
 		tmp_func->module_inst = module_inst;
 		tmp_func->compiled_code = NULL;
-		tmp_func->host_function = NULL;
 		tmp_func->type =
 			module->type_section.types[module->
 						   function_section.typeidxs[i]];
@@ -618,7 +595,7 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 		if (!unmapped)
 			goto error;
 
-		mapped = map_code_segment(code_size);
+		mapped = wasmjit_map_code_segment(code_size);
 		if (!mapped)
 			goto error;
 
@@ -653,7 +630,7 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 		}
 
 
-		if (!mark_code_segment_executable(mapped, code_size)) {
+		if (!wasmjit_mark_code_segment_executable(mapped, code_size)) {
 			goto error;
 		}
 

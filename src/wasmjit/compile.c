@@ -2151,5 +2151,143 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 	return NULL;
 }
 
+char *wasmjit_compile_hostfunc(struct FuncType *type,
+			       void *hostfunc,
+			       void *funcinst_ptr,
+			       size_t *out_size)
+{
+	char *out;
+	char *movabs_str = NULL;
+	size_t i;
+	size_t n_movs = 0, n_xmm_movs = 0, n_stack = 0;
+
+	/* count integer inputs */
+	for (i = 0; i < type->n_inputs; ++i) {
+		if ((type->input_types[i] == VALTYPE_I32 ||
+		     type->input_types[i] == VALTYPE_I64) &&
+		    n_movs < 6) {
+			n_movs += 1;
+		} else if ((type->input_types[i] == VALTYPE_F32 ||
+			    type->input_types[i] == VALTYPE_F64) &&
+			   n_xmm_movs < 8) {
+			n_xmm_movs += 1;
+		} else {
+			n_stack += 1;
+		}
+	}
+
+	switch (n_movs) {
+	case 0:
+		/* mov $const, %rdi */
+		movabs_str = "\x48\xbf";
+		break;
+	case 1:
+		/* mov $const, %rsi */
+		movabs_str = "\x48\xbe";
+		break;
+	case 2:
+		/* mov $const, %rdx */
+		movabs_str = "\x48\xba";
+		break;
+	case 3:
+		/* mov $const, %rcx */
+		movabs_str = "\x48\xb9";
+		break;
+	case 4:
+		/* mov $const, %r8 */
+		movabs_str = "\x48\xb8";
+		break;
+	case 5:
+		/* mov $const, %r9 */
+		movabs_str = "\x48\xb9";
+		break;
+	default: {
+		size_t off = 0;
+		*out_size =
+			/* align stack */
+			((n_stack % 2) ? 4 : 0) +
+			/* push value */
+			10 + 1 +
+			/* push old stack values */
+			7 * n_stack +
+			/* mov hostfunc to %rax and call there */
+			10 + 2 +
+			/* cleanup stack */
+			7 +
+			/* ret */
+			1;
+		out = malloc(*out_size);
+
+		/* keep stack aligned to 0x10 */
+		if (n_stack % 2) {
+			/* sub $0x8, %rsp */
+			memcpy(out + off, "\x48\x83\xec\x08", 4);
+			off += 4;
+		}
+
+		/* push value */
+		/* mov $const, %rax */
+		memcpy(out + off, "\x48\xb8", 2);
+		off += 2;
+		encode_le_uint64_t((uintptr_t) hostfunc, out + off);
+		off += 8;
+		/* push %rax */
+		memcpy(out + off, "\x50", 1);
+		off += 1;
+
+		/* repeat for each stack arg  */
+		for (i = 0; i < n_stack; ++i) {
+			/* push subbed_space + 8 * (n_stack_args + 1)(%rsp)*/
+			memcpy(out + off, "\xff\xb4\x24", 3);
+			off += 3;
+			encode_le_uint32_t(8 * ((n_stack % 2) + n_stack + 1),
+					   out + off);
+			off += 4;
+		}
+
+		/* mov $const, %rax */
+		memcpy(out + off, "\x48\xb8", 2);
+		off += 2;
+		encode_le_uint64_t((uintptr_t) hostfunc, out + off);
+		off += 8;
+
+		/* call *%rax */
+		memcpy(out + off, "\xff\xd0", 2);
+		off += 2;
+
+		/* cleanup stack */
+		memcpy(out + off, "\x48\x81\xc4", 3);
+		off += 3;
+		encode_le_uint32_t(((n_stack % 2) + 1 + n_stack) * 8,
+				   out + off);
+		off += 4;
+
+		memcpy(out + off, "\xc3", 1);
+		off += 1;
+
+		assert(off == *out_size);
+
+		break;
+	}
+	}
+
+	if (movabs_str) {
+		assert(strlen(movabs_str) == 2);
+		*out_size = 10 + 10 + 2;
+		out = malloc(*out_size);
+		if (!out)
+			return NULL;
+		memcpy(out, movabs_str, 2);
+		encode_le_uint64_t((uintptr_t) funcinst_ptr, out + 2);
+		/* movabs $const, %rax */
+		memcpy(out + 10, "\x48\xb8", 2);
+		encode_le_uint64_t((uintptr_t) hostfunc, out + 12);
+		/* jmp *%rax */
+		memcpy(out + 20, "\xff\xe0", 2);
+	}
+
+	return out;
+}
+
 #undef OUTB
 #undef OUTS

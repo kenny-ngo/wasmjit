@@ -59,4 +59,9 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 			       struct MemoryReferences *memrefs,
 			       size_t *out_size);
 
+char *wasmjit_compile_hostfunc(struct FuncType *type,
+			       void *hostfunc,
+			       void *funcinst_ptr,
+			       size_t *out_size);
+
 #endif

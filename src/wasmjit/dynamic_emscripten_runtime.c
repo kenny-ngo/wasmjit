@@ -25,6 +25,7 @@
 #include <wasmjit/runtime.h>
 #include <wasmjit/emscripten_runtime.h>
 #include <wasmjit/util.h>
+#include <wasmjit/compile.h>
 
 #include <math.h>
 #include <stdlib.h>
@@ -43,6 +44,7 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t *amt)
 	struct GlobalInst *tmp_global = NULL;
 	struct ModuleInst *module = NULL;
 	struct NamedModule *ret;
+	void *tmp_unmapped = NULL;
 
 	/* TODO: add exports */
 
@@ -87,10 +89,26 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t *amt)
 		if (!tmp_func)						\
 			goto error;					\
 		tmp_func->module_inst = module;				\
-		tmp_func->host_function = _fptr;			\
 		tmp_func->type.n_inputs = ARRAY_LEN(inputs);		\
 		memcpy(tmp_func->type.input_types, inputs, ARRAY_LEN(inputs)); \
 		tmp_func->type.output_type = _output;			\
+		if (tmp_unmapped)					\
+			free(tmp_unmapped);				\
+		tmp_unmapped =						\
+			wasmjit_compile_hostfunc(&tmp_func->type, _fptr, \
+						 tmp_func,		\
+						 &tmp_func->compiled_code_size); \
+		if (!tmp_unmapped)					\
+			goto error;					\
+		tmp_func->compiled_code =				\
+			wasmjit_map_code_segment(tmp_func->compiled_code_size);	\
+		if (!tmp_func->compiled_code)				\
+			goto error;					\
+		memcpy(tmp_func->compiled_code, tmp_unmapped,		\
+		       tmp_func->compiled_code_size);			\
+		if (!wasmjit_mark_code_segment_executable(tmp_func->compiled_code,\
+							  tmp_func->compiled_code_size)) \
+			goto error;					\
 		LVECTOR_GROW(&module->funcs, 1);			\
 		module->funcs.elts[module->funcs.n_elts - 1] = tmp_func; \
 		tmp_func = NULL;					\
@@ -185,11 +203,17 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t *amt)
 		}
 	}
 
+	if (tmp_unmapped)
+		free(tmp_unmapped);
 	if (module) {
 		wasmjit_free_module_inst(module);
 	}
-	if (tmp_func)
+	if (tmp_func) {
+		if (tmp_func->compiled_code)
+			wasmjit_unmap_code_segment(tmp_func->compiled_code,
+						   tmp_func->compiled_code_size);
 		free(tmp_func);
+	}
 	if (tmp_table_buf)
 		free(tmp_table_buf);
 	if (tmp_table) {

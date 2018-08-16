@@ -50,14 +50,6 @@ struct FuncInst {
 	*/
 	void *compiled_code;
 	size_t compiled_code_size;
-	/*
-	  host_function pointers are like
-	  compiled_code pointers except their
-	  argument list is followed by a struct
-	  FuncInst *, the runtime is expected to be
-	  able to translate between the two ABIs
-	*/
-	void *host_function;
 	struct FuncType type;
 };
 
@@ -148,6 +140,8 @@ void *wasmjit_resolve_indirect_call(const struct TableInst *tableinst,
 
 void wasmjit_free_module_inst(struct ModuleInst *module);
 
+void *wasmjit_map_code_segment(size_t code_size);
+int wasmjit_mark_code_segment_executable(void *code, size_t code_size);
 int wasmjit_unmap_code_segment(void *code, size_t code_size);
 
 #endif
