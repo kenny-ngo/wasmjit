@@ -27,6 +27,7 @@
 
 #include <wasmjit/runtime.h>
 
-int wasmjit_invoke_function(struct FuncInst *funcinst, union ValueUnion *values);
+int wasmjit_invoke_function(struct FuncInst *funcinst, union ValueUnion *values,
+			    union ValueUnion *out);
 
 #endif

@@ -64,4 +64,8 @@ char *wasmjit_compile_hostfunc(struct FuncType *type,
 			       void *funcinst_ptr,
 			       size_t *out_size);
 
+char *wasmjit_compile_invoker(struct FuncType *type,
+			      void *compiled_code,
+			      size_t *out_size);
+
 #endif

@@ -126,6 +126,15 @@ static void encode_le_uint32_t(uint32_t val, char *buf)
 	}						   \
 	while (0)
 
+#define OUTNULL(n)					\
+	do {						\
+		memset(buf, 0, (n));			\
+		if (!output_buf(output, buf, (n)))	\
+			goto error;			\
+	}						\
+	while (0)
+
+
 struct LocalsMD {
 	wasmjit_valtype_t valtype;
 	int32_t fp_offset;
@@ -302,14 +311,6 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		if (!res)			\
 			goto error;		\
 	}					\
-	while (0)
-
-#define OUTNULL(n)					\
-	do {						\
-		memset(buf, 0, (n));			\
-		if (!output_buf(output, buf, (n)))	\
-			goto error;			\
-	}						\
 	while (0)
 
 	switch (instruction->opcode) {
@@ -2289,5 +2290,170 @@ char *wasmjit_compile_hostfunc(struct FuncType *type,
 	return out;
 }
 
+char *wasmjit_compile_invoker(struct FuncType *type,
+			      void *compiled_code,
+			      size_t *out_size)
+{
+	size_t i;
+	size_t n_movs = 0, n_xmm_movs = 0, n_stack = 0;
+	struct SizedBuffer outputv = { 0, NULL };
+	struct SizedBuffer *output = &outputv;
+	char buf[0x100];
+	void *out = NULL;
+	int aligned;
+	size_t to_reserve;
+
+	for (i = 0; i < type->n_inputs; ++i) {
+		if ((type->input_types[i] == VALTYPE_I32 ||
+		     type->input_types[i] == VALTYPE_I64) &&
+		    n_movs < 6) {
+			n_movs += 1;
+		} else if ((type->input_types[i] == VALTYPE_F32 ||
+			    type->input_types[i] == VALTYPE_F64) &&
+			   n_xmm_movs < 8) {
+			n_xmm_movs += 1;
+		} else {
+			n_stack += 1;
+		}
+	}
+
+	to_reserve = 1 + n_stack;
+	aligned = !(to_reserve % 2);
+	if (aligned) {
+		to_reserve += 1;
+	}
+
+	/* sub to_reserve*8, %rsp */
+	OUTS("\x48\x81\xec");
+	encode_le_uint32_t(to_reserve * 8, buf);
+	if (!output_buf(output, buf, sizeof(uint32_t)))
+		goto error;
+
+	/* mov %rbx, (to_reserve - 1) *8(%rsp), */
+	OUTS("\x48\x89\x9c\x24");
+	encode_le_uint32_t((to_reserve - 1) * 8, buf);
+	if (!output_buf(output, buf, sizeof(uint32_t)))
+		goto error;
+
+	/* mov %rdi, %rbx */
+	OUTS("\x48\x89\xfb");
+
+	static const char *const movs[] = {
+		"\x48\x8b\xbb", /* mov N(%rbx), %rdi */
+		"\x48\x8b\xb3", /* mov N(%rbx), %rsi */
+		"\x48\x8b\x93", /* mov N(%rbx), %rdx */
+		"\x48\x8b\x8b", /* mov N(%rbx), %rcx */
+		"\x4c\x8b\x83", /* mov N(%rbx), %r8 */
+		"\x4c\x8b\x8b", /* mov N(%rbx), %r9 */
+	};
+
+	static const char *const f32_movs[] = {
+		"\xf3\x0f\x10\x83", /* movss  N(%rbx),%xmm0 */
+		"\xf3\x0f\x10\x8b", /* movss  N(%rbx),%xmm1 */
+		"\xf3\x0f\x10\x93", /* movss  N(%rbx),%xmm2 */
+		"\xf3\x0f\x10\x9b", /* movss  N(%rbx),%xmm3 */
+		"\xf3\x0f\x10\xa3", /* movss  N(%rbx),%xmm4 */
+		"\xf3\x0f\x10\xab", /* movss  N(%rbx),%xmm5 */
+		"\xf3\x0f\x10\xb3", /* movss  N(%rbx),%xmm6 */
+		"\xf3\x0f\x10\xbb", /* movss  N(%rbx),%xmm7 */
+	};
+
+	static const char *const f64_movs[] = {
+		"\xf2\x0f\x10\x83", /* movsd  N(%rbx),%xmm0 */
+		"\xf2\x0f\x10\x8b", /* movsd  N(%rbx),%xmm1 */
+		"\xf2\x0f\x10\x93", /* movsd  N(%rbx),%xmm2 */
+		"\xf2\x0f\x10\x9b", /* movsd  N(%rbx),%xmm3 */
+		"\xf2\x0f\x10\xa3", /* movsd  N(%rbx),%xmm4 */
+		"\xf2\x0f\x10\xab", /* movsd  N(%rbx),%xmm5 */
+		"\xf2\x0f\x10\xb3", /* movsd  N(%rbx),%xmm6 */
+		"\xf2\x0f\x10\xbb", /* movsd  N(%rbx),%xmm7 */
+	};
+
+	n_movs = 0;
+	n_xmm_movs = 0;
+	n_stack = 0;
+	for (i = 0; i < type->n_inputs; ++i) {
+		if ((type->input_types[i] == VALTYPE_I32 ||
+		     type->input_types[i] == VALTYPE_I64) &&
+		    n_movs < 6) {
+			OUTS(movs[n_movs]);
+			encode_le_uint32_t(i * -8, buf);
+			if (!output_buf(output, buf, sizeof(uint32_t)))
+				goto error;
+			n_movs += 1;
+		} else if ((type->input_types[i] == VALTYPE_F32 ||
+			    type->input_types[i] == VALTYPE_F64) &&
+			   n_xmm_movs < 8) {
+
+			if (type->input_types[i] == VALTYPE_F32) {
+				OUTS(f32_movs[n_movs]);
+			} else {
+				OUTS(f64_movs[n_movs]);
+			}
+
+			encode_le_uint32_t(i * -8, buf);
+			if (!output_buf(output, buf, sizeof(uint32_t)))
+				goto error;
+
+			n_xmm_movs += 1;
+		} else {
+			/* mov (-8 * i)(%rbx), %rax */
+			OUTS("\x48\x8b\x83");
+			encode_le_uint32_t(i * -8, buf);
+			if (!output_buf(output, buf, sizeof(uint32_t)))
+				goto error;
+
+			/* mov %rax, (n_stack * 8)(%rsp) */
+			OUTS("\x48\x89\x84\x24");
+			encode_le_uint32_t(n_stack * 8, buf);
+			if (!output_buf(output, buf, sizeof(uint32_t)))
+				goto error;
+
+			n_stack += 1;
+		}
+	}
+
+	/* movabs $const, %rax */
+	OUTS("\x48\xb8");
+	OUTNULL(8);
+	encode_le_uint64_t((uintptr_t) compiled_code,
+			   &output->elts[output->n_elts - 8]);
+
+	/* call *%rax */
+	OUTS("\xff\xd0");
+
+	/* mov (to_reserve - 1) *8(%rsp), %rbx */
+	OUTS("\x48\x8b\x9c\x24");
+	encode_le_uint32_t((to_reserve - 1) * 8, buf);
+	if (!output_buf(output, buf, sizeof(uint32_t)))
+		goto error;
+
+	/* clean up stack */
+	if (to_reserve) {
+		/* add $const, %rsp */
+		OUTS("\x48\x81\xc4");
+		encode_le_uint32_t(to_reserve * 8, buf);
+		if (!output_buf(output, buf, sizeof(uint32_t)))
+			goto error;
+	}
+
+	/* return */
+	OUTS("\xc3");
+
+	if (0) {
+	error:
+		free(output->elts);
+		out = NULL;
+	}
+	else {
+		out = output->elts;
+		if (out_size)
+			*out_size = output->n_elts;
+	}
+
+	return out;
+}
+
+#undef OUTNULL
 #undef OUTB
 #undef OUTS

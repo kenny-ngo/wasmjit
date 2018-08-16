@@ -667,7 +667,7 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 	/* add start function */
 	if (module->start_section.has_start) {
 		wasmjit_invoke_function(module_inst->funcs.elts[module->start_section.funcidx],
-					NULL);
+					NULL, NULL);
 	}
 
 	if (0) {

@@ -29,9 +29,42 @@
 #include <wasmjit/runtime.h>
 #include <wasmjit/util.h>
 
-int wasmjit_invoke_function(struct FuncInst *funcinst, union ValueUnion *values)
+int wasmjit_invoke_function(struct FuncInst *funcinst,
+			    union ValueUnion *values,
+			    union ValueUnion *out)
 {
-	(void)funcinst;
-	(void)values;
-	assert(0);
+	int ret = 0;
+	void *unmapped = NULL;
+	union ValueUnion (*mapped)(union ValueUnion *) = NULL;
+	size_t code_size;
+	union ValueUnion lout;
+
+	unmapped = wasmjit_compile_invoker(&funcinst->type,
+					   funcinst->compiled_code,
+					   &code_size);
+	if (!unmapped)
+		goto error;
+
+	mapped = wasmjit_map_code_segment(code_size);
+	if (!mapped)
+		goto error;
+
+	memcpy(mapped, unmapped, code_size);
+
+	if (!wasmjit_mark_code_segment_executable(mapped, code_size))
+		goto error;
+
+	lout = mapped(values);
+	if (out)
+		*out = lout;
+	ret = 1;
+
+ error:
+	if (mapped)
+		wasmjit_unmap_code_segment(mapped, code_size);
+
+	if (unmapped)
+		free(unmapped);
+
+	return ret;
 }
