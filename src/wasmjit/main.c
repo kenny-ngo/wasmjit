@@ -158,29 +158,64 @@ int main(int argc, char *argv[])
 		if (!modules)
 			return -1;
 
-		for (i = 0; i < n_modules; ++i) {
-			size_t j;
-			printf("module: %s\n", modules[i].name);
-			for (j = 0; j < modules[i].module->exports.n_elts; ++j) {
-				printf("  export %s: %s\n",
-				       wasmjit_desc_repr(modules[i].module->exports.elts[j].type),
-				       modules[i].module->exports.elts[j].name);
-			}
-		}
-
 		module_inst = wasmjit_instantiate(&module, n_modules, modules,
 						  error_buffer, sizeof(error_buffer));
-		if (!module_inst) {
-			fprintf(stderr,
-				"Failure to instantiate module: %s",
-				error_buffer);
+		if (!module_inst)
 			return -1;
+
+		/* find _main */
+		for (i = 0; i < module_inst->exports.n_elts; ++i) {
+			struct FuncInst *maininst;
+			if (strcmp(module_inst->exports.elts[i].name, "_main"))
+				continue;
+
+			if (module_inst->exports.elts[i].type !=
+			    IMPORT_DESC_TYPE_FUNC) {
+				fprintf(stderr, "_main export is not a function!\n");
+				return -1;
+			}
+
+			maininst = module_inst->exports.elts[i].value.func;
+
+			if (maininst->type.n_inputs == 0 &&
+			    maininst->type.output_type == VALTYPE_I32) {
+				union ValueUnion out;
+				if (!wasmjit_invoke_function(maininst, NULL,
+							     &out)) {
+					fprintf(stderr, "failed to invoke main");
+					return -1;
+				}
+
+				return out.i32;
+			} else if (maininst->type.n_inputs == 2 &&
+				   maininst->type.input_types[0] == VALTYPE_I32 &&
+				   maininst->type.input_types[1] == VALTYPE_I32 &&
+				   maininst->type.output_type == VALTYPE_I32) {
+				union ValueUnion inputs[2];
+				union ValueUnion out;
+				/* TODO: set argc, argv */
+				inputs[1].i32 = 0;
+				inputs[0].i32 = 0;
+				if (!wasmjit_invoke_function(maininst,
+							     &inputs[1],
+							     &out)) {
+					fprintf(stderr, "failed to invoke main");
+					return -1;
+				}
+
+				return out.i32;
+			}
+			else {
+				fprintf(stderr, "_main funciton had bad type!\n");
+				return -1;
+			}
+
+			break;
 		}
 
-		for (i = 0; i < module_inst->exports.n_elts; ++i) {
-			printf("Export %s: %s\n",
-			       wasmjit_desc_repr(module_inst->exports.elts[i].type),
-			       module_inst->exports.elts[i].name);
+		if (i == module_inst->exports.n_elts) {
+			fprintf(stderr, "no _main function\n");
+			return -1;
 		}
 
 		return 0;
