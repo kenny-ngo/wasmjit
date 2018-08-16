@@ -892,8 +892,10 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 
 		if (FUNC_TYPE_N_OUTPUTS(ft)) {
 			assert(FUNC_TYPE_N_OUTPUTS(ft) == 1);
-			if (FUNC_TYPE_OUTPUT_TYPES(ft)[0] == VALTYPE_F32 ||
-			    FUNC_TYPE_OUTPUT_TYPES(ft)[0] == VALTYPE_F64) {
+			if (FUNC_TYPE_OUTPUT_TYPES(ft)[0] == VALTYPE_F32) {
+				/* movd %xmm0, %eax */
+				OUTS("\x66\x0f\x7e\xc0");
+			} else if (FUNC_TYPE_OUTPUT_TYPES(ft)[0] == VALTYPE_F64) {
 				/* movq %xmm0, %rax */
 				OUTS("\x66\x48\x0f\x7e\xc0");
 			}
@@ -2122,8 +2124,22 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 		assert(FUNC_TYPE_N_OUTPUTS(type) == 1);
 		assert(peek_stack(&sstack) == FUNC_TYPE_OUTPUT_TYPES(type)[0]);
 		pop_stack(&sstack);
-		/* pop %rax */
-		OUTS("\x58");
+
+		/* mov to xmm0 if float return */
+		if (FUNC_TYPE_OUTPUT_TYPES(type)[0] == VALTYPE_F32) {
+			/* movss (%rsp), %xmm0 */
+			OUTS("\xf3\x0f\x10\x04\x24");
+			/* add $8, %rsp */
+			OUTS("\x48\x8d\x47\x08");
+		} else if (FUNC_TYPE_OUTPUT_TYPES(type)[0] == VALTYPE_F64) {
+			/* movsd (%rsp), %xmm0 */
+			OUTS("\xf2\x0f\x10\x07");
+			/* add $8, %rsp */
+			OUTS("\x48\x8d\x47\x08");
+		} else {
+			/* pop %rax */
+			OUTS("\x58");
+		}
 	}
 
 	/* add $(8 * (n_frame_locals)), %rsp */
