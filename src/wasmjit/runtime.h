@@ -31,20 +31,53 @@
 #include <stddef.h>
 #include <stdint.h>
 
-struct NamedModule {
-	char *name;
-	struct ModuleInst *module;
+struct Value {
+	wasmjit_valtype_t type;
+	union ValueUnion {
+		uint32_t i32;
+		uint64_t i64;
+		float f32;
+		double f64;
+	} data;
 };
 
-typedef size_t wasmjit_addr_t;
-#define INVALID_ADDR ((wasmjit_addr_t) -1)
-
-struct Addrs {
-	size_t n_elts;
-	wasmjit_addr_t *elts;
+struct FuncInst {
+	struct ModuleInst *module_inst;
+	/*
+	  the function signature of compiled_code
+	  pointers mirrors that of the WASM input
+	  types.
+	*/
+	void *compiled_code;
+	size_t compiled_code_size;
+	/*
+	  host_function pointers are like
+	  compiled_code pointers except their
+	  argument list is followed by a struct
+	  FuncInst *, the runtime is expected to be
+	  able to translate between the two ABIs
+	*/
+	void *host_function;
+	struct FuncType type;
 };
 
-DECLARE_VECTOR_GROW(addrs, struct Addrs);
+struct TableInst {
+	struct FuncInst **data;
+	unsigned elemtype;
+	size_t length;
+	size_t max;
+};
+
+struct MemInst {
+	char *data;
+	size_t size;
+	size_t max; /* max of 0 means no max */
+};
+
+struct GlobalInst {
+	struct Value value;
+	unsigned mut;
+};
 
 struct Export {
 	char *name;
@@ -71,87 +104,12 @@ struct ModuleInst {
 
 DECLARE_VECTOR_GROW(func_types, struct FuncTypeVector);
 
-struct Value {
-	wasmjit_valtype_t type;
-	union ValueUnion {
-		uint32_t i32;
-		uint64_t i64;
-		float f32;
-		double f64;
-	} data;
+struct NamedModule {
+	char *name;
+	struct ModuleInst *module;
 };
 
 #define IS_HOST(funcinst) ((funcinst)->host_function)
-
-struct Store {
-	struct ModuleInstances {
-		size_t n_elts;
-		struct ModuleInst *elts;
-	} modules;
-	struct Namespace {
-		size_t n_elts;
-		struct NamespaceEntry {
-			char *module_name;
-			char *name;
-			unsigned type;
-			wasmjit_addr_t addr;
-		} *elts;
-	} names;
-	struct StoreFuncs {
-		wasmjit_addr_t n_elts;
-		struct FuncInst {
-			struct ModuleInst *module_inst;
-			/*
-			  the function signature of compiled_code
-			  pointers mirrors that of the WASM input
-			  types.
-			 */
-			void *compiled_code;
-			size_t compiled_code_size;
-			/*
-			   host_function pointers are like
-			   compiled_code pointers except their
-			   argument list is followed by a struct
-			   FuncInst *, the runtime is expected to be
-			   able to translate between the two ABIs
-			*/
-			void *host_function;
-			struct FuncType type;
-		} *elts;
-	} funcs;
-	struct TableFuncs {
-		wasmjit_addr_t n_elts;
-		struct TableInst {
-			struct FuncInst **data;
-			unsigned elemtype;
-			size_t length;
-			size_t max;
-		} *elts;
-	} tables;
-	struct StoreMems {
-		wasmjit_addr_t n_elts;
-		struct MemInst {
-			char *data;
-			size_t size;
-			size_t max; /* max of 0 means no max */
-		} *elts;
-	} mems;
-	struct StoreGlobals {
-		wasmjit_addr_t n_elts;
-		struct GlobalInst {
-			struct Value value;
-			unsigned mut;
-		} *elts;
-	} globals;
-	struct Addrs startfuncs;
-};
-
-DECLARE_VECTOR_GROW(store_module_insts, struct ModuleInstances);
-DECLARE_VECTOR_GROW(store_names, struct Namespace);
-DECLARE_VECTOR_GROW(store_funcs, struct StoreFuncs);
-DECLARE_VECTOR_GROW(store_tables, struct TableFuncs);
-DECLARE_VECTOR_GROW(store_mems, struct StoreMems);
-DECLARE_VECTOR_GROW(store_globals, struct StoreGlobals);
 
 #define WASM_PAGE_SIZE ((size_t) (64 * 1024))
 
@@ -159,54 +117,6 @@ int _wasmjit_create_func_type(struct FuncType *ft,
 			      size_t n_inputs,
 			      wasmjit_valtype_t *input_types,
 			      size_t n_outputs, wasmjit_valtype_t *output_types);
-
-wasmjit_addr_t _wasmjit_add_memory_to_store(struct Store *store,
-					    size_t size, size_t max);
-wasmjit_addr_t _wasmjit_add_function_to_store(struct Store *store,
-					      struct ModuleInst *module_inst,
-					      void *code,
-					      size_t n_inputs,
-					      wasmjit_valtype_t *input_types,
-					      size_t n_outputs,
-					      wasmjit_valtype_t *output_types);
-wasmjit_addr_t _wasmjit_add_table_to_store(struct Store *store,
-					   unsigned elemtype,
-					   size_t length,
-					   size_t max);
-wasmjit_addr_t _wasmjit_add_global_to_store(struct Store *store,
-					    struct Value value,
-					    unsigned mut);
-int _wasmjit_add_to_namespace(struct Store *store,
-			      const char *module_name,
-			      const char *name,
-			      unsigned type,
-			      wasmjit_addr_t addr);
-
-int wasmjit_import_function(struct Store *store,
-			    const char *module_name,
-			    const char *name,
-			    void *funcaddr,
-			    size_t n_inputs,
-			    wasmjit_valtype_t *input_types,
-			    size_t n_outputs, wasmjit_valtype_t *output_types);
-
-wasmjit_addr_t wasmjit_import_memory(struct Store *store,
-				     const char *module_name,
-				     const char *name,
-				     size_t size, size_t max);
-
-int wasmjit_import_table(struct Store *store,
-			 const char *module_name,
-			 const char *name,
-			 unsigned elemtype,
-			 size_t length,
-			 size_t max);
-
-int wasmjit_import_global(struct Store *store,
-			  const char *module_name,
-			  const char *name,
-			  struct Value value,
-			  unsigned mut);
 
 int wasmjit_typecheck_func(const struct FuncType *expected_type,
 			   const struct FuncInst *func);
