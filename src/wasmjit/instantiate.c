@@ -520,19 +520,19 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 		switch (export->idx_type) {
 		case IMPORT_DESC_TYPE_FUNC:
 			exportinst->value.func =
-				module_inst->funcs.elts[export->idx_type];
+				module_inst->funcs.elts[export->idx];
 			break;
 		case IMPORT_DESC_TYPE_TABLE:
 			exportinst->value.table =
-				module_inst->tables.elts[export->idx_type];
+				module_inst->tables.elts[export->idx];
 			break;
 		case IMPORT_DESC_TYPE_MEM:
 			exportinst->value.mem =
-				module_inst->mems.elts[export->idx_type];
+				module_inst->mems.elts[export->idx];
 			break;
 		case IMPORT_DESC_TYPE_GLOBAL:
 			exportinst->value.global =
-				module_inst->globals.elts[export->idx_type];
+				module_inst->globals.elts[export->idx];
 			break;
 		default:
 			assert(0);
