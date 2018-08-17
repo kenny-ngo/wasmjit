@@ -178,7 +178,7 @@ double double_swap_bytes(double data)
 DEFINE_INT_READER(uint32_t);
 DEFINE_INT_READER(uint8_t);
 
-#ifndef __STDC_IEC_559__
+#ifndef IEC559_FLOAT_ENCODING
 #error We dont support non-IEC 449 floats
 #endif
 DEFINE_INT_READER(float);

@@ -110,4 +110,8 @@ int output_buf(struct SizedBuffer *sstack, const void *buf,
 #define CATAGAIN(a, b) a ## b
 #define CAT(a, b) CATAGAIN(a, b)
 
+#if defined(__STDC_IEC_559__) || (defined(__x86_64__) && defined(__clang__))
+#define IEC559_FLOAT_ENCODING
+#endif
+
 #endif
