@@ -113,11 +113,11 @@
 #include <wasmjit/emscripten_runtime_def.h>
 
 extern struct FuncInst WASM_FUNC_SYMBOL(env, _main);
+extern struct FuncInst WASM_FUNC_SYMBOL(env, stackAlloc);
 
 int main(int argc, char *argv[]) {
-	/* TODO: put argv into memory */
-	int (*_main)(int, char *[]);
-	/* TODO: type check _main */
-	_main = WASM_FUNC_SYMBOL(env, _main).compiled_code;
-	return _main(argc, argv);
+	return wasmjit_emscripten_invoke_main(&WASM_MEMORY_SYMBOL(env, memory),
+					      &WASM_FUNC_SYMBOL(env, stackAlloc),
+					      &WASM_FUNC_SYMBOL(env, _main),
+					      argc, argv);
 }

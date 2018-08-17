@@ -48,4 +48,10 @@ uint32_t wasmjit_emscripten____syscall6(uint32_t which, uint32_t varargs, struct
 void wasmjit_emscripten____unlock(uint32_t x, struct FuncInst *funcinst);
 uint32_t wasmjit_emscripten__emscripten_memcpy_big(uint32_t dest, uint32_t src, uint32_t num, struct FuncInst *funcinst);
 
+int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
+				   struct FuncInst *stack_alloc_inst,
+				   struct FuncInst *main_inst,
+				   int argc,
+				   char *argv[]);
+
 #endif

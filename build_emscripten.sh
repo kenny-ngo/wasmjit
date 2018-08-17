@@ -8,7 +8,7 @@ make wasmjit
 
 ./wasmjit -o "$1" > "$1.o"
 
-SUPPORT="static_runtime emscripten_runtime_posix runtime vector static_emscripten_runtime"
+SUPPORT="static_runtime emscripten_runtime emscripten_runtime_posix runtime vector static_emscripten_runtime"
 SUPPORT_FILES=""
 for FILE in $SUPPORT
 do

@@ -29,6 +29,7 @@
 #include <wasmjit/runtime.h>
 #include <wasmjit/instantiate.h>
 #include <wasmjit/execute.h>
+#include <wasmjit/emscripten_runtime.h>
 #include <wasmjit/dynamic_emscripten_runtime.h>
 #include <wasmjit/elf_relocatable.h>
 
@@ -150,74 +151,59 @@ int main(int argc, char *argv[])
 
 	{
 		struct NamedModule *modules;
-		struct ModuleInst *module_inst;
+		struct ModuleInst *module_inst, *env_module_inst;
 		size_t n_modules, i;
+		struct FuncInst *main_inst, *stack_alloc_inst;
+		struct MemInst *meminst;
 
 		modules = wasmjit_instantiate_emscripten_runtime(&n_modules);
 
 		if (!modules)
 			return -1;
 
+		env_module_inst = NULL;
+		for (i = 0; i < n_modules; ++i) {
+			if (!strcmp(modules[i].name, "env")) {
+				env_module_inst = modules[i].module;
+				break;
+			}
+		}
+
+		if (!env_module_inst)
+			return -1;
+
 		module_inst = wasmjit_instantiate(&module, n_modules, modules,
 						  error_buffer, sizeof(error_buffer));
-		if (!module_inst)
-			return -1;
-
-		/* find _main */
-		for (i = 0; i < module_inst->exports.n_elts; ++i) {
-			struct FuncInst *maininst;
-			if (strcmp(module_inst->exports.elts[i].name, "_main"))
-				continue;
-
-			if (module_inst->exports.elts[i].type !=
-			    IMPORT_DESC_TYPE_FUNC) {
-				fprintf(stderr, "_main export is not a function!\n");
-				return -1;
-			}
-
-			maininst = module_inst->exports.elts[i].value.func;
-
-			if (maininst->type.n_inputs == 0 &&
-			    maininst->type.output_type == VALTYPE_I32) {
-				union ValueUnion out;
-				if (!wasmjit_invoke_function(maininst, NULL,
-							     &out)) {
-					fprintf(stderr, "failed to invoke main");
-					return -1;
-				}
-
-				return out.i32;
-			} else if (maininst->type.n_inputs == 2 &&
-				   maininst->type.input_types[0] == VALTYPE_I32 &&
-				   maininst->type.input_types[1] == VALTYPE_I32 &&
-				   maininst->type.output_type == VALTYPE_I32) {
-				union ValueUnion inputs[2];
-				union ValueUnion out;
-				/* TODO: set argc, argv */
-				inputs[1].i32 = 0;
-				inputs[0].i32 = 0;
-				if (!wasmjit_invoke_function(maininst,
-							     &inputs[1],
-							     &out)) {
-					fprintf(stderr, "failed to invoke main");
-					return -1;
-				}
-
-				return out.i32;
-			}
-			else {
-				fprintf(stderr, "_main funciton had bad type!\n");
-				return -1;
-			}
-
-			break;
-		}
-
-		if (i == module_inst->exports.n_elts) {
-			fprintf(stderr, "no _main function\n");
+		if (!module_inst) {
+			fprintf(stderr, "Error instantiating module: %s\n",
+				error_buffer);
 			return -1;
 		}
 
-		return 0;
+		main_inst = wasmjit_get_export(module_inst, "_main",
+					       IMPORT_DESC_TYPE_FUNC).func;
+		if (!main_inst) {
+			fprintf(stderr, "Couldn't find _main\n");
+			return -1;
+		}
+
+		stack_alloc_inst = wasmjit_get_export(module_inst, "stackAlloc",
+						      IMPORT_DESC_TYPE_FUNC).func;
+		if (!stack_alloc_inst) {
+			fprintf(stderr, "Couldn't find stackAlloc\n");
+			return -1;
+		}
+
+		meminst = wasmjit_get_export(env_module_inst, "memory",
+					     IMPORT_DESC_TYPE_MEM).mem;
+		if (!meminst) {
+			fprintf(stderr, "Couldn't find env.memory\n");
+			return -1;
+		}
+
+		return wasmjit_emscripten_invoke_main(meminst,
+						      stack_alloc_inst,
+						      main_inst,
+						      argc - optind, &argv[optind]);
 	}
 }

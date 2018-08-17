@@ -74,7 +74,7 @@ struct GlobalInst {
 struct Export {
 	char *name;
 	wasmjit_desc_t type;
-	union {
+	union ExportPtr {
 		struct FuncInst *func;
 		struct TableInst *table;
 		struct MemInst *mem;
@@ -143,5 +143,8 @@ void wasmjit_free_module_inst(struct ModuleInst *module);
 void *wasmjit_map_code_segment(size_t code_size);
 int wasmjit_mark_code_segment_executable(void *code, size_t code_size);
 int wasmjit_unmap_code_segment(void *code, size_t code_size);
+
+union ExportPtr wasmjit_get_export(struct ModuleInst *, const char *name, wasmjit_desc_t type);
+
 
 #endif

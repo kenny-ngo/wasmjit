@@ -59,6 +59,40 @@ int wasmjit_unmap_code_segment(void *code, size_t code_size)
 
 /* end platform specific */
 
+union ExportPtr wasmjit_get_export(struct ModuleInst *module_inst,
+				   const char *name,
+				   wasmjit_desc_t type) {
+	size_t i;
+	union ExportPtr ret;
+
+	for (i = 0; i < module_inst->exports.n_elts; ++i) {
+		if (strcmp(module_inst->exports.elts[i].name, name))
+			continue;
+
+		if (module_inst->exports.elts[i].type != type)
+			break;
+
+		return module_inst->exports.elts[i].value;
+	}
+
+	switch (type) {
+	case IMPORT_DESC_TYPE_FUNC:
+		ret.func = NULL;
+		break;
+	case IMPORT_DESC_TYPE_TABLE:
+		ret.table = NULL;
+		break;
+	case IMPORT_DESC_TYPE_MEM:
+		ret.mem = NULL;
+		break;
+	case IMPORT_DESC_TYPE_GLOBAL:
+		ret.global = NULL;
+		break;
+	}
+
+	return ret;
+}
+
 void wasmjit_free_module_inst(struct ModuleInst *module)
 {
 	size_t i;
