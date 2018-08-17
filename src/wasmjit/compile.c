@@ -605,7 +605,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			OUTS("\x48\x8d\x74\x24");
 			OUTB(((intmax_t) (FUNC_TYPE_N_OUTPUTS(type) - 1)) * 8);
 
-			/* lea (-8 * n_frame_locals)(%rbp), %rdi */
+			/* lea (-8 * (n_frame_locals + 1))(%rbp), %rdi */
 			OUTS("\x48\x8d\xbd");
 			if (n_frame_locals == SIZE_MAX)
 				goto error;
