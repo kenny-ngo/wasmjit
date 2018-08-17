@@ -30,6 +30,8 @@
 
 #include <stdio.h>
 
+#ifdef __GLIBC__
+
 #include <elf.h>
 
 struct Relocations {
@@ -1464,3 +1466,16 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 
 	return NULL;
 }
+
+#else
+
+void *wasmjit_output_elf_relocatable(const char *module_name,
+                                     const struct Module *module,
+                                     size_t *outsize) {
+	(void)module_name;
+	(void)module;
+	(void)outsize;
+	return NULL;
+}
+
+#endif
