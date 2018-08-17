@@ -1088,9 +1088,11 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 	}
 	case OPCODE_I32_LOAD:
 	case OPCODE_I64_LOAD:
+	case OPCODE_F32_LOAD:
 	case OPCODE_F64_LOAD:
 	case OPCODE_I32_LOAD8_S:
 	case OPCODE_I32_STORE:
+	case OPCODE_F32_STORE:
 	case OPCODE_I64_STORE:
 	case OPCODE_F64_STORE:
 	case OPCODE_I32_STORE8:
@@ -1103,6 +1105,9 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			break;
 		case OPCODE_I64_LOAD:
 			extra = &instruction->data.i64_load;
+			break;
+		case OPCODE_F32_LOAD:
+			extra = &instruction->data.f32_load;
 			break;
 		case OPCODE_F64_LOAD:
 			extra = &instruction->data.f64_load;
@@ -1125,6 +1130,10 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		case OPCODE_I64_STORE:
 			assert(peek_stack(sstack) == STACK_I64);
 			extra = &instruction->data.i64_store;
+			goto after;
+		case OPCODE_F32_STORE:
+			assert(peek_stack(sstack) == STACK_F32);
+			extra = &instruction->data.f32_store;
 			goto after;
 		case OPCODE_F64_STORE:
 			assert(peek_stack(sstack) == STACK_F64);
@@ -1229,6 +1238,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		switch (instruction->opcode) {
 		case OPCODE_I32_LOAD:
 		case OPCODE_I32_LOAD8_S:
+		case OPCODE_F32_LOAD:
 		case OPCODE_F64_LOAD:
 		case OPCODE_I64_LOAD: {
 			unsigned valtype;
@@ -1241,9 +1251,14 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 				valtype = STACK_I32;
 				break;
 			case OPCODE_I32_LOAD:
+			case OPCODE_F32_LOAD:
 				/* movl -4(%rax, %rsi), %eax */
 				OUTS("\x8b\x44\x30\xfc");
-				valtype = STACK_I32;
+				switch (instruction->opcode) {
+				case OPCODE_I32_LOAD: valtype = STACK_I32; break;
+				case OPCODE_F32_LOAD: valtype = STACK_F32; break;
+				default: assert(0); break;
+				}
 				break;
 			case OPCODE_I64_LOAD:
 			case OPCODE_F64_LOAD:
@@ -1268,6 +1283,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			break;
 		}
 		case OPCODE_I32_STORE:
+		case OPCODE_F32_STORE:
 			/* LOGIC: data[ea - 4] = pop_stack() */
 			/* movl %edi, -4(%rax, %rsi) */
 			OUTS("\x89\x7c\x30\xfc");
@@ -1320,6 +1336,27 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 
 		push_stack(sstack, STACK_I64);
 		break;
+	case OPCODE_F32_CONST: {
+		uint32_t bitrepr;
+		/* mov $value, %eax */
+		OUTS("\xb8");
+#ifndef		__STDC_IEC_559__
+#error We dont support non-IEC 449 floats
+#endif
+
+		memcpy(&bitrepr, &instruction->data.f32_const.value,
+		       sizeof(uint32_t));
+
+		encode_le_uint32_t(bitrepr, buf);
+		if (!output_buf(output, buf, sizeof(uint32_t)))
+			goto error;
+
+		/* push %rax */
+		OUTS("\x50");
+
+		push_stack(sstack, STACK_F32);
+		break;
+	}
 	case OPCODE_F64_CONST: {
 		uint64_t bitrepr;
 		/* movq $value, %rax */
@@ -1830,6 +1867,25 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 
 		if (!push_stack(sstack, STACK_F64))
 			goto error;
+		break;
+	case OPCODE_F64_PROMOTE_F32:
+		assert(peek_stack(sstack) == STACK_F32);
+		pop_stack(sstack);
+
+
+		/* movd (%rsp), %xmm0 */
+		OUTS("\x66\x0f\x6e\x04\x24");
+
+		/* cvtss2sd %xmm0, %xmm1 */
+		OUTS("\xf3\x0f\x5a\xc8");
+
+		/* movsd %xmm1, (%rsp) */
+		OUTS("\xf2\x0f\x11\x0c\x24");
+
+
+		if (!push_stack(sstack, STACK_F64))
+			goto error;
+
 		break;
 	case OPCODE_I64_REINTERPRET_F64:
 		assert(peek_stack(sstack) == STACK_F64);
