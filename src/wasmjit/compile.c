@@ -1402,6 +1402,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 	case OPCODE_I64_EQ:
 	case OPCODE_I64_NE:
 	case OPCODE_I64_LT_S:
+	case OPCODE_I64_LT_U:
 	case OPCODE_I64_GT_U: {
 		unsigned stack_type;
 
@@ -1409,6 +1410,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		case OPCODE_I64_EQ:
 		case OPCODE_I64_NE:
 		case OPCODE_I64_LT_S:
+		case OPCODE_I64_LT_U:
 		case OPCODE_I64_GT_U:
 			stack_type = STACK_I64;
 			break;
@@ -1452,6 +1454,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			OUTS("\x0f\x9c\xc0");
 			break;
 		case OPCODE_I32_LT_U:
+		case OPCODE_I64_LT_U:
 			/* setb %al */
 			OUTS("\x0f\x92\xc0");
 			break;
@@ -1551,7 +1554,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 	case OPCODE_I64_SUB:
 	case OPCODE_I64_MUL:
 	case OPCODE_I64_AND:
-	case OPCODE_I64_OR: {
+	case OPCODE_I64_OR:
+	case OPCODE_I64_XOR: {
 		unsigned stack_type;
 
 		switch (instruction->opcode) {
@@ -1560,6 +1564,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		case OPCODE_I64_MUL:
 		case OPCODE_I64_AND:
 		case OPCODE_I64_OR:
+		case OPCODE_I64_XOR:
 			stack_type = STACK_I64;
 			break;
 		default:
@@ -1608,6 +1613,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			OUTS("\x09\x04\x24");
 			break;
 		case OPCODE_I32_XOR:
+		case OPCODE_I64_XOR:
 			/* xor    %eax,(%rsp) */
 			OUTS("\x31\x04\x24");
 			break;
