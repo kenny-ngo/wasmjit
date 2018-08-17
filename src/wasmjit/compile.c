@@ -680,6 +680,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			assert(peek_stack(sstack) == STACK_I32);
 			if (!pop_stack(sstack))
 				goto error;
+			cur_stack_depth -= 1;
 
 			/* mov $const, %rdi */
 			OUTS("\x48\xbf");
