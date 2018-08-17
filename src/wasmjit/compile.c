@@ -1732,9 +1732,9 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
  		assert(peek_stack(sstack) == STACK_F64);
 
 		/* movsd (%rsp), %xmm0 */
-		OUTS("\xf2\x0f\x10\x07");
+		OUTS("\xf2\x0f\x10\x04\x24");
 		/* add $8, %rsp */
-		OUTS("\x48\x8d\x47\x08");
+		OUTS("\x48\x83\xc4\x08");
 
 		switch (instruction->opcode) {
 		case OPCODE_F64_ADD:
@@ -1747,7 +1747,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			break;
 		case OPCODE_F64_MUL:
 			/* mulsd (%rsp), %xmm0 */
-			OUTS("\xf2\x0f\x59\x47\x08");
+			OUTS("\xf2\x0f\x59\x04\x24");
 			break;
 		default:
 			assert(0);
@@ -1762,8 +1762,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 
 		/* mov $0xffffffff,%eax */
 		OUTS("\xb8\xff\xff\xff\xff");
-		/* and %rax,(%rdi) */
-		OUTS("\x48\x21\x07");
+		/* and %rax,(%rsp) */
+		OUTS("\x48\x21\x04\x24");
 
 		if (!push_stack(sstack, STACK_I32))
 			goto error;
@@ -2133,9 +2133,9 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 			OUTS("\x48\x8d\x47\x08");
 		} else if (FUNC_TYPE_OUTPUT_TYPES(type)[0] == VALTYPE_F64) {
 			/* movsd (%rsp), %xmm0 */
-			OUTS("\xf2\x0f\x10\x07");
+			OUTS("\xf2\x0f\x10\x04\x24");
 			/* add $8, %rsp */
-			OUTS("\x48\x8d\x47\x08");
+			OUTS("\x48\x83\xc4\x08");
 		} else {
 			/* pop %rax */
 			OUTS("\x58");
