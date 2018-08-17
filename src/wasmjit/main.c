@@ -143,7 +143,7 @@ int main(int argc, char *argv[])
 		void *a_out;
 		size_t size;
 
-		a_out = wasmjit_output_elf_relocatable("env", &module, &size);
+		a_out = wasmjit_output_elf_relocatable("asm", &module, &size);
 		write(1, a_out, size);
 
 		return 0;
