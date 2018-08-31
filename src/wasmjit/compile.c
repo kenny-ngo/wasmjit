@@ -29,12 +29,7 @@
 #include <wasmjit/vector.h>
 #include <wasmjit/runtime.h>
 
-#include <assert.h>
-#include <inttypes.h>
-#include <limits.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
+#include <wasmjit/sys.h>
 
 #define FUNC_EXIT_CONT SIZE_MAX
 
@@ -1913,7 +1908,9 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			goto error;
 		break;
 	default:
+#ifndef __KERNEL__
 		fprintf(stderr, "Unhandled Opcode: 0x%" PRIx8 "\n", instruction->opcode);
+#endif
 		assert(0);
 		break;
 	}

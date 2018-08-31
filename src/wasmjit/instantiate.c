@@ -30,9 +30,7 @@
 #include <wasmjit/util.h>
 #include <wasmjit/execute.h>
 
-#include <inttypes.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <wasmjit/sys.h>
 
 static int func_sig_repr(char *why, size_t why_size, struct FuncType *type)
 {

@@ -25,9 +25,7 @@
 #ifndef __WASMJIT__WASMBIN_H__
 #define __WASMJIT__WASMBIN_H__
 
-#include <assert.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <wasmjit/sys.h>
 
 enum {
 	/* Control Instructions */

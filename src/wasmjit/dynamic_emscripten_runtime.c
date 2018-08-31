@@ -27,8 +27,7 @@
 #include <wasmjit/util.h>
 #include <wasmjit/compile.h>
 
-#include <math.h>
-#include <stdlib.h>
+#include <wasmjit/sys.h>
 
 struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t *amt)
 {

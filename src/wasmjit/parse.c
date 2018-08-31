@@ -25,18 +25,7 @@
 #include <wasmjit/parse.h>
 #include <wasmjit/util.h>
 
-#include <assert.h>
-#include <inttypes.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include <errno.h>
-#include <fcntl.h>
-#include <unistd.h>
-
-#include <sys/stat.h>
+#include <wasmjit/sys.h>
 
 #define BLOCK_TERMINAL 0x0B
 #define ELSE_TERMINAL 0x05
@@ -58,7 +47,7 @@ enum {
 	SECTION_ID_DATA,
 };
 
-int init_pstate(struct ParseState *pstate, char *buf, size_t size)
+int init_pstate(struct ParseState *pstate, const char *buf, size_t size)
 {
 	pstate->eof = 0;
 	pstate->input = buf;

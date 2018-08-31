@@ -22,29 +22,24 @@
   SOFTWARE.
  */
 
-#include <wasmjit/sys.h>
+#ifndef __KWASMJIT__KWASMJIT_H
+#define __KWASMJIT__KWASMJIT_H
 
-int wasmjit_vector_set_size(void *elts_, size_t *n_elts, size_t new_n_elts,
-			    size_t elt_size)
-{
-	void **elts = (void **)elts_;
-	void *newstackelts;
-	size_t total_elt_size;
+#ifdef __KERNEL__
+#include <linux/types.h>
+#else
+#include <stddef.h>
+#endif
 
-	if (__builtin_umull_overflow(new_n_elts, elt_size, &total_elt_size)) {
-		goto error;
-	}
+#include <linux/ioctl.h>
 
-	newstackelts = realloc(*elts, total_elt_size);
-	if (!newstackelts && total_elt_size)
-		goto error;
+#define KWASMJIT_MAGIC 0xCC
 
-	*elts = newstackelts;
-	*n_elts = new_n_elts;
+struct kwasmjit_instantiate_args {
+	int fd;
+	const char *module_name;
+};
 
-	return 1;
+#define KWASMJIT_INSTANTIATE _IOW(KWASMJIT_MAGIC, 0, struct kwasmjit_instantiate_args)
 
- error:
-	free(*elts);
-	return 0;
-}
+#endif

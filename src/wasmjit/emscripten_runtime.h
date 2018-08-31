@@ -27,7 +27,7 @@
 
 #include <wasmjit/runtime.h>
 
-#include <stdint.h>
+#include <wasmjit/sys.h>
 
 enum {
 	WASMJIT_EMSCRIPTEN_TOTAL_MEMORY = 16777216,

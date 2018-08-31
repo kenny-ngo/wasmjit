@@ -27,12 +27,35 @@
 #include <wasmjit/ast.h>
 #include <wasmjit/util.h>
 
-#include <assert.h>
-#include <stdlib.h>
+#include <wasmjit/sys.h>
 
 DEFINE_VECTOR_GROW(func_types, struct FuncTypeVector);
 
 /* platform specific */
+
+#ifdef __KERNEL__
+
+void *wasmjit_map_code_segment(size_t code_size)
+{
+	(void)code_size;
+	return NULL;
+}
+
+int wasmjit_mark_code_segment_executable(void *code, size_t code_size)
+{
+	(void)code;
+	(void)code_size;
+	return 0;
+}
+
+int wasmjit_unmap_code_segment(void *code, size_t code_size)
+{
+	(void)code;
+	(void)code_size;
+	return 0;
+}
+
+#else
 
 #include <sys/mman.h>
 
@@ -56,6 +79,8 @@ int wasmjit_unmap_code_segment(void *code, size_t code_size)
 {
 	return !munmap(code, code_size);
 }
+
+#endif
 
 /* end platform specific */
 

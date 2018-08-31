@@ -22,29 +22,35 @@
   SOFTWARE.
  */
 
+#ifndef __WASMJIT__HIGH_LEVEL_H
+#define __WASMJIT__HIGH_LEVEL_H
+
 #include <wasmjit/sys.h>
 
-int wasmjit_vector_set_size(void *elts_, size_t *n_elts, size_t new_n_elts,
-			    size_t elt_size)
-{
-	void **elts = (void **)elts_;
-	void *newstackelts;
-	size_t total_elt_size;
+/* this interface mimics the kernel interface and thus lacks power
+   since we can't pass in abitrary objects for import, like host functions */
 
-	if (__builtin_umull_overflow(new_n_elts, elt_size, &total_elt_size)) {
-		goto error;
-	}
+struct WasmJITHigh {
+#if defined(__linux__) && !defined(__KERNEL__)
+	int fd;
+#endif
+	size_t n_modules;
+	struct NamedModule *modules;
+};
 
-	newstackelts = realloc(*elts, total_elt_size);
-	if (!newstackelts && total_elt_size)
-		goto error;
+int wasmjit_high_init(struct WasmJITHigh *self);
+int wasmjit_high_instantiate_buf(struct WasmJITHigh *self,
+				 const char *buf, size_t size,
+				 const char *module_name);
+int wasmjit_high_instantiate(struct WasmJITHigh *self,
+			     const char *filename,
+			     const char *module_name);
+int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
+						size_t tablemin,
+						size_t tablemax);
+int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
+					const char *module_name,
+					int argc, char **argv);
+void wasmjit_high_close(struct WasmJITHigh *self);
 
-	*elts = newstackelts;
-	*n_elts = new_n_elts;
-
-	return 1;
-
- error:
-	free(*elts);
-	return 0;
-}
+#endif

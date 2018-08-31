@@ -27,7 +27,7 @@
 
 #include <wasmjit/ast.h>
 
-#include <stddef.h>
+#include <wasmjit/sys.h>
 
 struct ModuleTypes {
 	struct FuncType *functypes;

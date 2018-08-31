@@ -24,9 +24,7 @@
 
 #include <wasmjit/ast.h>
 
-#include <stddef.h>
-#include <string.h>
-#include <stdlib.h>
+#include <wasmjit/sys.h>
 
 void init_instruction(struct Instr *instr)
 {

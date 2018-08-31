@@ -27,9 +27,7 @@
 
 #include <wasmjit/ast.h>
 #include <wasmjit/vector.h>
-
-#include <stddef.h>
-#include <stdint.h>
+#include <wasmjit/sys.h>
 
 struct Value {
 	wasmjit_valtype_t type;

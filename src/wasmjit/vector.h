@@ -25,8 +25,7 @@
 #ifndef __WASMJIT__VECTOR_H__
 #define __WASMJIT__VECTOR_H__
 
-#include <assert.h>
-#include <string.h>
+#include <wasmjit/sys.h>
 
 int wasmjit_vector_set_size(void *, size_t *, size_t, size_t);
 

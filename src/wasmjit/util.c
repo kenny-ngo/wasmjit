@@ -26,8 +26,7 @@
 
 #include <wasmjit/vector.h>
 
-#include <stddef.h>
-#include <string.h>
+#include <wasmjit/sys.h>
 
 DEFINE_VECTOR_GROW(buffer, struct SizedBuffer);
 

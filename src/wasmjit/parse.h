@@ -27,17 +27,17 @@
 
 #include <wasmjit/ast.h>
 
-#include <stddef.h>
+#include <wasmjit/sys.h>
 
 struct ParseState {
 	int eof;
-	char *input;
+	const char *input;
 	size_t amt_left;
 };
 
 int read_module(struct ParseState *pstate, struct Module *module,
 		char *why, size_t why_size);
 
-int init_pstate(struct ParseState *pstate, char *buf, size_t size);
+int init_pstate(struct ParseState *pstate, const char *buf, size_t size);
 
 #endif

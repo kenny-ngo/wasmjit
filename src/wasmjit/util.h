@@ -27,9 +27,7 @@
 
 #include <wasmjit/vector.h>
 
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
+#include <wasmjit/sys.h>
 
 __attribute__ ((unused))
 static uint32_t uint32_t_swap_bytes(uint32_t data)
