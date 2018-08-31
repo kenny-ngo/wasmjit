@@ -37,6 +37,6 @@ struct ParseState {
 
 int read_module(struct ParseState *pstate, struct Module *module);
 
-int init_pstate(struct ParseState *pstate, char *file_name);
+int init_pstate(struct ParseState *pstate, char *buf, size_t size);
 
 #endif
