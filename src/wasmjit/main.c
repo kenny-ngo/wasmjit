@@ -146,7 +146,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	ret = read_module(&pstate, &module);
+	ret = read_module(&pstate, &module, NULL, 0);
 	if (!ret) {
 		printf("Error parsing module\n");
 		return -1;

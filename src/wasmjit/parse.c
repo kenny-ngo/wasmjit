@@ -269,7 +269,6 @@ int read_type_section(struct ParseState *pstate,
 			goto error;
 
 		if (ft != FUNCTION_TYPE_ID) {
-			errno = EINVAL;
 			goto error;
 		}
 
@@ -1418,18 +1417,26 @@ int read_data_section(struct ParseState *pstate,
 	return 0;
 }
 
-int read_module(struct ParseState *pstate, struct Module *module)
+int read_module(struct ParseState *pstate, struct Module *module,
+		char *why, size_t why_size)
 {
+#ifdef READ
+#undef READ
+#endif
 #define READ(msg, fn, ...)						\
 	do {								\
 		int ret;						\
 		ret = fn(pstate, __VA_ARGS__);				\
 		if (!ret) {						\
-			if (is_eof(pstate)) {				\
-				fprintf(stderr, "EOF while reading " msg "\n"); \
-			}						\
-			else {						\
-				fprintf(stderr, "Error reading " msg ": %s\n", strerror(errno)); \
+			if (why) {					\
+				if (is_eof(pstate)) {			\
+					snprintf(why, why_size,		\
+						 "EOF while reading " msg); \
+				}					\
+				else {					\
+					snprintf(why, why_size,		\
+						 "Error reading " msg); \
+				}					\
 			}						\
 			return 0;					\
 		}							\
@@ -1445,9 +1452,11 @@ int read_module(struct ParseState *pstate, struct Module *module)
 		READ("magic", read_uint32_t, &magic);
 
 		if (magic != WASM_MAGIC) {
-			fprintf(stderr,
-				"Bad WASM magic 0x%" PRIx32 " vs 0x%"
-				PRIx32 "\n", magic, WASM_MAGIC);
+			if (why) {
+				snprintf(why, why_size,
+					 "Bad WASM magic 0x%" PRIx32 " vs 0x%"
+					 PRIx32, magic, WASM_MAGIC);
+			}
 			return 0;
 		}
 	}
@@ -1459,9 +1468,11 @@ int read_module(struct ParseState *pstate, struct Module *module)
 		READ("version", read_uint32_t, &version);
 
 		if (version != VERSION) {
-			fprintf(stderr,
-				"Unsupported WASM version 0x%" PRIx32
-				" vs 0x%" PRIx32 "\n", version, VERSION);
+			if (why) {
+				snprintf(why, why_size,
+					 "Unsupported WASM version 0x%" PRIx32
+					 " vs 0x%" PRIx32, version, VERSION);
+			}
 			return 0;
 		}
 
@@ -1479,9 +1490,10 @@ int read_module(struct ParseState *pstate, struct Module *module)
 				if (is_eof(pstate)) {
 					break;
 				}
-				fprintf(stderr,
-					"Error reading id %s\n",
-					strerror(errno));
+				if (why) {
+					snprintf(why, why_size,
+						 "Error reading id");
+				}
 				return 0;
 			}
 		}
@@ -1536,7 +1548,10 @@ int read_module(struct ParseState *pstate, struct Module *module)
 			     &module->data_section);
 			break;
 		default:
-			printf("Unsupported wasm section: 0x%" PRIx32 "\n", id);
+			if (why) {
+				snprintf(why, why_size,
+					 "Unsupported wasm section: 0x%" PRIx32, id);
+			}
 			return 0;
 		}
 	}

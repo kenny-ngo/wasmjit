@@ -35,7 +35,8 @@ struct ParseState {
 	size_t amt_left;
 };
 
-int read_module(struct ParseState *pstate, struct Module *module);
+int read_module(struct ParseState *pstate, struct Module *module,
+		char *why, size_t why_size);
 
 int init_pstate(struct ParseState *pstate, char *buf, size_t size);
 
