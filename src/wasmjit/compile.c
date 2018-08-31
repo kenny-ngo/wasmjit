@@ -773,37 +773,6 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			OUTB(offsetof(struct FuncInst, compiled_code));
 		}
 
-		static const char *const movs[] = {
-			"\x48\x8b\xbc\x24",	/* mov N(%rsp), %rdi */
-			"\x48\x8b\xb4\x24",	/* mov N(%rsp), %rsi */
-			"\x48\x8b\x94\x24",	/* mov N(%rsp), %rdx */
-			"\x48\x8b\x8c\x24",	/* mov N(%rsp), %rcx */
-			"\x4c\x8b\x84\x24",	/* mov N(%rsp), %r8 */
-			"\x4c\x8b\x8c\x24",	/* mov N(%rsp), %r9 */
-		};
-
-		static const char *const f32_movs[] = {
-			"\xf3\x0f\x10\x84\x24",	/* movss N(%rsp), %xmm0 */
-			"\xf3\x0f\x10\x8c\x24",	/* movss N(%rsp), %xmm1 */
-			"\xf3\x0f\x10\x94\x24",	/* movss N(%rsp), %xmm2 */
-			"\xf3\x0f\x10\x9c\x24",	/* movss N(%rsp), %xmm3 */
-			"\xf3\x0f\x10\xa4\x24",	/* movss N(%rsp), %xmm4 */
-			"\xf3\x0f\x10\xac\x24",	/* movss N(%rsp), %xmm5 */
-			"\xf3\x0f\x10\xb4\x24",	/* movss N(%rsp), %xmm6 */
-			"\xf3\x0f\x10\xbc\x24",	/* movss N(%rsp), %xmm7 */
-		};
-
-		static const char *const f64_movs[] = {
-			"\xf2\x0f\x10\x84\x24",	/* movsd N(%rsp), %xmm0 */
-			"\xf2\x0f\x10\x8c\x24",	/* movsd N(%rsp), %xmm1 */
-			"\xf2\x0f\x10\x94\x24",	/* movsd N(%rsp), %xmm2 */
-			"\xf2\x0f\x10\x9c\x24",	/* movsd N(%rsp), %xmm3 */
-			"\xf2\x0f\x10\xa4\x24",	/* movsd N(%rsp), %xmm4 */
-			"\xf2\x0f\x10\xac\x24",	/* movsd N(%rsp), %xmm5 */
-			"\xf2\x0f\x10\xb4\x24",	/* movsd N(%rsp), %xmm6 */
-			"\xf2\x0f\x10\xbc\x24",	/* movsd N(%rsp), %xmm7 */
-		};
-
 		/* align stack to 16-byte boundary */
 		{
 			/* add stack contribution from spilled arguments */
@@ -838,6 +807,37 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		n_xmm_movs = 0;
 		n_stack = 0;
 		for (i = 0; i < ft->n_inputs; ++i) {
+			static const char *const movs[] = {
+				"\x48\x8b\xbc\x24",	/* mov N(%rsp), %rdi */
+				"\x48\x8b\xb4\x24",	/* mov N(%rsp), %rsi */
+				"\x48\x8b\x94\x24",	/* mov N(%rsp), %rdx */
+				"\x48\x8b\x8c\x24",	/* mov N(%rsp), %rcx */
+				"\x4c\x8b\x84\x24",	/* mov N(%rsp), %r8 */
+				"\x4c\x8b\x8c\x24",	/* mov N(%rsp), %r9 */
+			};
+
+			static const char *const f32_movs[] = {
+				"\xf3\x0f\x10\x84\x24",	/* movss N(%rsp), %xmm0 */
+				"\xf3\x0f\x10\x8c\x24",	/* movss N(%rsp), %xmm1 */
+				"\xf3\x0f\x10\x94\x24",	/* movss N(%rsp), %xmm2 */
+				"\xf3\x0f\x10\x9c\x24",	/* movss N(%rsp), %xmm3 */
+				"\xf3\x0f\x10\xa4\x24",	/* movss N(%rsp), %xmm4 */
+				"\xf3\x0f\x10\xac\x24",	/* movss N(%rsp), %xmm5 */
+				"\xf3\x0f\x10\xb4\x24",	/* movss N(%rsp), %xmm6 */
+				"\xf3\x0f\x10\xbc\x24",	/* movss N(%rsp), %xmm7 */
+			};
+
+			static const char *const f64_movs[] = {
+				"\xf2\x0f\x10\x84\x24",	/* movsd N(%rsp), %xmm0 */
+				"\xf2\x0f\x10\x8c\x24",	/* movsd N(%rsp), %xmm1 */
+				"\xf2\x0f\x10\x94\x24",	/* movsd N(%rsp), %xmm2 */
+				"\xf2\x0f\x10\x9c\x24",	/* movsd N(%rsp), %xmm3 */
+				"\xf2\x0f\x10\xa4\x24",	/* movsd N(%rsp), %xmm4 */
+				"\xf2\x0f\x10\xac\x24",	/* movsd N(%rsp), %xmm5 */
+				"\xf2\x0f\x10\xb4\x24",	/* movsd N(%rsp), %xmm6 */
+				"\xf2\x0f\x10\xbc\x24",	/* movsd N(%rsp), %xmm7 */
+			};
+
 			intmax_t stack_offset;
 			assert(sstack->
 			       elts[sstack->n_elts - ft->n_inputs +
@@ -2417,41 +2417,41 @@ char *wasmjit_compile_invoker(struct FuncType *type,
 	/* mov %rdi, %rbx */
 	OUTS("\x48\x89\xfb");
 
-	static const char *const movs[] = {
-		"\x48\x8b\xbb", /* mov N(%rbx), %rdi */
-		"\x48\x8b\xb3", /* mov N(%rbx), %rsi */
-		"\x48\x8b\x93", /* mov N(%rbx), %rdx */
-		"\x48\x8b\x8b", /* mov N(%rbx), %rcx */
-		"\x4c\x8b\x83", /* mov N(%rbx), %r8 */
-		"\x4c\x8b\x8b", /* mov N(%rbx), %r9 */
-	};
-
-	static const char *const f32_movs[] = {
-		"\xf3\x0f\x10\x83", /* movss  N(%rbx),%xmm0 */
-		"\xf3\x0f\x10\x8b", /* movss  N(%rbx),%xmm1 */
-		"\xf3\x0f\x10\x93", /* movss  N(%rbx),%xmm2 */
-		"\xf3\x0f\x10\x9b", /* movss  N(%rbx),%xmm3 */
-		"\xf3\x0f\x10\xa3", /* movss  N(%rbx),%xmm4 */
-		"\xf3\x0f\x10\xab", /* movss  N(%rbx),%xmm5 */
-		"\xf3\x0f\x10\xb3", /* movss  N(%rbx),%xmm6 */
-		"\xf3\x0f\x10\xbb", /* movss  N(%rbx),%xmm7 */
-	};
-
-	static const char *const f64_movs[] = {
-		"\xf2\x0f\x10\x83", /* movsd  N(%rbx),%xmm0 */
-		"\xf2\x0f\x10\x8b", /* movsd  N(%rbx),%xmm1 */
-		"\xf2\x0f\x10\x93", /* movsd  N(%rbx),%xmm2 */
-		"\xf2\x0f\x10\x9b", /* movsd  N(%rbx),%xmm3 */
-		"\xf2\x0f\x10\xa3", /* movsd  N(%rbx),%xmm4 */
-		"\xf2\x0f\x10\xab", /* movsd  N(%rbx),%xmm5 */
-		"\xf2\x0f\x10\xb3", /* movsd  N(%rbx),%xmm6 */
-		"\xf2\x0f\x10\xbb", /* movsd  N(%rbx),%xmm7 */
-	};
-
 	n_movs = 0;
 	n_xmm_movs = 0;
 	n_stack = 0;
 	for (i = 0; i < type->n_inputs; ++i) {
+		static const char *const movs[] = {
+			"\x48\x8b\xbb", /* mov N(%rbx), %rdi */
+			"\x48\x8b\xb3", /* mov N(%rbx), %rsi */
+			"\x48\x8b\x93", /* mov N(%rbx), %rdx */
+			"\x48\x8b\x8b", /* mov N(%rbx), %rcx */
+			"\x4c\x8b\x83", /* mov N(%rbx), %r8 */
+			"\x4c\x8b\x8b", /* mov N(%rbx), %r9 */
+		};
+
+		static const char *const f32_movs[] = {
+			"\xf3\x0f\x10\x83", /* movss  N(%rbx),%xmm0 */
+			"\xf3\x0f\x10\x8b", /* movss  N(%rbx),%xmm1 */
+			"\xf3\x0f\x10\x93", /* movss  N(%rbx),%xmm2 */
+			"\xf3\x0f\x10\x9b", /* movss  N(%rbx),%xmm3 */
+			"\xf3\x0f\x10\xa3", /* movss  N(%rbx),%xmm4 */
+			"\xf3\x0f\x10\xab", /* movss  N(%rbx),%xmm5 */
+			"\xf3\x0f\x10\xb3", /* movss  N(%rbx),%xmm6 */
+			"\xf3\x0f\x10\xbb", /* movss  N(%rbx),%xmm7 */
+		};
+
+		static const char *const f64_movs[] = {
+			"\xf2\x0f\x10\x83", /* movsd  N(%rbx),%xmm0 */
+			"\xf2\x0f\x10\x8b", /* movsd  N(%rbx),%xmm1 */
+			"\xf2\x0f\x10\x93", /* movsd  N(%rbx),%xmm2 */
+			"\xf2\x0f\x10\x9b", /* movsd  N(%rbx),%xmm3 */
+			"\xf2\x0f\x10\xa3", /* movsd  N(%rbx),%xmm4 */
+			"\xf2\x0f\x10\xab", /* movsd  N(%rbx),%xmm5 */
+			"\xf2\x0f\x10\xb3", /* movsd  N(%rbx),%xmm6 */
+			"\xf2\x0f\x10\xbb", /* movsd  N(%rbx),%xmm7 */
+		};
+
 		if ((type->input_types[i] == VALTYPE_I32 ||
 		     type->input_types[i] == VALTYPE_I64) &&
 		    n_movs < 6) {

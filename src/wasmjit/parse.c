@@ -1031,6 +1031,7 @@ int read_instructions(struct ParseState *pstate,
 	while (1) {
 		struct Instr instruction, *next_instructions;
 		size_t new_len;
+		size_t size;
 
 		ret =
 		    read_instruction(pstate, &instruction, allow_else,
@@ -1047,7 +1048,6 @@ int read_instructions(struct ParseState *pstate,
 
 		new_len = *n_instructions + 1;
 
-		size_t size;
 		if (__builtin_umull_overflow
 		    (new_len, sizeof(struct Instr), &size)) {
 			goto error;

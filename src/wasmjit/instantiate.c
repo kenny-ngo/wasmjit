@@ -624,6 +624,10 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 			case MEMREF_RESOLVE_INDIRECT_CALL:
 				val = (uintptr_t) &wasmjit_resolve_indirect_call;
 				break;
+			default:
+				assert(0);
+				val = 0;
+				break;
 			}
 
 			encode_le_uint64_t(val, &((char *) mapped)[memrefs.elts[j].code_offset]);
