@@ -424,14 +424,16 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 		if (!tmp_table)
 			goto error;
 
-		tmp_table->data = calloc(tmp_table->length,
-					 sizeof(tmp_table->data[0]));
-		if (!tmp_table->data)
-			goto error;
-
 		tmp_table->elemtype = table->elemtype;
 		tmp_table->length = table->limits.min;
 		tmp_table->max = table->limits.max;
+
+		if (tmp_table->length) {
+			tmp_table->data = calloc(tmp_table->length,
+						 sizeof(tmp_table->data[0]));
+			if (!tmp_table->data)
+				goto error;
+		}
 
 		LVECTOR_GROW(&module_inst->tables, 1);
 		module_inst->tables.elts[module_inst->tables.n_elts - 1] = tmp_table;
