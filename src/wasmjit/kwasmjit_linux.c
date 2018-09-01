@@ -146,6 +146,71 @@ static int kwasmjit_instantiate_emscripten_runtime(struct kwasmjit_private *self
 	return retval;
 }
 
+static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
+					   struct kwasmjit_emscripten_invoke_main_args *arg)
+{
+	int retval, i;
+	char **argv = NULL, *module_name = NULL;
+
+	argv = kvzalloc(arg->argc * sizeof(char *), GFP_KERNEL);
+	if (IS_ERR(argv)) {
+		retval = PTR_ERR(argv);
+		argv = NULL;
+		goto error;
+	}
+
+	for (i = 0; i < arg->argc; ++i) {
+		char __user *argp;
+		get_user(argp, arg->argv + i);
+		argv[i] = kvstrndup_user(argp, 1024, GFP_KERNEL);
+		if (IS_ERR(argv[i])) {
+			retval = PTR_ERR(argv[i]);
+			argv[i] = NULL;
+			goto error;
+		}
+	}
+
+	module_name = kvstrndup_user(arg->module_name, 1024, GFP_USER);
+	if (IS_ERR(module_name)) {
+		retval = PTR_ERR(module_name);
+		module_name = NULL;
+		goto error;
+	}
+
+	{
+		mm_segment_t old_fs = get_fs();
+		/*
+		  we only handle kernel validated memory now
+		  so remove address limit
+		*/
+		set_fs(get_ds());
+		retval = wasmjit_high_emscripten_invoke_main(&self->high,
+							     module_name,
+							     arg->argc, argv);
+		set_fs(old_fs);
+	}
+
+	if (retval < 0) {
+		retval = -EINVAL;
+	}
+
+	/* TODO: copy back mutations to argv? */
+
+ error:
+	if (module_name)
+		kvfree(module_name);
+
+	if (argv) {
+		for (i = 0; i < arg->argc; ++i) {
+			if (argv[i])
+				kvfree(argv[i]);
+		}
+		kvfree(argv);
+	}
+
+	return retval;
+}
+
 static int kwasmjit_open(struct inode *inode, struct file *filp)
 {
 	/* allocate kwasmjit_private */
@@ -213,6 +278,17 @@ static long kwasmjit_unlocked_ioctl(struct file *filp,
 		}
 
 		retval = kwasmjit_instantiate_emscripten_runtime(self, &arg);
+		break;
+	}
+	case KWASMJIT_EMSCRIPTEN_INVOKE_MAIN: {
+		struct kwasmjit_emscripten_invoke_main_args arg;
+
+		if (copy_from_user(&arg, parg, sizeof(arg))) {
+			retval = -EFAULT;
+			goto error;
+		}
+
+		retval = kwasmjit_emscripten_invoke_main(self, &arg);
 		break;
 	}
 	default:

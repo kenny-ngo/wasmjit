@@ -43,7 +43,7 @@ int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
 	if (main_inst->type.n_inputs == 0 &&
 	    main_inst->type.output_type == VALTYPE_I32) {
 		uint32_t (*_main)(void) = main_inst->compiled_code;
-		return _main();
+		return 0xff & _main();
 	} else if (main_inst->type.n_inputs == 2 &&
 		   main_inst->type.input_types[0] == VALTYPE_I32 &&
 		   main_inst->type.input_types[1] == VALTYPE_I32 &&
@@ -63,7 +63,9 @@ int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
 
 		memcpy(base + argv_i + argc * 4, &zero, 4);
 
-		return _main(argc, argv_i);
+		/* TODO: copy back mutations to argv? */
+
+		return 0xff & _main(argc, argv_i);
 	} else {
 		return -1;
 	}

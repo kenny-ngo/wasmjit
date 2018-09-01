@@ -211,6 +211,70 @@ int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
 	return ret;
 }
 
+int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
+					const char *module_name,
+					int argc, char **argv)
+{
+	size_t i;
+	struct ModuleInst *env_module_inst;
+	struct FuncInst *main_inst, *stack_alloc_inst;
+	struct MemInst *meminst;
+	struct ModuleInst *module_inst;
+
+#if defined(__linux__) && !defined(__KERNEL__)
+	if (self->fd >= 0) {
+		struct kwasmjit_emscripten_invoke_main_args arg;
+
+		arg.module_name = module_name;
+		arg.argc = argc;
+		arg.argv = argv;
+
+		return ioctl(self->fd, KWASMJIT_EMSCRIPTEN_INVOKE_MAIN, &arg);
+	}
+#endif
+
+	module_inst = NULL;
+	for (i = 0; i < self->n_modules; ++i) {
+		if (!strcmp(self->modules[i].name, module_name)) {
+			module_inst = self->modules[i].module;
+		}
+	}
+
+	if (!module_inst)
+		return -1;
+
+	env_module_inst = NULL;
+	for (i = 0; i < self->n_modules; ++i) {
+		if (!strcmp(self->modules[i].name, "env")) {
+			env_module_inst = self->modules[i].module;
+			break;
+		}
+	}
+
+	if (!env_module_inst)
+		return -1;
+
+	main_inst = wasmjit_get_export(module_inst, "_main",
+				       IMPORT_DESC_TYPE_FUNC).func;
+	if (!main_inst)
+		return -1;
+
+	stack_alloc_inst = wasmjit_get_export(module_inst, "stackAlloc",
+					      IMPORT_DESC_TYPE_FUNC).func;
+	if (!stack_alloc_inst)
+		return -1;
+
+	meminst = wasmjit_get_export(env_module_inst, "memory",
+				     IMPORT_DESC_TYPE_MEM).mem;
+	if (!meminst)
+		return -1;
+
+	return wasmjit_emscripten_invoke_main(meminst,
+					      stack_alloc_inst,
+					      main_inst,
+					      argc, argv);
+}
+
 void wasmjit_high_close(struct WasmJITHigh *self)
 {
 	size_t i;
