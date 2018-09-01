@@ -32,6 +32,8 @@
 #include <wasmjit/emscripten_runtime.h>
 #include <wasmjit/dynamic_emscripten_runtime.h>
 #include <wasmjit/elf_relocatable.h>
+#include <wasmjit/util.h>
+#include <wasmjit/high_level.h>
 
 #include <assert.h>
 #include <inttypes.h>
@@ -40,72 +42,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <errno.h>
-
 #include <unistd.h>
-#include <fcntl.h>
-
-#include <sys/stat.h>
-#include <sys/types.h>
-
-char *load_file(const char *file_name, size_t *size)
-{
-	FILE *f = NULL;
-	char *input = NULL;
-	int fd = -1, ret;
-	struct stat st;
-	size_t rets;
-
-	fd = open(file_name, O_RDONLY);
-	if (fd < 0) {
-		goto error_exit;
-	}
-
-	ret = fstat(fd, &st);
-	if (ret < 0) {
-		goto error_exit;
-	}
-
-	f = fdopen(fd, "r");
-	if (!f) {
-		goto error_exit;
-	}
-	fd = -1;
-
-	*size = st.st_size;
-	input = malloc(st.st_size);
-	if (!input) {
-		goto error_exit;
-	}
-
-	rets = fread(input, sizeof(char), st.st_size, f);
-	if (rets != (size_t) st.st_size) {
-		goto error_exit;
-	}
-
-	goto success_exit;
-
- error_exit:
-	if (input) {
-		free(input);
-	}
-
- success_exit:
-	if (f) {
-		fclose(f);
-	}
-
-	if (fd >= 0) {
-		close(fd);
-	}
-
-	return input;
-}
 
 int init_pstate_user(struct ParseState *pstate, const char *file_name)
 {
 	size_t size;
-	char *buf = load_file(file_name, &size);
+	char *buf = wasmjit_load_file(file_name, &size);
 	if (!buf)
 		return 0;
 
@@ -117,8 +59,8 @@ int main(int argc, char *argv[])
 	int ret;
 	struct ParseState pstate;
 	struct Module module;
+	char *filename;
 	int dump_module, create_relocatable, opt;
-	char error_buffer[0x1000] = {0};
 
 	dump_module =  0;
 	create_relocatable =  0;
@@ -140,9 +82,10 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	ret = init_pstate_user(&pstate, argv[optind]);
+	filename = argv[optind];
+	ret = init_pstate_user(&pstate, filename);
 	if (!ret) {
-		printf("Error loading file %s\n", strerror(errno));
+		printf("Error loading file\n");
 		return -1;
 	}
 
@@ -218,60 +161,46 @@ int main(int argc, char *argv[])
 	}
 
 	{
-		struct NamedModule *modules;
-		struct ModuleInst *module_inst, *env_module_inst;
-		size_t n_modules, i;
-		struct FuncInst *main_inst, *stack_alloc_inst;
-		struct MemInst *meminst;
+		struct WasmJITHigh high;
+		size_t tablemin = 0, tablemax = 0, i;
+		int ret;
 
-		modules = wasmjit_instantiate_emscripten_runtime(&n_modules);
-
-		if (!modules)
-			return -1;
-
-		env_module_inst = NULL;
-		for (i = 0; i < n_modules; ++i) {
-			if (!strcmp(modules[i].name, "env")) {
-				env_module_inst = modules[i].module;
-				break;
-			}
-		}
-
-		if (!env_module_inst)
-			return -1;
-
-		module_inst = wasmjit_instantiate(&module, n_modules, modules,
-						  error_buffer, sizeof(error_buffer));
-		if (!module_inst) {
-			fprintf(stderr, "Error instantiating module: %s\n",
-				error_buffer);
+		if (!wasmjit_high_init(&high)) {
+			fprintf(stderr, "failed to initialize\n");
 			return -1;
 		}
 
-		main_inst = wasmjit_get_export(module_inst, "_main",
-					       IMPORT_DESC_TYPE_FUNC).func;
-		if (!main_inst) {
-			fprintf(stderr, "Couldn't find _main\n");
+		/* find correct tablemin and tablemax */
+		for (i = 0; i < module.import_section.n_imports; ++i) {
+			struct ImportSectionImport *import;
+			import = &module.import_section.imports[i];
+			if (strcmp(import->module, "env") ||
+			    strcmp(import->name, "table") ||
+			    import->desc_type != IMPORT_DESC_TYPE_TABLE)
+				continue;
+
+			tablemin = import->desc.tabletype.limits.min;
+			tablemax = import->desc.tabletype.limits.max;
+			break;
+		}
+
+		if (!wasmjit_high_instantiate_emscripten_runtime(&high,
+								 tablemin, tablemax)) {
+			fprintf(stderr, "failed to instantiate emscripten runtime\n");
 			return -1;
 		}
 
-		stack_alloc_inst = wasmjit_get_export(module_inst, "stackAlloc",
-						      IMPORT_DESC_TYPE_FUNC).func;
-		if (!stack_alloc_inst) {
-			fprintf(stderr, "Couldn't find stackAlloc\n");
+		if (!wasmjit_high_instantiate(&high, filename, "asm")) {
+			fprintf(stderr, "failed to instantiate module\n");
 			return -1;
 		}
 
-		meminst = wasmjit_get_export(env_module_inst, "memory",
-					     IMPORT_DESC_TYPE_MEM).mem;
-		if (!meminst) {
-			fprintf(stderr, "Couldn't find env.memory\n");
-			return -1;
-		}
+		ret = wasmjit_high_emscripten_invoke_main(&high, "asm",
+							  argc - optind,
+							  &argv[optind]);
 
-		return wasmjit_emscripten_invoke_main(meminst,
-						      stack_alloc_inst,
-						      main_inst,
-						      argc - optind, &argv[optind]);
+		wasmjit_high_close(&high);
+
+		return ret;
 	}
 }

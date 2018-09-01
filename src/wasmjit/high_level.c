@@ -152,6 +152,62 @@ int wasmjit_high_instantiate_buf(struct WasmJITHigh *self,
 	return ret;
 }
 
+#ifndef __KERNEL__
+
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
+int wasmjit_high_instantiate(struct WasmJITHigh *self, const char *filename, const char *module_name)
+{
+	int ret;
+	size_t size;
+	char *buf;
+#if defined(__linux__) && !defined(__KERNEL__)
+	int fd = -1;
+#endif
+
+#if defined(__linux__) && !defined(__KERNEL__)
+	if (self->fd >= 0) {
+		struct kwasmjit_instantiate_args arg;
+
+		fd = open(filename, O_RDONLY);
+		if (fd < 0)
+			goto error;
+
+		arg.fd = fd;
+		arg.module_name = module_name;
+
+		if (ioctl(self->fd, KWASMJIT_INSTANTIATE, &arg) < 0)
+			goto error;
+
+		goto success;
+	}
+#endif
+
+	buf = wasmjit_load_file(filename, &size);
+	if (!buf)
+		goto error;
+
+	ret = wasmjit_high_instantiate_buf(self, buf, size, module_name);
+
+ success:
+	if (0) {
+	error:
+		ret = 0;
+	}
+
+#if defined(__linux__) && !defined(__KERNEL__)
+	if (fd >= 0) {
+		close(fd);
+	}
+#endif
+
+	return ret;
+}
+
+#endif
+
 int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
 						size_t tablemin,
 						size_t tablemax)

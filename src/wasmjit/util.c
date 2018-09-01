@@ -39,3 +39,68 @@ int output_buf(struct SizedBuffer *sstack, const void *buf,
 	       n_elts * sizeof(sstack->elts[0]));
 	return 1;
 }
+
+#ifndef __KERNEL__
+
+#include <errno.h>
+#include <unistd.h>
+#include <fcntl.h>
+
+#include <sys/stat.h>
+#include <sys/types.h>
+
+char *wasmjit_load_file(const char *filename, size_t *size)
+{
+	FILE *f = NULL;
+	char *input = NULL;
+	int fd = -1, ret;
+	struct stat st;
+	size_t rets;
+
+	fd = open(filename, O_RDONLY);
+	if (fd < 0) {
+		goto error_exit;
+	}
+
+	ret = fstat(fd, &st);
+	if (ret < 0) {
+		goto error_exit;
+	}
+
+	f = fdopen(fd, "r");
+	if (!f) {
+		goto error_exit;
+	}
+	fd = -1;
+
+	*size = st.st_size;
+	input = malloc(st.st_size);
+	if (!input) {
+		goto error_exit;
+	}
+
+	rets = fread(input, sizeof(char), st.st_size, f);
+	if (rets != (size_t) st.st_size) {
+		goto error_exit;
+	}
+
+	goto success_exit;
+
+ error_exit:
+	if (input) {
+		free(input);
+	}
+
+ success_exit:
+	if (f) {
+		fclose(f);
+	}
+
+	if (fd >= 0) {
+		close(fd);
+	}
+
+	return input;
+}
+
+#endif

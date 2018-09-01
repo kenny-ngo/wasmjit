@@ -112,4 +112,6 @@ int output_buf(struct SizedBuffer *sstack, const void *buf,
 #define IEC559_FLOAT_ENCODING
 #endif
 
+char *wasmjit_load_file(const char *filename, size_t *size);
+
 #endif
