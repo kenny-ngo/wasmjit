@@ -691,6 +691,11 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 
 #define MEMBER_OFFSET(s, e) (((char *) (e)) - ((char *) (s)))
 
+		smi.module.n_imported_funcs = n_imported_funcs;
+		smi.module.n_imported_tables = n_imported_tables;
+		smi.module.n_imported_mems = n_imported_mems;
+		smi.module.n_imported_globals = n_imported_globals;
+
 		smi.module.types.n_elts = module->type_section.n_types;
 		ADD_DATA_PTR_RELOCATION_RAW(output->n_elts +
 					    MEMBER_OFFSET(&smi, &smi.module.types.elts),

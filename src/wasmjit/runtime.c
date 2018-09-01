@@ -121,21 +121,21 @@ union ExportPtr wasmjit_get_export(struct ModuleInst *module_inst,
 void wasmjit_free_module_inst(struct ModuleInst *module)
 {
 	size_t i;
-	for (i = 0; i < module->funcs.n_elts; ++i) {
+	for (i = module->n_imported_funcs; i < module->funcs.n_elts; ++i) {
 		if (module->funcs.elts[i]->compiled_code)
 			wasmjit_unmap_code_segment(module->funcs.elts[i]->compiled_code,
 						   module->funcs.elts[i]->compiled_code_size);
 		free(module->funcs.elts[i]);
 	}
-	for (i = 0; i < module->tables.n_elts; ++i) {
+	for (i = module->n_imported_tables; i < module->tables.n_elts; ++i) {
 		free(module->tables.elts[i]->data);
 		free(module->tables.elts[i]);
 	}
-	for (i = 0; i < module->mems.n_elts; ++i) {
+	for (i = module->n_imported_mems; i < module->mems.n_elts; ++i) {
 		free(module->mems.elts[i]->data);
 		free(module->mems.elts[i]);
 	}
-	for (i = 0; i < module->globals.n_elts; ++i) {
+	for (i = module->n_imported_globals; i < module->globals.n_elts; ++i) {
 		free(module->globals.elts[i]);
 	}
 	for (i = 0; i < module->exports.n_elts; ++i) {

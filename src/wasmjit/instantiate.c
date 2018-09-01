@@ -177,7 +177,6 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 {
 	uint32_t i;
 	struct ModuleInst *module_inst = NULL;
-	size_t internal_func_idx;
 	struct ModuleTypes module_types;
 	struct FuncInst *tmp_func = NULL;
 	struct TableInst *tmp_table = NULL;
@@ -390,7 +389,11 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 		}
 	}
 
-	internal_func_idx = module_inst->funcs.n_elts;
+	module_inst->n_imported_funcs = module_inst->funcs.n_elts;
+	module_inst->n_imported_tables = module_inst->tables.n_elts;
+	module_inst->n_imported_mems = module_inst->mems.n_elts;
+	module_inst->n_imported_globals = module_inst->globals.n_elts;
+
 	for (i = 0; i < module->function_section.n_typeidxs; ++i) {
 		assert(tmp_func == NULL);
 		tmp_func = calloc(1, sizeof(*tmp_func));
@@ -572,7 +575,7 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 		struct FuncInst *funcinst;
 		size_t j;
 
-		funcinst = module_inst->funcs.elts[i + internal_func_idx];
+		funcinst = module_inst->funcs.elts[i + module_inst->n_imported_funcs];
 
 		if (memrefs.elts) {
 			free(memrefs.elts);

@@ -90,6 +90,8 @@ struct ModuleInst {
 	DEFINE_ANON_VECTOR(struct MemInst *) mems;
 	DEFINE_ANON_VECTOR(struct GlobalInst *) globals;
 	DEFINE_ANON_VECTOR(struct Export) exports;
+	size_t n_imported_funcs, n_imported_tables,
+		n_imported_mems, n_imported_globals;
 };
 
 DECLARE_VECTOR_GROW(func_types, struct FuncTypeVector);
