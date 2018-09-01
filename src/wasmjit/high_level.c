@@ -152,6 +152,65 @@ int wasmjit_high_instantiate_buf(struct WasmJITHigh *self,
 	return ret;
 }
 
+int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
+						size_t tablemin,
+						size_t tablemax)
+{
+	int ret;
+	size_t n_modules, i;
+	struct NamedModule *modules = NULL;
+
+#if defined(__linux__) && !defined(__KERNEL__)
+	if (self->fd >= 0) {
+		struct kwasmjit_instantiate_emscripten_runtime_args arg;
+
+		arg.tablemin = tablemin;
+		arg.tablemax = tablemax;
+
+		if (ioctl(self->fd, KWASMJIT_INSTANTIATE_EMSCRIPTEN_RUNTIME, &arg) < 0)
+			goto error;
+
+		goto success;
+	}
+#endif
+
+	modules = wasmjit_instantiate_emscripten_runtime(tablemin,
+							 tablemax,
+							 &n_modules);
+	if (!modules) {
+		goto error;
+	}
+
+	for (i = 0; i < n_modules; ++i)  {
+		if (!add_named_module(self, modules[i].name, modules[i].module)) {
+			goto error;
+		}
+
+		modules[i].module = NULL;
+	}
+
+#if defined(__linux__) && !defined(__KERNEL__)
+ success:
+#endif
+	ret = 1;
+
+	if (0) {
+	error:
+		ret = 0;
+	}
+
+	if (modules) {
+		for (i = 0; i < n_modules; ++i) {
+			free(modules[i].name);
+			if (modules[i].module)
+				wasmjit_free_module_inst(modules[i].module);
+		}
+		free(modules);
+	}
+
+	return ret;
+}
+
 void wasmjit_high_close(struct WasmJITHigh *self)
 {
 	size_t i;

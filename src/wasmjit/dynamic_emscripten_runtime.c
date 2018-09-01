@@ -29,7 +29,9 @@
 
 #include <wasmjit/sys.h>
 
-struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t *amt)
+struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t tablemin,
+							   size_t tablemax,
+							   size_t *amt)
 {
 	struct {
 		size_t n_elts;
@@ -72,7 +74,9 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t *amt)
 		module = NULL;						\
 	}
 
-#define START_TABLE_DEFS()
+#define START_TABLE_DEFS() \
+	DEFINE_WASM_TABLE(table, ELEMTYPE_ANYFUNC, tablemin, tablemax)
+
 #define END_TABLE_DEFS()
 #define START_MEMORY_DEFS()
 #define END_MEMORY_DEFS()

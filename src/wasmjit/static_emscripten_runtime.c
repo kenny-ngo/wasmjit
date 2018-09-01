@@ -63,7 +63,8 @@
 #define START_MODULE()
 
 #define START_TABLE_DEFS(n)						\
-	static struct TableInst *CAT(CURRENT_MODULE, _tables)[] = {
+	static struct TableInst *CAT(CURRENT_MODULE, _tables)[] = {	\
+		&WASM_TABLE_SYMBOL(CURRENT_MODULE, table),
 #define DEFINE_WASM_TABLE(_name, ...)			\
 	&WASM_TABLE_SYMBOL(CURRENT_MODULE, _name),
 #define END_TABLE_DEFS()			\

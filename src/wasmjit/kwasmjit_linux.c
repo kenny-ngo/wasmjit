@@ -128,6 +128,24 @@ static int kwasmjit_instantiate(struct kwasmjit_private *self,
 	return retval;
 }
 
+static int kwasmjit_instantiate_emscripten_runtime(struct kwasmjit_private *self,
+						   struct kwasmjit_instantiate_emscripten_runtime_args *args)
+{
+	int retval;
+
+	if (!wasmjit_high_instantiate_emscripten_runtime(&self->high,
+							 args->tablemin,
+							 args->tablemax)) {
+		retval = -EINVAL;
+		goto error;
+	}
+
+	retval = 0;
+
+ error:
+	return retval;
+}
+
 static int kwasmjit_open(struct inode *inode, struct file *filp)
 {
 	/* allocate kwasmjit_private */
@@ -184,6 +202,17 @@ static long kwasmjit_unlocked_ioctl(struct file *filp,
 		}
 
 		retval = kwasmjit_instantiate(self, &arg);
+		break;
+	}
+	case KWASMJIT_INSTANTIATE_EMSCRIPTEN_RUNTIME: {
+		struct kwasmjit_instantiate_emscripten_runtime_args arg;
+
+		if (copy_from_user(&arg, parg, sizeof(arg))) {
+			retval = -EFAULT;
+			goto error;
+		}
+
+		retval = kwasmjit_instantiate_emscripten_runtime(self, &arg);
 		break;
 	}
 	default:
