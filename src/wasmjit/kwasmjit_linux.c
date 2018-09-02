@@ -111,7 +111,7 @@ static int kwasmjit_instantiate(struct kwasmjit_private *self,
 		goto error;
 	}
 
-	if (!wasmjit_high_instantiate_buf(&self->high, buf, size, module_name)) {
+	if (!wasmjit_high_instantiate_buf(&self->high, buf, size, module_name, 0)) {
 		retval = -EINVAL;
 		goto error;
 	}
@@ -135,7 +135,7 @@ static int kwasmjit_instantiate_emscripten_runtime(struct kwasmjit_private *self
 
 	if (!wasmjit_high_instantiate_emscripten_runtime(&self->high,
 							 args->tablemin,
-							 args->tablemax)) {
+							 args->tablemax, 0)) {
 		retval = -EINVAL;
 		goto error;
 	}
@@ -186,7 +186,7 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 		set_fs(get_ds());
 		retval = wasmjit_high_emscripten_invoke_main(&self->high,
 							     module_name,
-							     arg->argc, argv);
+							     arg->argc, argv, 0);
 		set_fs(old_fs);
 	}
 

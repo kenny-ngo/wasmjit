@@ -103,7 +103,7 @@ int wasmjit_high_init(struct WasmJITHigh *self)
 
 int wasmjit_high_instantiate_buf(struct WasmJITHigh *self,
 				 const char *buf, size_t size,
-				 const char *module_name)
+				 const char *module_name, int flags)
 {
 	int ret;
 	struct ParseState pstate;
@@ -116,6 +116,8 @@ int wasmjit_high_instantiate_buf(struct WasmJITHigh *self,
 		goto error;
 	}
 #endif
+
+	(void)flags;
 
 	if (!init_pstate(&pstate, buf, size)) {
 		goto error;
@@ -158,7 +160,7 @@ int wasmjit_high_instantiate_buf(struct WasmJITHigh *self,
 #include <sys/stat.h>
 #include <sys/types.h>
 
-int wasmjit_high_instantiate(struct WasmJITHigh *self, const char *filename, const char *module_name)
+int wasmjit_high_instantiate(struct WasmJITHigh *self, const char *filename, const char *module_name, int flags)
 {
 	int ret;
 	size_t size;
@@ -177,6 +179,7 @@ int wasmjit_high_instantiate(struct WasmJITHigh *self, const char *filename, con
 
 		arg.fd = fd;
 		arg.module_name = module_name;
+		arg.flags = flags;
 
 		if (ioctl(self->fd, KWASMJIT_INSTANTIATE, &arg) < 0)
 			goto error;
@@ -189,7 +192,7 @@ int wasmjit_high_instantiate(struct WasmJITHigh *self, const char *filename, con
 	if (!buf)
 		goto error;
 
-	ret = wasmjit_high_instantiate_buf(self, buf, size, module_name);
+	ret = wasmjit_high_instantiate_buf(self, buf, size, module_name, flags);
 
  success:
 	if (0) {
@@ -210,7 +213,8 @@ int wasmjit_high_instantiate(struct WasmJITHigh *self, const char *filename, con
 
 int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
 						size_t tablemin,
-						size_t tablemax)
+						size_t tablemax,
+						int flags)
 {
 	int ret;
 	size_t n_modules, i;
@@ -222,6 +226,7 @@ int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
 
 		arg.tablemin = tablemin;
 		arg.tablemax = tablemax;
+		arg.flags = flags;
 
 		if (ioctl(self->fd, KWASMJIT_INSTANTIATE_EMSCRIPTEN_RUNTIME, &arg) < 0)
 			goto error;
@@ -269,7 +274,7 @@ int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
 
 int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 					const char *module_name,
-					int argc, char **argv)
+					int argc, char **argv, int flags)
 {
 	size_t i;
 	struct ModuleInst *env_module_inst;
@@ -284,6 +289,7 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 		arg.module_name = module_name;
 		arg.argc = argc;
 		arg.argv = argv;
+		arg.flags = flags;
 
 		return ioctl(self->fd, KWASMJIT_EMSCRIPTEN_INVOKE_MAIN, &arg);
 	}

@@ -185,19 +185,19 @@ int main(int argc, char *argv[])
 		}
 
 		if (!wasmjit_high_instantiate_emscripten_runtime(&high,
-								 tablemin, tablemax)) {
+								 tablemin, tablemax, 0)) {
 			fprintf(stderr, "failed to instantiate emscripten runtime\n");
 			return -1;
 		}
 
-		if (!wasmjit_high_instantiate(&high, filename, "asm")) {
+		if (!wasmjit_high_instantiate(&high, filename, "asm", 0)) {
 			fprintf(stderr, "failed to instantiate module\n");
 			return -1;
 		}
 
 		ret = wasmjit_high_emscripten_invoke_main(&high, "asm",
 							  argc - optind,
-							  &argv[optind]);
+							  &argv[optind], 0);
 
 		wasmjit_high_close(&high);
 

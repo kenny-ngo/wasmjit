@@ -38,17 +38,20 @@
 struct kwasmjit_instantiate_args {
 	int fd;
 	const char *module_name;
+	int flags;
 };
 
 struct kwasmjit_instantiate_emscripten_runtime_args {
 	int version;
 	size_t tablemin, tablemax;
+	int flags;
 };
 
 struct kwasmjit_emscripten_invoke_main_args {
 	const char *module_name;
 	int argc;
 	char **argv;
+	int flags;
 };
 
 #define KWASMJIT_INSTANTIATE _IOW(KWASMJIT_MAGIC, 0, struct kwasmjit_instantiate_args)
