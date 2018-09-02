@@ -36,18 +36,20 @@
 #define KWASMJIT_MAGIC 0xCC
 
 struct kwasmjit_instantiate_args {
+	unsigned version;
 	int fd;
 	const char *module_name;
 	int flags;
 };
 
 struct kwasmjit_instantiate_emscripten_runtime_args {
-	int version;
+	unsigned version;
 	size_t tablemin, tablemax;
 	int flags;
 };
 
 struct kwasmjit_emscripten_invoke_main_args {
+	unsigned version;
 	const char *module_name;
 	int argc;
 	char **argv;

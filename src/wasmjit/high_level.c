@@ -177,6 +177,7 @@ int wasmjit_high_instantiate(struct WasmJITHigh *self, const char *filename, con
 		if (fd < 0)
 			goto error;
 
+		arg.version = 0;
 		arg.fd = fd;
 		arg.module_name = module_name;
 		arg.flags = flags;
@@ -224,6 +225,7 @@ int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
 	if (self->fd >= 0) {
 		struct kwasmjit_instantiate_emscripten_runtime_args arg;
 
+		arg.version = 0;
 		arg.tablemin = tablemin;
 		arg.tablemax = tablemax;
 		arg.flags = flags;
@@ -286,6 +288,7 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 	if (self->fd >= 0) {
 		struct kwasmjit_emscripten_invoke_main_args arg;
 
+		arg.version = 0;
 		arg.module_name = module_name;
 		arg.argc = argc;
 		arg.argv = argv;

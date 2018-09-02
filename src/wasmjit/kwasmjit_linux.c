@@ -260,6 +260,13 @@ static long kwasmjit_unlocked_ioctl(struct file *filp,
 	switch (cmd) {
 	case KWASMJIT_INSTANTIATE: {
 		struct kwasmjit_instantiate_args arg;
+		unsigned version;
+
+		get_user(version, (unsigned *) parg);
+		if (version > 0) {
+			retval = -EINVAL;
+			goto error;
+		}
 
 		if (copy_from_user(&arg, parg, sizeof(arg))) {
 			retval = -EFAULT;
@@ -271,6 +278,13 @@ static long kwasmjit_unlocked_ioctl(struct file *filp,
 	}
 	case KWASMJIT_INSTANTIATE_EMSCRIPTEN_RUNTIME: {
 		struct kwasmjit_instantiate_emscripten_runtime_args arg;
+		unsigned version;
+
+		get_user(version, (unsigned *) parg);
+		if (version > 0) {
+			retval = -EINVAL;
+			goto error;
+		}
 
 		if (copy_from_user(&arg, parg, sizeof(arg))) {
 			retval = -EFAULT;
@@ -282,6 +296,13 @@ static long kwasmjit_unlocked_ioctl(struct file *filp,
 	}
 	case KWASMJIT_EMSCRIPTEN_INVOKE_MAIN: {
 		struct kwasmjit_emscripten_invoke_main_args arg;
+		unsigned version;
+
+		get_user(version, (unsigned *) parg);
+		if (version > 0) {
+			retval = -EINVAL;
+			goto error;
+		}
 
 		if (copy_from_user(&arg, parg, sizeof(arg))) {
 			retval = -EFAULT;
