@@ -29,6 +29,8 @@
 #include <wasmjit/util.h>
 #include <wasmjit/sys.h>
 
+#include <linux/uio.h>
+
 __attribute__((noreturn))
 static void my_abort(const char *msg)
 {
@@ -37,8 +39,7 @@ static void my_abort(const char *msg)
 }
 
 char *wasmjit_emscripten_get_base_address(struct FuncInst *funcinst) {
-	(void)funcinst;
-	return NULL;
+	return funcinst->module_inst->mems.elts[0]->data;
 }
 
 void wasmjit_emscripten_abortStackOverflow(uint32_t allocSize, struct FuncInst *funcinst)
@@ -99,6 +100,8 @@ void wasmjit_emscripten____setErrNo(uint32_t value, struct FuncInst *funcinst)
 	my_abort("failed to set errno from JS");
 }
 
+long sys_lseek(unsigned int fd, off_t offset, unsigned int whence);
+
 /*  _llseek */
 uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
 {
@@ -107,7 +110,7 @@ uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs, stru
 		uint32_t fd, offset_high, offset_low,
 			result, whence;
 	} args;
-	off_t rret;
+	long rret;
 
 	(void)which;
 	assert(which == 140);
@@ -118,10 +121,9 @@ uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs, stru
 	// emscripten off_t is 32-bits, offset_high is useless
 	assert(!args.offset_high);
 
-	assert(0);
-	rret = 0;
+	rret = sys_lseek(args.fd, args.offset_low, args.whence);
 
-	if ((off_t) -1 == rret) {
+	if (rret < 0) {
 		/* TODO: set errno */
 		return -1;
 	} else {
@@ -133,14 +135,19 @@ uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs, stru
 	}
 }
 
+long sys_writev(unsigned long fd, const struct iovec *vec,
+		unsigned long vlen);
+
 /* writev */
 uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
 {
+	uint32_t i;
 	char *base;
 	struct {
 		uint32_t fd, iov, iovcnt;
 	} args;
-	ssize_t rret;
+	long rret;
+	struct iovec *liov;
 
 	(void)which;
 	assert(which == 146);
@@ -148,10 +155,30 @@ uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, stru
 
 	memcpy(&args, base + varargs, sizeof(args));
 
-	assert(0);
-	rret = 0;
+	/* TODO: do UIO_FASTIOV stack optimization */
+	liov = wasmjit_alloc_vector(args.iovcnt,
+				    sizeof(struct iovec), NULL);
+	if (!liov) {
+		/* TODO: set errno */
+		return -1;
+	}
 
-	if ((ssize_t) -1 == rret) {
+	for (i = 0; i < args.iovcnt; ++i) {
+		struct em_iovec {
+			uint32_t iov_base;
+			uint32_t iov_len;
+		} iov;
+		memcpy(&iov, base + args.iov + sizeof(struct em_iovec) * i,
+		       sizeof(struct em_iovec));
+
+		liov[i].iov_base = base + iov.iov_base;
+		liov[i].iov_len = iov.iov_len;
+	}
+
+	rret = sys_writev(args.fd, liov, args.iovcnt);
+	free(liov);
+
+	if (rret < 0) {
 		/* TODO: set errno */
 		return -1;
 	} else {
@@ -173,6 +200,8 @@ uint32_t wasmjit_emscripten____syscall54(uint32_t which, uint32_t varargs, struc
 	return 0;
 }
 
+long sys_close(unsigned int fd);
+
 /* close */
 uint32_t wasmjit_emscripten____syscall6(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
 {
@@ -181,7 +210,7 @@ uint32_t wasmjit_emscripten____syscall6(uint32_t which, uint32_t varargs, struct
 	struct {
 		uint32_t fd;
 	} args;
-	int ret;
+	long ret;
 
 	assert(which == 6);
 	(void)which;
@@ -189,8 +218,7 @@ uint32_t wasmjit_emscripten____syscall6(uint32_t which, uint32_t varargs, struct
 	base = wasmjit_emscripten_get_base_address(funcinst);
 
 	memcpy(&args, base + varargs, sizeof(args));
-	ret = 0;
-	assert(0);
+	ret = sys_close(args.fd);
 	return ret ? -1 : 0;
 }
 

@@ -35,24 +35,26 @@ DEFINE_VECTOR_GROW(func_types, struct FuncTypeVector);
 
 #ifdef __KERNEL__
 
+#include <linux/mm.h>
+
 void *wasmjit_map_code_segment(size_t code_size)
 {
-	(void)code_size;
-	return NULL;
+	return __vmalloc(code_size, GFP_KERNEL, PAGE_KERNEL_EXEC);
 }
 
 int wasmjit_mark_code_segment_executable(void *code, size_t code_size)
 {
+	/* TODO: mess with pte a la mprotect_fixup */
 	(void)code;
 	(void)code_size;
-	return 0;
+	return 1;
 }
 
 int wasmjit_unmap_code_segment(void *code, size_t code_size)
 {
-	(void)code;
 	(void)code_size;
-	return 0;
+	vfree(code);
+	return 1;
 }
 
 #else
