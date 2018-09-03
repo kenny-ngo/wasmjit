@@ -60,14 +60,19 @@ int main(int argc, char *argv[])
 	struct ParseState pstate;
 	struct Module module;
 	char *filename;
-	int dump_module, create_relocatable, opt;
+	int dump_module, create_relocatable, create_relocatable_helper, opt;
+	size_t tablemin = 0, tablemax = 0, i;
 
 	dump_module =  0;
 	create_relocatable =  0;
-	while ((opt = getopt(argc, argv, "do")) != -1) {
+	create_relocatable_helper =  0;
+	while ((opt = getopt(argc, argv, "dop")) != -1) {
 		switch (opt) {
 		case 'o':
 			create_relocatable = 1;
+			break;
+		case 'p':
+			create_relocatable_helper = 1;
 			break;
 		case 'd':
 			dump_module = 1;
@@ -160,28 +165,56 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
+	/* find correct tablemin and tablemax */
+	for (i = 0; i < module.import_section.n_imports; ++i) {
+		struct ImportSectionImport *import;
+		import = &module.import_section.imports[i];
+		if (strcmp(import->module, "env") ||
+		    strcmp(import->name, "table") ||
+		    import->desc_type != IMPORT_DESC_TYPE_TABLE)
+			continue;
+
+		tablemin = import->desc.tabletype.limits.min;
+		tablemax = import->desc.tabletype.limits.max;
+		break;
+	}
+
+	if (create_relocatable_helper) {
+		void *a_out;
+		size_t size;
+		struct Module env_module;
+		struct TableSectionTable table;
+		struct ExportSectionExport export;
+
+		memset(&env_module, 0, sizeof(env_module));
+
+		table.elemtype = ELEMTYPE_ANYFUNC;
+		table.limits.min = tablemin;
+		table.limits.max = tablemax;
+
+		env_module.table_section.n_tables = 1;
+		env_module.table_section.tables = &table;
+
+		export.name = "table";
+		export.idx_type = IMPORT_DESC_TYPE_TABLE;
+		export.idx = 0;
+
+		env_module.export_section.n_exports = 1;
+		env_module.export_section.exports = &export;
+
+		a_out = wasmjit_output_elf_relocatable("env", &env_module, &size);
+		write(1, a_out, size);
+
+		return 0;
+	}
+
 	{
 		struct WasmJITHigh high;
-		size_t tablemin = 0, tablemax = 0, i;
 		int ret;
 
 		if (!wasmjit_high_init(&high)) {
 			fprintf(stderr, "failed to initialize\n");
 			return -1;
-		}
-
-		/* find correct tablemin and tablemax */
-		for (i = 0; i < module.import_section.n_imports; ++i) {
-			struct ImportSectionImport *import;
-			import = &module.import_section.imports[i];
-			if (strcmp(import->module, "env") ||
-			    strcmp(import->name, "table") ||
-			    import->desc_type != IMPORT_DESC_TYPE_TABLE)
-				continue;
-
-			tablemin = import->desc.tabletype.limits.min;
-			tablemax = import->desc.tabletype.limits.max;
-			break;
 		}
 
 		if (!wasmjit_high_instantiate_emscripten_runtime(&high,

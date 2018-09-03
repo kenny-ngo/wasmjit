@@ -62,6 +62,16 @@
 
 #define START_MODULE()
 
+/* NB: this is here because I don't feel like implementing the macro
+   magic in START_TABLE_DEFS to only add the env table */
+struct TableInst WASM_TABLE_SYMBOL(global, table) = {
+	.data = NULL,
+	.elemtype = ELEMTYPE_ANYFUNC,
+	.length = 0,
+	.max = 0,
+};
+extern struct TableInst WASM_TABLE_SYMBOL(env, table);
+
 #define START_TABLE_DEFS(n)						\
 	static struct TableInst *CAT(CURRENT_MODULE, _tables)[] = {	\
 		&WASM_TABLE_SYMBOL(CURRENT_MODULE, table),
