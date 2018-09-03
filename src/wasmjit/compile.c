@@ -901,6 +901,32 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		if (!pop_stack(sstack))
 			goto error;
 		break;
+
+	case OPCODE_SELECT: {
+		assert(peek_stack(sstack) == STACK_I32);
+		if (!pop_stack(sstack))
+			goto error;
+
+		if (!pop_stack(sstack))
+			goto error;
+
+		/* pop %rax */
+		OUTS("\x58");
+
+		/* pop %rdx */
+		OUTS("\x5a");
+
+		/* test %eax, %eax */
+		OUTS("\x85\xc0");
+
+		/* jnz +4 */
+		OUTS("\x75\x04");
+
+		/* mov %rdx, (%rsp) */
+		OUTS("\x48\x89\x14\x24");
+
+		break;
+	}
 	case OPCODE_GET_LOCAL:
 		assert(instruction->data.get_local.localidx < n_locals);
 		push_stack(sstack,
