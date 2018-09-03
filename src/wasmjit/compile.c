@@ -155,7 +155,7 @@ static int emit_br_code(struct SizedBuffer *output,
 			struct BranchPoints *branches,
 			uint32_t labelidx)
 {
-	char buf[0x100];
+	char buf[sizeof(uint32_t)];
 	size_t arity;
 	size_t je_offset_2, j;
 	int32_t stack_shift;
@@ -288,16 +288,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 				       size_t n_frame_locals,
 				       struct StaticStack *sstack)
 {
-	char buf[0x100];
-
-#define BUFFMT(...)						\
-	do {							\
-		int ret;					\
-		ret = snprintf(buf, sizeof(buf), __VA_ARGS__);	\
-		if (ret < 0)					\
-			goto error;				\
-	}							\
-	while (1)
+	char buf[sizeof(uint64_t)];
 
 #define INC_LABELS()				\
 	do {					\
@@ -519,6 +510,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			size_t offset =
 				output->n_elts - je_offset - 2;
 			assert(offset < 128 && offset > 0);
+			assert(sizeof(buf) >= 2);
 			ret =
 				snprintf(buf, sizeof(buf), "\x74%c",
 					 (int)offset);
@@ -1916,7 +1908,6 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 	}
 
 #undef INC_LABELS
-#undef BUFFMT
 
 	return 1;
 
@@ -1973,7 +1964,7 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 			       const struct CodeSectionCode *code,
 			       struct MemoryReferences *memrefs, size_t *out_size)
 {
-	char buf[0x100];
+	char buf[sizeof(uint32_t)];
 	struct SizedBuffer outputv = { 0, NULL };
 	struct SizedBuffer *output = &outputv;
 	struct BranchPoints branches = { 0, NULL };
@@ -2133,7 +2124,6 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 				     8))
 					goto error;
 			} else {
-				char buf[sizeof(uint32_t)];
 				/* mov %rsp, %rdi */
 				OUTS("\x48\x89\xe7");
 				/* xor %rax, %rax */
@@ -2163,17 +2153,17 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 	{
 		size_t i;
 		for (i = 0; i < branches.n_elts; ++i) {
-			char buf[1 + sizeof(uint32_t)] = { 0xe9 };
+			char buf2[1 + sizeof(uint32_t)] = { 0xe9 };
 			struct BranchPointElt *branch = &branches.elts[i];
 			size_t continuation_offset = (branch->continuation_idx == FUNC_EXIT_CONT)
 				? output->n_elts
 				: labels.elts[branch->continuation_idx];
 			uint32_t rel =
 			    continuation_offset - branch->branch_offset -
-			    sizeof(buf);
-			encode_le_uint32_t(rel, &buf[1]);
-			memcpy(&output->elts[branch->branch_offset], buf,
-			       sizeof(buf));
+			    sizeof(buf2);
+			encode_le_uint32_t(rel, &buf2[1]);
+			memcpy(&output->elts[branch->branch_offset], buf2,
+			       sizeof(buf2));
 		}
 	}
 
@@ -2374,7 +2364,7 @@ char *wasmjit_compile_invoker(struct FuncType *type,
 	size_t n_movs = 0, n_xmm_movs = 0, n_stack = 0;
 	struct SizedBuffer outputv = { 0, NULL };
 	struct SizedBuffer *output = &outputv;
-	char buf[0x100];
+	char buf[sizeof(uint64_t)];
 	void *out = NULL;
 	int aligned;
 	size_t to_reserve;
