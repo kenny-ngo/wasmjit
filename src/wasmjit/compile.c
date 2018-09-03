@@ -1413,6 +1413,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 	case OPCODE_I32_LE_S:
 	case OPCODE_I32_LE_U:
 	case OPCODE_I32_GE_S:
+	case OPCODE_I32_GE_U:
 	case OPCODE_I64_EQ:
 	case OPCODE_I64_NE:
 	case OPCODE_I64_LT_S:
@@ -1492,6 +1493,10 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		case OPCODE_I32_GE_S:
 			/* setge %al */
 			OUTS("\x0f\x9d\xc0");
+			break;
+		case OPCODE_I32_GE_U:
+			/* setae %al */
+			OUTS("\x0f\x93\xc0");
 			break;
 		default:
 			assert(0);
