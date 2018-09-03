@@ -960,10 +960,10 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		       locals_md[instruction->data.
 				 tee_local.localidx].valtype);
 
-		/* movq (%rsp), %rax */
-		OUTS("\x48\x85");
+		/* mov (%rsp), %rax */
+		OUTS("\x48\x8b\x04\x24");
 		/* movq %rax, fp_offset(%rbp) */
-		OUTS("\x48\x89\x45");
+		OUTS("\x48\x89\x85");
 		encode_le_uint32_t(locals_md
 				   [instruction->data.tee_local.localidx]
 				   .fp_offset, buf);
