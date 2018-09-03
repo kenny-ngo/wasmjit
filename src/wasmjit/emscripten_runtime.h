@@ -43,6 +43,7 @@ void wasmjit_emscripten____lock(uint32_t x, struct FuncInst *funcinst);
 void wasmjit_emscripten____setErrNo(uint32_t value, struct FuncInst *funcinst);
 uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs, struct FuncInst *funcinst);
 uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, struct FuncInst *funcinst);
+uint32_t wasmjit_emscripten____syscall4(uint32_t which, uint32_t varargs, struct FuncInst *funcinst);
 uint32_t wasmjit_emscripten____syscall54(uint32_t which, uint32_t varargs, struct FuncInst *funcinst);
 uint32_t wasmjit_emscripten____syscall6(uint32_t which, uint32_t varargs, struct FuncInst *funcinst);
 void wasmjit_emscripten____unlock(uint32_t x, struct FuncInst *funcinst);

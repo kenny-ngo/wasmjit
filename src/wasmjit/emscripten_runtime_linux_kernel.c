@@ -189,6 +189,36 @@ uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, stru
 	}
 }
 
+long sys_write(unsigned int fd, void *vec,
+	       size_t vlen);
+
+/* write */
+uint32_t wasmjit_emscripten____syscall4(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
+{
+	char *base;
+	struct {
+		uint32_t fd, buf, count;
+	} args;
+	long rret;
+
+	(void)which;
+	assert(which == 4);
+	base = wasmjit_emscripten_get_base_address(funcinst);
+
+	memcpy(&args, base + varargs, sizeof(args));
+
+	rret = sys_write(args.fd, base + args.buf, args.count);
+	if (rret < 0) {
+		/* TODO: set errno */
+		return -1;
+	} else {
+		int32_t ret;
+		assert(rret <= INT32_MAX && rret >= INT32_MIN);
+		ret = rret;
+		return ret;
+	}
+}
+
 /* ioctl */
 uint32_t wasmjit_emscripten____syscall54(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
 {
