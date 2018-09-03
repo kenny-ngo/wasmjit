@@ -201,6 +201,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 	size_t i,
 		section_header_start,
 		data_section_start, text_section_start,
+		text_section_end,
 		rela_text_section_start, rela_data_section_start,
 		bss_section_start, symtab_section_start,
 		init_array_section_start, rela_init_array_section_start,
@@ -879,6 +880,8 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 					    func_code_start + i - n_imported_funcs);
 	}
 
+	text_section_end = output->n_elts;
+
 	/* add bss references */
 	/* align to 32 */
 	if (output->n_elts % 32) {
@@ -1260,7 +1263,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		text_sec.sh_flags = SHF_ALLOC | SHF_EXECINSTR;
 		text_sec.sh_addr = 0;
 		text_sec.sh_offset = text_section_start;
-		text_sec.sh_size = bss_section_start - text_section_start;
+		text_sec.sh_size = text_section_end - text_section_start;
 		text_sec.sh_link = 0;
 		text_sec.sh_info = 0;
 		text_sec.sh_addralign = 1;
