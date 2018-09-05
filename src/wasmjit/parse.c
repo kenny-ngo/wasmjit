@@ -1009,6 +1009,10 @@ int read_instructions(struct ParseState *pstate,
 		if (!ret)
 			goto error;
 
+		/* if ret equals these things then our parent will be confused
+		   about why we stopped */
+		assert(BLOCK_TERMINAL != ret && ELSE_TERMINAL != ret);
+
 		if (instruction.opcode == BLOCK_TERMINAL
 		    || instruction.opcode == ELSE_TERMINAL) {
 			ret = instruction.opcode;
