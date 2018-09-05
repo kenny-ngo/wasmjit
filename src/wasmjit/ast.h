@@ -317,7 +317,7 @@ struct Instr {
 			size_t n_instructions;
 			struct Instr *instructions;
 		} block, loop;
-		struct {
+		struct IfExtra {
 			uint8_t blocktype;
 			size_t n_instructions_then;
 			struct Instr *instructions_then;

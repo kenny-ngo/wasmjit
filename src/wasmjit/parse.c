@@ -554,13 +554,7 @@ int read_memory_section(struct ParseState *pstate,
 	return 0;
 }
 
-int read_instructions(struct ParseState *pstate,
-		      struct Instr **instructions,
-		      size_t *n_instructions, int allow_else,
-		      int allow_block);
-
-int read_instruction(struct ParseState *pstate, struct Instr *instr,
-		     int allow_else, int allow_block)
+int read_instruction(struct ParseState *pstate, struct Instr *instr)
 {
 	int ret;
 	struct BlockLoopExtra *block;
@@ -577,9 +571,9 @@ int read_instruction(struct ParseState *pstate, struct Instr *instr,
 
 	switch (instr->opcode) {
 	case BLOCK_TERMINAL:
-		return allow_block;
+		break;
 	case ELSE_TERMINAL:
-		return allow_else;
+		break;
 	case OPCODE_BLOCK:
 	case OPCODE_LOOP:
 		block = instr->opcode == OPCODE_BLOCK
@@ -589,34 +583,11 @@ int read_instruction(struct ParseState *pstate, struct Instr *instr,
 		if (!ret)
 			goto error;
 
-		ret = read_instructions(pstate, &block->instructions,
-					&block->n_instructions, 0, 1);
-		if (!ret)
-			goto error;
-
 		break;
 	case OPCODE_IF:
 		ret = read_uint8_t(pstate, &instr->data.if_.blocktype);
 		if (!ret)
 			goto error;
-
-		ret =
-		    read_instructions(pstate,
-				      &instr->data.if_.instructions_then,
-				      &instr->data.if_.n_instructions_then, 1,
-				      1);
-		if (!ret)
-			goto error;
-
-		if (ret == ELSE_TERMINAL) {
-			ret =
-				read_instructions(pstate,
-						  &instr->data.if_.instructions_else,
-						  &instr->data.if_.n_instructions_else, 0,
-						  1);
-			if (!ret)
-				goto error;
-		}
 
 		break;
 	case OPCODE_BR:
@@ -986,56 +957,156 @@ int read_instruction(struct ParseState *pstate, struct Instr *instr,
 }
 
 int read_instructions(struct ParseState *pstate,
-		      struct Instr **instructions,
-		      size_t *n_instructions, int allow_else,
-		      int allow_block)
+		      struct Instr **root_instructions,
+		      size_t *root_n_instructions)
 {
 	struct Instr instruction;
 	int ret;
-	*instructions = NULL;
-
-	assert(!*n_instructions);
+	size_t n_ctxts;
+	struct StackElt {
+		struct Instr **instructions;
+		size_t *n_instructions;
+		int allow_else;
+	} *stack, *new_stack;
 
 	init_instruction(&instruction);
 
-	while (1) {
-		struct Instr *next_instructions;
-		size_t new_len;
-		size_t size;
+	n_ctxts = 1;
+	stack = malloc(sizeof(stack[0]));
+	if (!stack)
+		goto error;
 
-		ret =
-		    read_instruction(pstate, &instruction, allow_else,
-				     allow_block);
-		if (!ret)
+	assert(!*root_instructions);
+	assert(!*root_n_instructions);
+
+	stack[0].instructions = root_instructions;
+	stack[0].n_instructions = root_n_instructions;
+	stack[0].allow_else = 0;
+
+	while (n_ctxts) {
+		struct Instr **instructions;
+		size_t *n_instructions;
+		int allow_else;
+
+		/* get item at top of stack */
+		instructions = stack[n_ctxts - 1].instructions;
+		n_instructions = stack[n_ctxts - 1].n_instructions;
+		allow_else = stack[n_ctxts - 1].allow_else;
+
+		/* shrink stack */
+		n_ctxts -= 1;
+		new_stack = realloc(stack, n_ctxts * sizeof(stack[0]));
+		if (!new_stack && n_ctxts)
 			goto error;
+		stack = new_stack;
 
-		/* if ret equals these things then our parent will be confused
-		   about why we stopped */
-		assert(BLOCK_TERMINAL != ret && ELSE_TERMINAL != ret);
+		while (1) {
+			struct Instr *next_instructions;
+			size_t new_len;
+			size_t size;
 
-		if (instruction.opcode == BLOCK_TERMINAL
-		    || instruction.opcode == ELSE_TERMINAL) {
-			ret = instruction.opcode;
-			break;
+			ret = read_instruction(pstate, &instruction);
+			if (!ret)
+				goto error;
+
+			if (instruction.opcode == BLOCK_TERMINAL) {
+				break;
+			} else if (instruction.opcode == ELSE_TERMINAL) {
+				if (!allow_else)
+					goto error;
+
+				/* start reading else clause,
+				   push the else clause onto the stack
+				 */
+
+				/* increase stack size */
+				n_ctxts += 1;
+				new_stack = realloc(stack, n_ctxts * sizeof(stack[0]));
+				if (!new_stack)
+					goto error;
+				stack = new_stack;
+
+				{
+					/* we get the else clause from our parent, we should
+					   be the previous element on the stack */
+					struct StackElt *last_stack_elt = &stack[n_ctxts - 2];
+					struct Instr *last_instr = &(*last_stack_elt->instructions)[*last_stack_elt->n_instructions - 1];
+					assert(last_instr->opcode == OPCODE_IF);
+					struct IfExtra *extra = &last_instr->data.if_;
+
+					assert(!extra->instructions_else);
+					assert(!extra->n_instructions_else);
+
+					/* push parent onto stack first, so we can pick up
+					   where we left off */
+					stack[n_ctxts - 1].instructions = &extra->instructions_else;
+					stack[n_ctxts - 1].n_instructions = &extra->n_instructions_else;
+					stack[n_ctxts - 1].allow_else = 0;
+				}
+				break;
+			}
+
+			new_len = *n_instructions + 1;
+
+			if (__builtin_umull_overflow
+			    (new_len, sizeof(struct Instr), &size)) {
+				goto error;
+			}
+
+			next_instructions = realloc(*instructions, size);
+			if (!next_instructions) {
+				goto error;
+			}
+
+			next_instructions[new_len - 1] = instruction;
+			init_instruction(&instruction);
+
+			*instructions = next_instructions;
+			*n_instructions = new_len;
+
+			if (next_instructions[new_len - 1].opcode == OPCODE_BLOCK ||
+			    next_instructions[new_len - 1].opcode == OPCODE_LOOP ||
+			    next_instructions[new_len - 1].opcode == OPCODE_IF) {
+				/* we read the beginning of a block,
+				   we have to recurse */
+				n_ctxts += 2;
+				new_stack = realloc(stack, n_ctxts * sizeof(stack[0]));
+				if (!new_stack)
+					goto error;
+				stack = new_stack;
+
+				/* push parent onto stack first, so we can pick up
+				   where we left off */
+				stack[n_ctxts - 2].instructions = instructions;
+				stack[n_ctxts - 2].n_instructions = n_instructions;
+				stack[n_ctxts - 2].allow_else = allow_else;
+			}
+
+			if (next_instructions[new_len - 1].opcode == OPCODE_BLOCK ||
+			    next_instructions[new_len - 1].opcode == OPCODE_LOOP) {
+				struct BlockLoopExtra *block;
+
+				block = instruction.opcode == OPCODE_BLOCK
+					? &next_instructions[new_len - 1].data.block
+					: &next_instructions[new_len - 1].data.loop;
+
+				assert(!block->instructions);
+				assert(!block->n_instructions);
+
+				stack[n_ctxts - 1].instructions = &block->instructions;
+				stack[n_ctxts - 1].n_instructions = &block->n_instructions;
+				stack[n_ctxts - 1].allow_else = 0;
+
+				break;
+			} else if (next_instructions[new_len - 1].opcode == OPCODE_IF) {
+				struct IfExtra *extra = &next_instructions[new_len - 1].data.if_;
+
+				stack[n_ctxts - 1].instructions = &extra->instructions_then;
+				stack[n_ctxts - 1].n_instructions = &extra->n_instructions_then;
+				stack[n_ctxts - 1].allow_else = 1;
+				break;
+			}
 		}
-
-		new_len = *n_instructions + 1;
-
-		if (__builtin_umull_overflow
-		    (new_len, sizeof(struct Instr), &size)) {
-			goto error;
-		}
-
-		next_instructions = realloc(*instructions, size);
-		if (!next_instructions) {
-			goto error;
-		}
-
-		next_instructions[new_len - 1] = instruction;
-		init_instruction(&instruction);
-
-		*instructions = next_instructions;
-		*n_instructions = new_len;
 	}
 
 	assert(ret);
@@ -1043,6 +1114,9 @@ int read_instructions(struct ParseState *pstate,
 	error:
 		ret = 0;
 	}
+
+	if (stack)
+		free(stack);
 
 	free_instruction(&instruction);
 
@@ -1078,8 +1152,7 @@ int read_global_section(struct ParseState *pstate,
 			ret = read_instructions(pstate,
 						&global->instructions,
 						&global->
-						n_instructions,
-						0, 1);
+						n_instructions);
 			if (!ret) {
 				goto error;
 			}
@@ -1170,7 +1243,7 @@ int read_element_section(struct ParseState *pstate,
 			ret =
 			    read_instructions(pstate,
 					      &element->instructions,
-					      &element->n_instructions, 0, 1);
+					      &element->n_instructions);
 			if (!ret)
 				goto error;
 
@@ -1265,7 +1338,7 @@ int read_code_section(struct ParseState *pstate,
 			ret =
 			    read_instructions(pstate,
 					      &code->instructions,
-					      &code->n_instructions, 0, 1);
+					      &code->n_instructions);
 			if (!ret)
 				goto error;
 		}
@@ -1305,7 +1378,7 @@ int read_data_section(struct ParseState *pstate,
 			ret =
 			    read_instructions(pstate,
 					      &data->instructions,
-					      &data->n_instructions, 0, 1);
+					      &data->n_instructions);
 			if (!ret)
 				goto error;
 
