@@ -119,6 +119,8 @@ int wasmjit_high_instantiate_buf(struct WasmJITHigh *self,
 
 	(void)flags;
 
+	init_module(&module);
+
 	if (!init_pstate(&pstate, buf, size)) {
 		goto error;
 	}
@@ -146,6 +148,8 @@ int wasmjit_high_instantiate_buf(struct WasmJITHigh *self,
 	} else {
 		ret = 1;
 	}
+
+	free_module(&module);
 
 	if (module_inst) {
 		wasmjit_free_module_inst(module_inst);

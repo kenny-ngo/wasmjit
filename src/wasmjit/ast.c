@@ -44,3 +44,103 @@ void free_instructions(struct Instr *instructions, size_t n_instructions)
 	}
 	free(instructions);
 }
+
+void init_module(struct Module *module)
+{
+	memset(module, 0, sizeof(*module));
+}
+
+void free_module(struct Module *module)
+{
+	if (module->type_section.types) {
+		free(module->type_section.types);
+	}
+
+	if (module->import_section.imports) {
+		free(module->import_section.imports);
+	}
+
+	if (module->function_section.typeidxs) {
+		free(module->function_section.typeidxs);
+	}
+
+	if (module->table_section.tables) {
+		free(module->table_section.tables);
+	}
+
+	if (module->memory_section.memories) {
+		free(module->memory_section.memories);
+	}
+
+	if (module->global_section.globals) {
+		uint32_t i;
+		for (i = 0; i < module->global_section.n_globals; ++i) {
+			free_instructions(module->global_section.globals[i].instructions,
+					  module->global_section.globals[i].n_instructions);
+		}
+		free(module->global_section.globals);
+	}
+
+	if (module->export_section.exports) {
+		uint32_t i;
+		for (i = 0; i < module->export_section.n_exports; ++i) {
+			if (module->export_section.exports[i].name) {
+				free(module->export_section.exports[i].name);
+			}
+		}
+		free(module->export_section.exports);
+	}
+
+
+	if (module->element_section.elements) {
+		uint32_t i;
+		for (i = 0; i < module->element_section.n_elements; ++i) {
+			struct ElementSectionElement *element =
+			    &module->element_section.elements[i];
+
+			if (element->instructions) {
+				free_instructions(element->instructions,
+						  element->n_instructions);
+			}
+
+			if (element->funcidxs) {
+				free(element->funcidxs);
+			}
+		}
+		free(module->element_section.elements);
+	}
+
+	if (module->code_section.codes) {
+		uint32_t i;
+		for (i = 0; i < module->code_section.n_codes; ++i) {
+			struct CodeSectionCode *code = &module->code_section.codes[i];
+
+			if (code->locals) {
+				free(code->locals);
+			}
+
+			if (code->instructions) {
+				free_instructions(code->instructions,
+						  code->n_instructions);
+			}
+		}
+		free(module->code_section.codes);
+	}
+
+	if (module->data_section.datas) {
+		uint32_t i;
+		for (i = 0; i < module->data_section.n_datas; ++i) {
+			struct DataSectionData *data = &module->data_section.datas[i];
+
+			if (data->instructions) {
+				free_instructions(data->instructions,
+						  data->n_instructions);
+			}
+
+			if (data->buf) {
+				free(data->buf);
+			}
+		}
+		free(module->data_section.datas);
+	}
+}

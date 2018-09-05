@@ -94,6 +94,8 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
+	init_module(&module);
+
 	ret = read_module(&pstate, &module, NULL, 0);
 	if (!ret) {
 		printf("Error parsing module\n");

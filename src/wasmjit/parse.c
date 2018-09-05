@@ -231,8 +231,6 @@ int read_type_section(struct ParseState *pstate,
 	int ret;
 	uint32_t i;
 
-	type_section->types = NULL;
-
 	ret = read_uleb_uint32_t(pstate, &type_section->n_types);
 	if (!ret)
 		goto error;
@@ -306,9 +304,6 @@ int read_type_section(struct ParseState *pstate,
 	return 1;
 
  error:
-	if (type_section->types) {
-		free(type_section->types);
-	}
 	return 0;
 }
 
@@ -376,8 +371,6 @@ int read_import_section(struct ParseState *pstate,
 {
 	int ret;
 	uint32_t i;
-
-	import_section->imports = NULL;
 
 	ret = read_uleb_uint32_t(pstate, &import_section->n_imports);
 	if (!ret)
@@ -455,8 +448,6 @@ int read_function_section(struct ParseState *pstate,
 {
 	int ret;
 
-	function_section->typeidxs = NULL;
-
 	ret = read_uleb_uint32_t(pstate, &function_section->n_typeidxs);
 	if (!ret)
 		goto error;
@@ -481,10 +472,6 @@ int read_function_section(struct ParseState *pstate,
 	return 1;
 
  error:
-	if (function_section->typeidxs) {
-		free(function_section->typeidxs);
-	}
-
 	return 0;
 }
 
@@ -492,8 +479,6 @@ int read_table_section(struct ParseState *pstate,
 		       struct TableSection *table_section)
 {
 	int ret;
-
-	table_section->tables = NULL;
 
 	ret = read_uleb_uint32_t(pstate, &table_section->n_tables);
 	if (!ret)
@@ -529,9 +514,6 @@ int read_table_section(struct ParseState *pstate,
 	return 1;
 
  error:
-	if (table_section->tables) {
-		free(table_section->tables);
-	}
 	return 0;
 }
 
@@ -539,8 +521,6 @@ int read_memory_section(struct ParseState *pstate,
 			struct MemorySection *memory_section)
 {
 	int ret;
-
-	memory_section->memories = NULL;
 
 	ret = read_uleb_uint32_t(pstate, &memory_section->n_memories);
 	if (!ret)
@@ -569,9 +549,6 @@ int read_memory_section(struct ParseState *pstate,
 	return 1;
 
  error:
-	if (memory_section->memories) {
-		free(memory_section->memories);
-	}
 	return 0;
 }
 
@@ -590,7 +567,7 @@ int read_instruction(struct ParseState *pstate, struct Instr *instr,
 	struct GlobalExtra *gextra;
 	struct LoadStoreExtra *lsextra;
 
-	init_instruction(instr);
+	/* TODO: assert instruction is initted */
 
 	ret = read_uint8_t(pstate, &instr->opcode);
 	if (!ret)
@@ -1003,7 +980,6 @@ int read_instruction(struct ParseState *pstate, struct Instr *instr,
 	return 1;
 
  error:
-	free_instruction(instr);
 	return 0;
 }
 
@@ -1012,13 +988,16 @@ int read_instructions(struct ParseState *pstate,
 		      size_t *n_instructions, int allow_else,
 		      int allow_block)
 {
-	int ret = 0;
+	struct Instr instruction;
+	int ret;
 	*instructions = NULL;
 
 	assert(!*n_instructions);
 
+	init_instruction(&instruction);
+
 	while (1) {
-		struct Instr instruction, *next_instructions;
+		struct Instr *next_instructions;
 		size_t new_len;
 		size_t size;
 
@@ -1031,7 +1010,6 @@ int read_instructions(struct ParseState *pstate,
 		if (instruction.opcode == BLOCK_TERMINAL
 		    || instruction.opcode == ELSE_TERMINAL) {
 			ret = instruction.opcode;
-			free_instruction(&instruction);
 			break;
 		}
 
@@ -1044,32 +1022,31 @@ int read_instructions(struct ParseState *pstate,
 
 		next_instructions = realloc(*instructions, size);
 		if (!next_instructions) {
-			free_instruction(&instruction);
 			goto error;
 		}
 
 		next_instructions[new_len - 1] = instruction;
+		init_instruction(&instruction);
 
 		*instructions = next_instructions;
 		*n_instructions = new_len;
 	}
 
 	assert(ret);
-	return ret;
-
- error:
-	if (*instructions) {
-		free_instructions(*instructions, *n_instructions);
+	if (0) {
+	error:
+		ret = 0;
 	}
-	return 0;
+
+	free_instruction(&instruction);
+
+	return ret;
 }
 
 int read_global_section(struct ParseState *pstate,
 			struct GlobalSection *global_section)
 {
 	int ret;
-
-	global_section->globals = NULL;
 
 	ret = read_uleb_uint32_t(pstate, &global_section->n_globals);
 	if (!ret)
@@ -1106,7 +1083,6 @@ int read_global_section(struct ParseState *pstate,
 	return 1;
 
  error:
-	/* TODO: free global_section memory */
 	return 0;
 }
 
@@ -1114,8 +1090,6 @@ int read_export_section(struct ParseState *pstate,
 			struct ExportSection *export_section)
 {
 	int ret;
-
-	export_section->exports = NULL;
 
 	ret = read_uleb_uint32_t(pstate, &export_section->n_exports);
 	if (!ret)
@@ -1151,16 +1125,6 @@ int read_export_section(struct ParseState *pstate,
 	return 1;
 
  error:
-	if (export_section->exports) {
-		uint32_t i;
-		for (i = 0; i < export_section->n_exports; ++i) {
-			if (export_section->exports[i].name) {
-				free(export_section->exports[i].name);
-			}
-		}
-		free(export_section->exports);
-	}
-
 	return 0;
 }
 
@@ -1175,8 +1139,6 @@ int read_element_section(struct ParseState *pstate,
 			 struct ElementSection *element_section)
 {
 	int ret;
-
-	element_section->elements = NULL;
 
 	ret = read_uleb_uint32_t(pstate, &element_section->n_elements);
 	if (!ret)
@@ -1234,23 +1196,6 @@ int read_element_section(struct ParseState *pstate,
 	return 1;
 
  error:
-	if (element_section->elements) {
-		uint32_t i;
-		for (i = 0; i < element_section->n_elements; ++i) {
-			struct ElementSectionElement *element =
-			    &element_section->elements[i];
-
-			if (element->instructions) {
-				free_instructions(element->instructions,
-						  element->n_instructions);
-			}
-
-			if (element->funcidxs) {
-				free(element->funcidxs);
-			}
-		}
-		free(element_section->elements);
-	}
 	return 0;
 }
 
@@ -1258,8 +1203,6 @@ int read_code_section(struct ParseState *pstate,
 		      struct CodeSection *code_section)
 {
 	int ret;
-
-	code_section->codes = NULL;
 
 	ret = read_uleb_uint32_t(pstate, &code_section->n_codes);
 	if (!ret)
@@ -1325,22 +1268,6 @@ int read_code_section(struct ParseState *pstate,
 	return 1;
 
  error:
-	if (code_section->codes) {
-		uint32_t i;
-		for (i = 0; i < code_section->n_codes; ++i) {
-			struct CodeSectionCode *code = &code_section->codes[i];
-
-			if (code->locals) {
-				free(code->locals);
-			}
-
-			if (code->instructions) {
-				free_instructions(code->instructions,
-						  code->n_instructions);
-			}
-		}
-		free(code_section->codes);
-	}
 	return 0;
 }
 
@@ -1348,8 +1275,6 @@ int read_data_section(struct ParseState *pstate,
 		      struct DataSection *data_section)
 {
 	int ret;
-
-	data_section->datas = NULL;
 
 	ret = read_uleb_uint32_t(pstate, &data_section->n_datas);
 	if (!ret)
@@ -1387,22 +1312,6 @@ int read_data_section(struct ParseState *pstate,
 	return 1;
 
  error:
-	if (data_section->datas) {
-		uint32_t i;
-		for (i = 0; i < data_section->n_datas; ++i) {
-			struct DataSectionData *data = &data_section->datas[i];
-
-			if (data->instructions) {
-				free_instructions(data->instructions,
-						  data->n_instructions);
-			}
-
-			if (data->buf) {
-				free(data->buf);
-			}
-		}
-		free(data_section->datas);
-	}
 	return 0;
 }
 
@@ -1432,7 +1341,7 @@ int read_module(struct ParseState *pstate, struct Module *module,
 	}								\
 	while (0)
 
-	memset(module, 0, sizeof(*module));
+	/* TODO: assert module is null */
 
 	/* check magic */
 	{
