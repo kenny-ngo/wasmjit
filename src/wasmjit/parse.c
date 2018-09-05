@@ -439,8 +439,10 @@ int read_import_section(struct ParseState *pstate,
 		}
 	}
 
- error:
 	return 1;
+
+ error:
+	return 0;
 }
 
 int read_function_section(struct ParseState *pstate,
