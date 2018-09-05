@@ -86,6 +86,11 @@ void free_module(struct Module *module)
 	}
 
 	if (module->import_section.imports) {
+		uint32_t i;
+		for (i = 0; i < module->import_section.n_imports; ++i) {
+			free(module->import_section.imports[i].name);
+			free(module->import_section.imports[i].module);
+		}
 		free(module->import_section.imports);
 	}
 

@@ -123,27 +123,33 @@ union ExportPtr wasmjit_get_export(struct ModuleInst *module_inst,
 void wasmjit_free_module_inst(struct ModuleInst *module)
 {
 	size_t i;
+	free(module->types.elts);
 	for (i = module->n_imported_funcs; i < module->funcs.n_elts; ++i) {
 		if (module->funcs.elts[i]->compiled_code)
 			wasmjit_unmap_code_segment(module->funcs.elts[i]->compiled_code,
 						   module->funcs.elts[i]->compiled_code_size);
 		free(module->funcs.elts[i]);
 	}
+	free(module->funcs.elts);
 	for (i = module->n_imported_tables; i < module->tables.n_elts; ++i) {
 		free(module->tables.elts[i]->data);
 		free(module->tables.elts[i]);
 	}
+	free(module->tables.elts);
 	for (i = module->n_imported_mems; i < module->mems.n_elts; ++i) {
 		free(module->mems.elts[i]->data);
 		free(module->mems.elts[i]);
 	}
+	free(module->mems.elts);
 	for (i = module->n_imported_globals; i < module->globals.n_elts; ++i) {
 		free(module->globals.elts[i]);
 	}
+	free(module->globals.elts);
 	for (i = 0; i < module->exports.n_elts; ++i) {
 		if (module->exports.elts[i].name)
 			free(module->exports.elts[i].name);
 	}
+	free(module->exports.elts);
 	free(module);
 }
 

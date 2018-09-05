@@ -2001,9 +2001,10 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 	struct BranchPoints branches = { 0, NULL };
 	struct StaticStack sstack = { 0, NULL };
 	struct LabelContinuations labels = { 0, NULL };
-	struct LocalsMD *locals_md;
+	struct LocalsMD *locals_md = NULL;
 	size_t n_frame_locals;
 	size_t n_locals;
+	char *out;
 
 	{
 		size_t i;
@@ -2240,13 +2241,34 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 	/* retq */
 	OUTS("\xc3");
 
-	*out_size = output->n_elts;
+	if (0) {
+	error:
+		free(output->elts);
+		out = NULL;
+	}
+	else {
+		out = output->elts;
+		if (out_size)
+			*out_size = output->n_elts;
+	}
 
-	return output->elts;
+	if (locals_md) {
+		free(locals_md);
+	}
 
- error:
-	assert(0);
-	return NULL;
+	if (branches.elts) {
+		free(branches.elts);
+	}
+
+	if (sstack.elts) {
+		free(sstack.elts);
+	}
+
+	if (labels.elts) {
+		free(labels.elts);
+	}
+
+	return out;
 }
 
 char *wasmjit_compile_hostfunc(struct FuncType *type,

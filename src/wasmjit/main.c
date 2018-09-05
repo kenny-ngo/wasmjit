@@ -44,16 +44,6 @@
 
 #include <unistd.h>
 
-int init_pstate_user(struct ParseState *pstate, const char *file_name)
-{
-	size_t size;
-	char *buf = wasmjit_load_file(file_name, &size);
-	if (!buf)
-		return 0;
-
-	return init_pstate(pstate, buf, size);
-}
-
 int main(int argc, char *argv[])
 {
 	int ret;
@@ -62,6 +52,8 @@ int main(int argc, char *argv[])
 	char *filename;
 	int dump_module, create_relocatable, create_relocatable_helper, opt;
 	size_t tablemin = 0, tablemax = 0, i;
+	void *buf;
+	size_t size;
 
 	dump_module =  0;
 	create_relocatable =  0;
@@ -88,7 +80,12 @@ int main(int argc, char *argv[])
 	}
 
 	filename = argv[optind];
-	ret = init_pstate_user(&pstate, filename);
+
+	buf = wasmjit_load_file(filename, &size);
+	if (!buf)
+		return -1;
+
+	ret = init_pstate(&pstate, buf, size);
 	if (!ret) {
 		printf("Error loading file\n");
 		return -1;
@@ -101,6 +98,8 @@ int main(int argc, char *argv[])
 		printf("Error parsing module\n");
 		return -1;
 	}
+
+	free(buf);
 
 	if (dump_module) {
 		uint32_t i;
@@ -235,6 +234,8 @@ int main(int argc, char *argv[])
 							  &argv[optind], 0);
 
 		wasmjit_high_close(&high);
+
+		free_module(&module);
 
 		return ret;
 	}

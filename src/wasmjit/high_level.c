@@ -168,7 +168,7 @@ int wasmjit_high_instantiate(struct WasmJITHigh *self, const char *filename, con
 {
 	int ret;
 	size_t size;
-	char *buf;
+	char *buf = NULL;
 #if defined(__linux__) && !defined(__KERNEL__)
 	int fd = -1;
 #endif
@@ -204,6 +204,9 @@ int wasmjit_high_instantiate(struct WasmJITHigh *self, const char *filename, con
 	error:
 		ret = 0;
 	}
+
+	if (buf)
+		free(buf);
 
 #if defined(__linux__) && !defined(__KERNEL__)
 	if (fd >= 0) {
