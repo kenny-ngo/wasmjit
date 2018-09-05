@@ -33,7 +33,36 @@ void init_instruction(struct Instr *instr)
 
 void free_instruction(struct Instr *instr)
 {
-	(void)instr;
+	switch (instr->opcode) {
+	case OPCODE_BLOCK:
+	case OPCODE_LOOP: {
+		struct BlockLoopExtra *block =
+			instr->opcode == OPCODE_BLOCK
+			? &instr->data.block : &instr->data.loop;
+		if (block->instructions) {
+			free_instructions(block->instructions,
+					  block->n_instructions);
+		}
+		break;
+	};
+	case OPCODE_IF: {
+		if (instr->data.if_.instructions_then) {
+			free_instructions(instr->data.if_.instructions_then,
+					  instr->data.if_.n_instructions_then);
+		}
+		if (instr->data.if_.instructions_else) {
+			free_instructions(instr->data.if_.instructions_else,
+					  instr->data.if_.n_instructions_else);
+		}
+		break;
+	}
+	case OPCODE_BR_TABLE: {
+		if (instr->data.br_table.labelidxs) {
+			free(instr->data.br_table.labelidxs);
+		}
+		break;
+	}
+	}
 }
 
 void free_instructions(struct Instr *instructions, size_t n_instructions)
