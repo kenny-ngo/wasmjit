@@ -1031,8 +1031,8 @@ int read_instructions(struct ParseState *pstate,
 					   be the previous element on the stack */
 					struct StackElt *last_stack_elt = &stack[n_ctxts - 2];
 					struct Instr *last_instr = &(*last_stack_elt->instructions)[*last_stack_elt->n_instructions - 1];
-					assert(last_instr->opcode == OPCODE_IF);
 					struct IfExtra *extra = &last_instr->data.if_;
+					assert(last_instr->opcode == OPCODE_IF);
 
 					assert(!extra->instructions_else);
 					assert(!extra->n_instructions_else);
