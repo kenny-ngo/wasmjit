@@ -91,7 +91,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	init_module(&module);
+	wasmjit_init_module(&module);
 
 	ret = read_module(&pstate, &module, NULL, 0);
 	if (!ret) {
@@ -235,7 +235,7 @@ int main(int argc, char *argv[])
 
 		wasmjit_high_close(&high);
 
-		free_module(&module);
+		wasmjit_free_module(&module);
 
 		return ret;
 	}

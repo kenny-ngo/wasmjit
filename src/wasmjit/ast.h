@@ -487,7 +487,7 @@ struct Module {
 	struct DataSection data_section;
 };
 
-void init_module(struct Module *module);
-void free_module(struct Module *modules);
+void wasmjit_init_module(struct Module *module);
+void wasmjit_free_module(struct Module *modules);
 
 #endif

@@ -74,12 +74,12 @@ void free_instructions(struct Instr *instructions, size_t n_instructions)
 	free(instructions);
 }
 
-void init_module(struct Module *module)
+void wasmjit_init_module(struct Module *module)
 {
 	memset(module, 0, sizeof(*module));
 }
 
-void free_module(struct Module *module)
+void wasmjit_free_module(struct Module *module)
 {
 	if (module->type_section.types) {
 		free(module->type_section.types);
