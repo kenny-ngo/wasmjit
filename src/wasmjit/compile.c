@@ -226,6 +226,9 @@ static int emit_br_code(struct SizedBuffer *output,
 
 		/* rep movsq */
 		OUTS("\x48\xa5");
+
+		/* cld */
+		OUTS("\xfc");
 	}
 
 	/* increment esp to Lth label (simulating pop) */
@@ -463,6 +466,9 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 
 			/* rep movsq */
 			OUTS("\x48\xa5");
+
+			/* cld */
+			OUTS("\xfc");
 		}
 
 		/* adjust stack to top of arity */
@@ -2249,8 +2255,6 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 				encode_le_uint32_t(n_locals - type->n_inputs, buf);
 				if (!output_buf(output, buf, sizeof(uint32_t)))
 					goto error;
-				/* cld */
-				OUTS("\xfc");
 				/* rep stosq */
 				OUTS("\xf3\x48\xab");
 			}
