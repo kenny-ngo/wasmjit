@@ -1528,7 +1528,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			break;
 		default:
 			assert(0);
-			stack_type = 0;
+			__builtin_unreachable();
 			break;
 		}
 
@@ -2011,10 +2011,6 @@ static int wasmjit_compile_instructions(const struct FuncType *func_types,
 						imd.data.if_.jump_to_after_else_offset = output->n_elts + 1;
 						/* jmp after_else_offset */
 						OUTS("\xe9\x90\x90\x90\x90");
-					}
-					else {
-						/* appease gcc */
-						imd.data.if_.jump_to_after_else_offset = 0;
 					}
 
 					/* fix up jump_to_else_offset */
