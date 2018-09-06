@@ -84,6 +84,7 @@ static int push_stack(struct StaticStack *sstack, unsigned type)
 	return 1;
 }
 
+__attribute__((unused))
 static unsigned peek_stack(struct StaticStack *sstack)
 {
 	assert(sstack->n_elts);
@@ -304,6 +305,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 				       const struct Instr *instruction)
 {
 	char buf[sizeof(uint64_t)];
+
+	(void)n_locals;
 
 	switch (instruction->opcode) {
 	case OPCODE_UNREACHABLE:
@@ -1017,6 +1020,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			break;
 		default:
 			assert(0);
+			__builtin_unreachable();
 			break;
 		}
 
@@ -1127,7 +1131,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 				switch (instruction->opcode) {
 				case OPCODE_I32_LOAD: valtype = STACK_I32; break;
 				case OPCODE_F32_LOAD: valtype = STACK_F32; break;
-				default: assert(0); break;
+				default: assert(0); __builtin_unreachable(); break;
 				}
 				break;
 			case OPCODE_I64_LOAD:
@@ -1137,11 +1141,12 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 				switch (instruction->opcode) {
 				case OPCODE_I64_LOAD: valtype = STACK_I64; break;
 				case OPCODE_F64_LOAD: valtype = STACK_F64; break;
-				default: assert(0); break;
+				default: assert(0); __builtin_unreachable(); break;
 				}
 				break;
 			default:
 				assert(0);
+				__builtin_unreachable();
 				break;
 			}
 

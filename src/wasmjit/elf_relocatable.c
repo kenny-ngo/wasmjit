@@ -88,6 +88,7 @@ int add_symbol(struct Symbols *symbols,
 static void read_constant_expression(struct Value *value,
 				     size_t n_instructions, struct Instr *instructions)
 {
+	(void)n_instructions;
 	assert(n_instructions == 1);
 
 	switch (instructions[0].opcode) {
@@ -1116,6 +1117,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 				break;
 			default:
 				assert(0);
+				__builtin_unreachable();
 			}
 
 			ADD_FUNC_PTR_RELOCATION_RAW(offset + elt->code_offset,
@@ -1151,6 +1153,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 			break;
 		default:
 			assert(0);
+			__builtin_unreachable();
 			break;
 		}
 
