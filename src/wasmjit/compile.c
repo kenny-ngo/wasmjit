@@ -129,26 +129,19 @@ static void encode_le_uint32_t(uint32_t val, char *buf)
 	}						\
 	while (0)
 
+#define INC_LABELS()				\
+	do {					\
+		int res;			\
+		res = labels_grow(labels, 1);	\
+		if (!res)			\
+			goto error;		\
+	}					\
+	while (0)
 
 struct LocalsMD {
 	wasmjit_valtype_t valtype;
 	int32_t fp_offset;
 };
-
-static int wasmjit_compile_instructions(const struct FuncType *func_types,
-					const struct ModuleTypes *module_types,
-					const struct FuncType *type,
-					const struct CodeSectionCode *code,
-					const struct Instr *instructions,
-					size_t n_instructions,
-					struct SizedBuffer *output,
-					struct LabelContinuations *labels,
-					struct BranchPoints *branches,
-					struct MemoryReferences *memrefs,
-					struct LocalsMD *locals_md,
-					size_t n_locals,
-					size_t n_frame_locals,
-					struct StaticStack *sstack);
 
 static int emit_br_code(struct SizedBuffer *output,
 			struct StaticStack *sstack,
@@ -274,30 +267,40 @@ static int emit_br_code(struct SizedBuffer *output,
 	return 0;
 }
 
+struct InstructionMD {
+	const struct Instr *initiator;
+	size_t cont;
+	const struct Instr *instructions;
+	size_t n_instructions;
+	union {
+		struct {
+			size_t label_idx;
+			size_t stack_idx;
+			size_t output_idx;
+		} block;
+		struct {
+			size_t label_idx;
+			size_t stack_idx;
+			size_t jump_to_else_offset;
+			size_t jump_to_after_else_offset;
+			int did_else;
+		} if_;
+	} data;
+};
+
 static int wasmjit_compile_instruction(const struct FuncType *func_types,
 				       const struct ModuleTypes *module_types,
 				       const struct FuncType *type,
-				       const struct CodeSectionCode *code,
-				       const struct Instr *instruction,
 				       struct SizedBuffer *output,
-				       struct LabelContinuations *labels,
 				       struct BranchPoints *branches,
 				       struct MemoryReferences *memrefs,
 				       struct LocalsMD *locals_md,
 				       size_t n_locals,
 				       size_t n_frame_locals,
-				       struct StaticStack *sstack)
+				       struct StaticStack *sstack,
+				       const struct Instr *instruction)
 {
 	char buf[sizeof(uint64_t)];
-
-#define INC_LABELS()				\
-	do {					\
-		int res;			\
-		res = labels_grow(labels, 1);	\
-		if (!res)			\
-			goto error;		\
-	}					\
-	while (0)
 
 	switch (instruction->opcode) {
 	case OPCODE_UNREACHABLE:
@@ -308,166 +311,13 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		break;
 	case OPCODE_BLOCK:
 	case OPCODE_LOOP: {
-		size_t arity;
-		size_t label_idx, stack_idx, output_idx;
-		struct StackElt *elt;
-
-		arity =
-			instruction->data.block.blocktype !=
-			VALTYPE_NULL ? 1 : 0;
-
-		label_idx = labels->n_elts;
-		INC_LABELS();
-
-		stack_idx = sstack->n_elts;
-		if (!stack_grow(sstack, 1))
-			goto error;
-		elt = &sstack->elts[stack_idx];
-		elt->type = STACK_LABEL;
-		elt->data.label.arity = arity;
-		elt->data.label.continuation_idx = label_idx;
-
-		output_idx = output->n_elts;
-		wasmjit_compile_instructions(func_types,
-					     module_types,
-					     type,
-					     code,
-					     instruction->data.
-					     block.instructions,
-					     instruction->data.
-					     block.n_instructions,
-					     output, labels,
-					     branches, memrefs,
-					     locals_md, n_locals,
-					     n_frame_locals,
-					     sstack);
-
-		/* shift stack results over label */
-		memmove(&sstack->elts[stack_idx],
-			&sstack->elts[sstack->n_elts - arity],
-			arity * sizeof(sstack->elts[0]));
-		if (!stack_truncate(sstack, stack_idx + arity))
-			goto error;
-
-		switch (instruction->opcode) {
-		case OPCODE_BLOCK:
-			labels->elts[label_idx] =
-				output->n_elts;
-			break;
-		case OPCODE_LOOP:
-			labels->elts[label_idx] = output_idx;
-			break;
-		default:
-			assert(0);
-			break;
-		}
+		/* handled by wasmjit_compile_instructions */
+		assert(0);
 		break;
 	}
 	case OPCODE_IF: {
-		int arity;
-		size_t jump_to_else_offset, jump_to_after_else_offset,
-			stack_idx, label_idx;
-
-		/* test top of stack */
-		assert(peek_stack(sstack) == STACK_I32);
-		pop_stack(sstack);
-		/* pop %rax */
-		OUTS("\x58");
-
-		/* if not true jump to else case */
-		/* test %eax, %eax */
-		OUTS("\x85\xc0");
-
-		jump_to_else_offset = output->n_elts + 2;
-		/* je else_offset */
-		OUTS("\x0f\x84\x90\x90\x90\x90");
-
-		/* output then case */
-		label_idx = labels->n_elts;
-		INC_LABELS();
-
-		arity =
-			instruction->data.if_.blocktype !=
-			VALTYPE_NULL ? 1 : 0;
-		{
-			struct StackElt *elt;
-			stack_idx = sstack->n_elts;
-			if (!stack_grow(sstack, 1))
-				goto error;
-			elt = &sstack->elts[stack_idx];
-			elt->type = STACK_LABEL;
-			elt->data.label.arity = arity;
-			elt->data.label.continuation_idx = label_idx;
-		}
-
-		wasmjit_compile_instructions(func_types,
-					     module_types,
-					     type,
-					     code,
-					     instruction->data.
-					     if_.instructions_then,
-					     instruction->data.
-					     if_.n_instructions_then,
-					     output, labels,
-					     branches, memrefs,
-					     locals_md, n_locals,
-					     n_frame_locals,
-					     sstack);
-
-		/* if (else_exist) {
-		   jump after else
-		   }
-		*/
-		if (instruction->data.if_.n_instructions_else) {
-			jump_to_after_else_offset = output->n_elts + 1;
-			/* jmp after_else_offset */
-			OUTS("\xe9\x90\x90\x90\x90");
-		}
-		else {
-			/* appease gcc */
-			jump_to_after_else_offset = 0;
-		}
-
-		/* fix up jump_to_else_offset */
-		jump_to_else_offset = output->n_elts - jump_to_else_offset;
-		encode_le_uint32_t(jump_to_else_offset - 4,
-				   &output->elts[output->n_elts - jump_to_else_offset]);
-
-		/* if (else_exist) {
-		   output else case
-		   }
-		*/
-		if (instruction->data.if_.n_instructions_else) {
-			wasmjit_compile_instructions(func_types,
-						     module_types,
-						     type,
-						     code,
-						     instruction->data.
-						     if_.instructions_else,
-						     instruction->data.
-						     if_.n_instructions_else,
-						     output, labels,
-						     branches, memrefs,
-						     locals_md, n_locals,
-						     n_frame_locals,
-						     sstack);
-
-			/* fix up jump_to_after_else_offset */
-			jump_to_after_else_offset = output->n_elts - jump_to_after_else_offset;
-			encode_le_uint32_t(jump_to_after_else_offset - 4,
-					   &output->elts[output->n_elts - jump_to_after_else_offset]);
-		}
-
-		/* fix up static stack */
-		/* shift stack results over label */
-		memmove(&sstack->elts[stack_idx],
-			&sstack->elts[sstack->n_elts - arity],
-			arity * sizeof(sstack->elts[0]));
-		if (!stack_truncate(sstack, stack_idx + arity))
-			goto error;
-
-		/* set labels position */
-		labels->elts[label_idx] = output->n_elts;;
+		/* handled by wasmjit_compile_instructions */
+		assert(0);
 		break;
 	}
 	case OPCODE_BR_IF:
@@ -1938,8 +1788,6 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		break;
 	}
 
-#undef INC_LABELS
-
 	return 1;
 
  error:
@@ -1952,9 +1800,6 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 static int wasmjit_compile_instructions(const struct FuncType *func_types,
 					const struct ModuleTypes *module_types,
 					const struct FuncType *type,
-					const struct CodeSectionCode *code,
-					const struct Instr *instructions,
-					size_t n_instructions,
 					struct SizedBuffer *output,
 					struct LabelContinuations *labels,
 					struct BranchPoints *branches,
@@ -1962,31 +1807,268 @@ static int wasmjit_compile_instructions(const struct FuncType *func_types,
 					struct LocalsMD *locals_md,
 					size_t n_locals,
 					size_t n_frame_locals,
-					struct StaticStack *sstack)
+					struct StaticStack *sstack,
+					const struct Instr *instructions,
+					size_t n_instructions)
 {
+	int ret;
 	size_t i;
+	size_t stack_sz;
+	struct InstructionMD *stack;
 
-	for (i = 0; i < n_instructions; ++i) {
-		if (!wasmjit_compile_instruction(func_types,
-						 module_types,
-						 type,
-						 code,
-						 &instructions[i],
-						 output,
-						 labels,
-						 branches,
-						 memrefs,
-						 locals_md,
-						 n_locals,
-						 n_frame_locals,
-						 sstack))
+	stack_sz = 1;
+	stack = malloc(stack_sz * sizeof(stack[0]));
+	if (!stack)
+		goto error;
+
+	stack[0].instructions = instructions;
+	stack[0].n_instructions = n_instructions;
+	stack[0].initiator = NULL;
+	stack[0].cont = 0;
+
+	while (stack_sz) {
+		struct InstructionMD imd, *new_stack;
+
+		/* pop instruction stream off stack */
+
+		stack_sz -= 1;
+		memcpy(&imd, &stack[stack_sz], sizeof(imd));
+		new_stack = realloc(stack, stack_sz * sizeof(stack[0]));
+		if (!new_stack && stack_sz)
 			goto error;
+		stack = new_stack;
+
+		for (i = imd.cont; i < imd.n_instructions; ++i) {
+			struct InstructionMD imd2;
+			const struct Instr *instruction = &imd.instructions[i];
+
+			switch (instruction->opcode) {
+			case OPCODE_BLOCK:
+			case OPCODE_LOOP: {
+				size_t arity;
+
+				arity = instruction->data.block.blocktype !=
+					VALTYPE_NULL ? 1 : 0;
+
+				imd2.data.block.label_idx = labels->n_elts;
+				INC_LABELS();
+
+				imd2.data.block.stack_idx = sstack->n_elts;
+				if (!stack_grow(sstack, 1))
+					goto error;
+
+				{
+					struct StackElt *elt =
+						&sstack->elts[imd2.data.block.stack_idx];
+					elt->type = STACK_LABEL;
+					elt->data.label.arity = arity;
+					elt->data.label.continuation_idx = imd2.data.block.label_idx;
+				}
+
+				imd2.data.block.output_idx = output->n_elts;
+
+				imd2.instructions = instruction->data.block.instructions;
+				imd2.n_instructions = instruction->data.block.n_instructions;
+				break;
+			}
+			case OPCODE_IF: {
+				int arity =
+					instruction->data.if_.blocktype !=
+					VALTYPE_NULL ? 1 : 0;
+
+				/* test top of stack */
+				assert(peek_stack(sstack) == STACK_I32);
+				pop_stack(sstack);
+				/* pop %rax */
+				OUTS("\x58");
+
+				/* if not true jump to else case */
+				/* test %eax, %eax */
+				OUTS("\x85\xc0");
+
+				imd2.data.if_.jump_to_else_offset = output->n_elts + 2;
+				/* je else_offset */
+				OUTS("\x0f\x84\x90\x90\x90\x90");
+
+				/* output then case */
+				imd2.data.if_.label_idx = labels->n_elts;
+				INC_LABELS();
+
+				imd2.data.if_.stack_idx = sstack->n_elts;
+				if (!stack_grow(sstack, 1))
+					goto error;
+
+				{
+					struct StackElt *elt =
+						&sstack->elts[imd2.data.if_.stack_idx];
+					elt->type = STACK_LABEL;
+					elt->data.label.arity = arity;
+					elt->data.label.continuation_idx = imd2.data.if_.label_idx;
+				}
+
+				imd2.data.if_.did_else = 0;
+
+				imd2.instructions = instruction->data.if_.instructions_then;
+				imd2.n_instructions = instruction->data.if_.n_instructions_then;
+				break;
+			}
+			default:
+				if (!wasmjit_compile_instruction(func_types,
+								 module_types,
+								 type,
+								 output,
+								 branches,
+								 memrefs,
+								 locals_md,
+								 n_locals,
+								 n_frame_locals,
+								 sstack,
+								 instruction))
+					goto error;
+				break;
+			}
+
+			if (instruction->opcode == OPCODE_BLOCK ||
+			    instruction->opcode == OPCODE_LOOP ||
+			    instruction->opcode == OPCODE_IF) {
+				/* push onto stack, break loop */
+
+				stack_sz += 2;
+				new_stack = realloc(stack, stack_sz * sizeof(stack[0]));
+				if (!new_stack)
+					goto error;
+				stack = new_stack;
+
+				imd.cont = i + 1;
+				memcpy(&stack[stack_sz - 2], &imd, sizeof(imd));
+
+				imd2.initiator = instruction;
+				imd2.cont = 0;
+				memcpy(&stack[stack_sz - 1], &imd2, sizeof(imd2));
+
+				break;
+			}
+		}
+
+		if (i != imd.n_instructions)
+			continue;
+
+		/* do footer logic */
+		if (imd.initiator) {
+			const struct Instr *instruction = imd.initiator;
+			switch (instruction->opcode) {
+			case OPCODE_BLOCK:
+			case OPCODE_LOOP: {
+				size_t arity =
+					instruction->data.block.blocktype !=
+					VALTYPE_NULL ? 1 : 0;
+
+				/* shift stack results over label */
+				memmove(&sstack->elts[imd.data.block.stack_idx],
+					&sstack->elts[sstack->n_elts - arity],
+					arity * sizeof(sstack->elts[0]));
+				if (!stack_truncate(sstack, imd.data.block.stack_idx + arity))
+					goto error;
+
+				switch (instruction->opcode) {
+				case OPCODE_BLOCK:
+					labels->elts[imd.data.block.label_idx] =
+						output->n_elts;
+					break;
+				case OPCODE_LOOP:
+					labels->elts[imd.data.block.label_idx] =
+						imd.data.block.output_idx;
+					break;
+				default:
+					assert(0);
+					break;
+				}
+
+				break;
+			}
+			case OPCODE_IF: {
+				size_t arity =
+					instruction->data.if_.blocktype !=
+					VALTYPE_NULL ? 1 : 0;
+
+				if (!imd.data.if_.did_else) {
+					/* if (else_exist) {
+					   jump after else
+					   }
+					*/
+					if (instruction->data.if_.n_instructions_else) {
+						imd.data.if_.jump_to_after_else_offset = output->n_elts + 1;
+						/* jmp after_else_offset */
+						OUTS("\xe9\x90\x90\x90\x90");
+					}
+					else {
+						/* appease gcc */
+						imd.data.if_.jump_to_after_else_offset = 0;
+					}
+
+					/* fix up jump_to_else_offset */
+					imd.data.if_.jump_to_else_offset = output->n_elts - imd.data.if_.jump_to_else_offset;
+					encode_le_uint32_t(imd.data.if_.jump_to_else_offset - 4,
+							   &output->elts[output->n_elts - imd.data.if_.jump_to_else_offset]);
+
+				} else {
+					/* fix up jump_to_after_else_offset */
+					imd.data.if_.jump_to_after_else_offset = output->n_elts - imd.data.if_.jump_to_after_else_offset;
+					encode_le_uint32_t(imd.data.if_.jump_to_after_else_offset - 4,
+							   &output->elts[output->n_elts - imd.data.if_.jump_to_after_else_offset]);
+				}
+
+				if (!imd.data.if_.did_else &&
+				    instruction->data.if_.n_instructions_else) {
+					/* if (else_exist) {
+					   output else case
+					   }
+					*/
+
+					/* push else chain onto stack */
+					stack_sz += 1;
+					new_stack = realloc(stack, stack_sz * sizeof(stack[0]));
+					if (!new_stack)
+						goto error;
+					stack = new_stack;
+
+					imd.cont = 0;
+					imd.instructions = instruction->data.if_.instructions_else;
+					imd.n_instructions = instruction->data.if_.n_instructions_else;
+					imd.data.if_.did_else = 1;
+
+					memcpy(&stack[stack_sz - 1],
+					       &imd,
+					       sizeof(imd));
+				} else {
+					/* fix up static stack */
+					/* shift stack results over label */
+					memmove(&sstack->elts[imd.data.if_.stack_idx],
+						&sstack->elts[sstack->n_elts - arity],
+						arity * sizeof(sstack->elts[0]));
+					if (!stack_truncate(sstack, imd.data.if_.stack_idx + arity))
+						goto error;
+
+					/* set labels position */
+					labels->elts[imd.data.if_.label_idx] = output->n_elts;
+				}
+				break;
+			}
+			}
+		}
 	}
 
-	return 1;
+	ret = 1;
 
- error:
-	return 0;
+	if (0) {
+	error:
+		ret = 0;
+	}
+
+	if (stack)
+		free(stack);
+
+	return ret;
 }
 
 char *wasmjit_compile_function(const struct FuncType *func_types,
@@ -2175,10 +2257,10 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 		}
 	}
 
-	if (!wasmjit_compile_instructions(func_types, module_types, type, code,
-					  code->instructions, code->n_instructions,
+	if (!wasmjit_compile_instructions(func_types, module_types, type,
 					  output, &labels, &branches, memrefs,
-					  locals_md, n_locals, n_frame_locals, &sstack))
+					  locals_md, n_locals, n_frame_locals, &sstack,
+					  code->instructions, code->n_instructions))
 		goto error;
 
 	/* fix branch points */
@@ -2573,6 +2655,7 @@ char *wasmjit_compile_invoker(struct FuncType *type,
 	return out;
 }
 
+#undef INC_LABELS
 #undef OUTNULL
 #undef OUTB
 #undef OUTS
