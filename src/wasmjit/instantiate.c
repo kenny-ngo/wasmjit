@@ -115,25 +115,25 @@ static int fill_module_types(struct ModuleInst *module_inst,
 	module_types->functypes =
 		calloc(module_inst->funcs.n_elts,
 		       sizeof(module_types->functypes[0]));
-	if (!module_types->functypes)
+	if (module_inst->funcs.n_elts && !module_types->functypes)
 		goto error;
 
 	module_types->tabletypes =
 		calloc(module_inst->tables.n_elts,
 		       sizeof(module_types->tabletypes[0]));
-	if (!module_types->tabletypes)
+	if (module_inst->tables.n_elts && !module_types->tabletypes)
 		goto error;
 
 	module_types->memorytypes =
 		calloc(module_inst->mems.n_elts,
 		       sizeof(module_types->memorytypes[0]));
-	if (!module_types->memorytypes)
+	if (module_inst->mems.n_elts && !module_types->memorytypes)
 		goto error;
 
 	module_types->globaltypes =
 		calloc(module_inst->globals.n_elts,
 		       sizeof(module_types->globaltypes[0]));
-	if (!module_types->globaltypes)
+	if (module_inst->globals.n_elts && !module_types->globaltypes)
 		goto error;
 
 

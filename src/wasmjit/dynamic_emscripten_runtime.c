@@ -125,7 +125,7 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t tablemin,
 #define DEFINE_WASM_TABLE(_name, _elemtype, _min, _max)		\
 	{								\
 		tmp_table_buf = calloc(_min, sizeof(tmp_table_buf[0]));	\
-		if (!tmp_table_buf)					\
+		if ((_min) && !tmp_table_buf)				\
 			goto error;					\
 		tmp_table = calloc(1, sizeof(struct TableInst));	\
 		if (!tmp_table)						\
@@ -148,7 +148,7 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t tablemin,
 #define DEFINE_WASM_MEMORY(_name, _min, _max)	\
 	{						\
 		tmp_mem_buf = calloc((_min) * WASM_PAGE_SIZE, 1);	\
-		if (!tmp_mem_buf)				\
+		if ((_min) && !tmp_mem_buf)				\
 			goto error;				\
 		tmp_mem = calloc(1, sizeof(struct MemInst));	\
 		tmp_mem->data = tmp_mem_buf;			\

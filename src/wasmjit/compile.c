@@ -2107,7 +2107,7 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 		size_t n_movs = 0, n_xmm_movs = 0, n_stack = 0, i;
 
 		locals_md = calloc(n_locals, sizeof(locals_md[0]));
-		if (!locals_md)
+		if (n_locals && !locals_md)
 			goto error;
 
 		for (i = 0; i < type->n_inputs; ++i) {
