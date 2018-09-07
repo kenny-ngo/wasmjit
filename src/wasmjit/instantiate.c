@@ -188,6 +188,8 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 
 	memset(&module_types, 0, sizeof(module_types));
 	module_inst = calloc(1, sizeof(*module_inst));
+	if (!module_inst)
+		goto error;
 
 #define LVECTOR_GROW(sstack, n_elts)		      \
 	do {					      \

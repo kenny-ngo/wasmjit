@@ -2424,6 +2424,8 @@ char *wasmjit_compile_hostfunc(struct FuncType *type,
 			/* ret */
 			1;
 		out = malloc(*out_size);
+		if (!out)
+			break;
 
 		/* keep stack aligned to 0x10 */
 		if (n_stack % 2) {
