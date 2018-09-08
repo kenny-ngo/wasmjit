@@ -2559,6 +2559,15 @@ char *wasmjit_compile_invoker(struct FuncType *type,
 			"\x4c\x8b\x8b", /* mov N(%rbx), %r9 */
 		};
 
+		static const char *const movs_32[] = {
+			"\x8b\xbb", /* mov N(%rbx), %edi */
+			"\x8b\xb3", /* mov N(%rbx), %esi */
+			"\x8b\x93", /* mov N(%rbx), %edx */
+			"\x8b\x8b", /* mov N(%rbx), %ecx */
+			"\x8b\x83", /* mov N(%rbx), %r8d */
+			"\x8b\x8b", /* mov N(%rbx), %r9d */
+		};
+
 		static const char *const f32_movs[] = {
 			"\xf3\x0f\x10\x83", /* movss  N(%rbx),%xmm0 */
 			"\xf3\x0f\x10\x8b", /* movss  N(%rbx),%xmm1 */
@@ -2584,8 +2593,11 @@ char *wasmjit_compile_invoker(struct FuncType *type,
 		if ((type->input_types[i] == VALTYPE_I32 ||
 		     type->input_types[i] == VALTYPE_I64) &&
 		    n_movs < 6) {
-			OUTS(movs[n_movs]);
-			encode_le_uint32_t(i * -8, buf);
+			if (type->input_types[i] == VALTYPE_I32) {
+				OUTS(movs_32[n_movs]);
+			} else {
+				OUTS(movs[n_movs]);
+			}
 			if (!output_buf(output, buf, sizeof(uint32_t)))
 				goto error;
 			n_movs += 1;
