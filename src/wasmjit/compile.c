@@ -2598,6 +2598,7 @@ char *wasmjit_compile_invoker(struct FuncType *type,
 			} else {
 				OUTS(movs[n_movs]);
 			}
+			encode_le_uint32_t(i * 8, buf);
 			if (!output_buf(output, buf, sizeof(uint32_t)))
 				goto error;
 			n_movs += 1;
@@ -2611,15 +2612,15 @@ char *wasmjit_compile_invoker(struct FuncType *type,
 				OUTS(f64_movs[n_movs]);
 			}
 
-			encode_le_uint32_t(i * -8, buf);
+			encode_le_uint32_t(i * 8, buf);
 			if (!output_buf(output, buf, sizeof(uint32_t)))
 				goto error;
 
 			n_xmm_movs += 1;
 		} else {
-			/* mov (-8 * i)(%rbx), %rax */
+			/* mov (8 * i)(%rbx), %rax */
 			OUTS("\x48\x8b\x83");
-			encode_le_uint32_t(i * -8, buf);
+			encode_le_uint32_t(i * 8, buf);
 			if (!output_buf(output, buf, sizeof(uint32_t)))
 				goto error;
 
