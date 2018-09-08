@@ -134,7 +134,7 @@ int wasmjit_set_jmp_buf(jmp_buf *jmpbuf)
 
 /* end platform specific */
 
-union ExportPtr wasmjit_get_export(struct ModuleInst *module_inst,
+union ExportPtr wasmjit_get_export(const struct ModuleInst *module_inst,
 				   const char *name,
 				   wasmjit_desc_t type) {
 	size_t i;

@@ -183,7 +183,7 @@ int wasmjit_unmap_code_segment(void *code, size_t code_size);
 int wasmjit_set_jmp_buf(jmp_buf *jmpbuf);
 jmp_buf *wasmjit_get_jmp_buf(void);
 
-union ExportPtr wasmjit_get_export(struct ModuleInst *, const char *name, wasmjit_desc_t type);
+union ExportPtr wasmjit_get_export(const struct ModuleInst *, const char *name, wasmjit_desc_t type);
 
 
 #endif
