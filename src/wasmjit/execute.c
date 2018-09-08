@@ -54,6 +54,10 @@ int wasmjit_invoke_function(struct FuncInst *funcinst,
 	if (!wasmjit_mark_code_segment_executable(mapped, code_size))
 		goto error;
 
+#ifndef __x86_64__
+#error Only works on x86_64
+#endif
+
 	lout = mapped(values);
 	if (out)
 		*out = lout;
