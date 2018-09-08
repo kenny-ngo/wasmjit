@@ -358,6 +358,8 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 
 	wasmjit_set_jmp_buf(preserve);
 
+	wasmjit_emscripten_cleanup(env_module_inst);
+
 	return ret;
 }
 

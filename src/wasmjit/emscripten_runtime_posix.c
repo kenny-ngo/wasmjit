@@ -260,3 +260,8 @@ uint32_t wasmjit_emscripten__emscripten_memcpy_big(uint32_t dest, uint32_t src, 
 	memcpy(dest + base, src + base, num);
 	return dest;
 }
+
+void wasmjit_emscripten_cleanup(struct ModuleInst *moduleinst) {
+	(void)moduleinst;
+	/* TODO: implement */
+}
