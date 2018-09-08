@@ -37,7 +37,7 @@ static int wasmjit_init_tls_key(wasmjit_tls_key_t *pkey, void (*destr)(void *))
 }
 
 __attribute__((unused))
-static int wasmjit_get_tls_key(wasmjit_tls_key_t key, const void *newval)
+static int wasmjit_get_tls_key(wasmjit_tls_key_t key, void *newval)
 {
 	errno = 0;
 	*(void **)newval = pthread_getspecific(key);
@@ -45,7 +45,7 @@ static int wasmjit_get_tls_key(wasmjit_tls_key_t key, const void *newval)
 }
 
 __attribute__((unused))
-static int wasmjit_set_tls_key(wasmjit_tls_key_t key, const void *val)
+static int wasmjit_set_tls_key(wasmjit_tls_key_t key, void *val)
 {
 	return !pthread_setspecific(key, val);
 }
