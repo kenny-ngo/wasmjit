@@ -2611,8 +2611,8 @@ char *wasmjit_compile_invoker(struct FuncType *type,
 			"\x8b\xb3", /* mov N(%rbx), %esi */
 			"\x8b\x93", /* mov N(%rbx), %edx */
 			"\x8b\x8b", /* mov N(%rbx), %ecx */
-			"\x8b\x83", /* mov N(%rbx), %r8d */
-			"\x8b\x8b", /* mov N(%rbx), %r9d */
+			"\x44\x8b\x83", /* mov N(%rbx), %r8d */
+			"\x44\x8b\x8b", /* mov N(%rbx), %r9d */
 		};
 
 		static const char *const f32_movs[] = {
