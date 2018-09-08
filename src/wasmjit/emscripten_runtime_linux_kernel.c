@@ -30,12 +30,13 @@
 #include <wasmjit/sys.h>
 
 #include <linux/uio.h>
+#include <linux/sched.h>
 
 __attribute__((noreturn))
 static void my_abort(const char *msg)
 {
-	(void)msg;
-	abort();
+	printk(KERN_NOTICE "kwasmjit abort PID %d: %s", current->pid, msg);
+	wasmjit_trap(WASMJIT_TRAP_ABORT);
 }
 
 char *wasmjit_emscripten_get_base_address(struct FuncInst *funcinst) {

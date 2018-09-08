@@ -46,6 +46,7 @@ struct MemoryReferences {
 			MEMREF_MEM,
 			MEMREF_GLOBAL,
 			MEMREF_RESOLVE_INDIRECT_CALL,
+			MEMREF_TRAP,
 		} type;
 		size_t code_offset;
 		size_t idx;

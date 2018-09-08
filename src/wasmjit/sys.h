@@ -166,7 +166,21 @@ static char *strdup(const char *s)
 
 typedef int64_t intmax_t;
 
-#define abort() (panic("aborted"))
+
+#ifdef __x86_64__
+typedef unsigned long __jmp_buf[8];
+#else
+#error Only works on x86_64
+#endif
+
+typedef struct __jmp_buf_tag {
+	__jmp_buf __jb;
+	unsigned long __fl;
+	unsigned long __ss[128/sizeof(long)];
+} jmp_buf[1];
+
+int setjmp(jmp_buf);
+void longjmp(jmp_buf, int) __attribute__((noreturn));
 
 #else
 
@@ -179,6 +193,7 @@ typedef int64_t intmax_t;
 #include <stdlib.h>
 #include <inttypes.h>
 #include <math.h>
+#include <setjmp.h>
 
 #endif
 

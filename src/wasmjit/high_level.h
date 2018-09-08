@@ -38,6 +38,10 @@ struct WasmJITHigh {
 	struct NamedModule *modules;
 };
 
+#define WASMJIT_TRAP_OFFSET 0x100
+#define WASMJIT_IS_TRAP_ERROR(ret) ((ret) >= WASMJIT_TRAP_OFFSET)
+#define WASMJIT_DECODE_TRAP_ERROR(ret) ((ret) - WASMJIT_TRAP_OFFSET)
+
 int wasmjit_high_init(struct WasmJITHigh *self);
 int wasmjit_high_instantiate_buf(struct WasmJITHigh *self,
 				 const char *buf, size_t size,

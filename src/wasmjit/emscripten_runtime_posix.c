@@ -41,7 +41,7 @@ __attribute__((noreturn))
 static void my_abort(const char *msg)
 {
 	fprintf(stderr, "%s", msg);
-	abort();
+	wasmjit_trap(WASMJIT_TRAP_ABORT);
 }
 
 char *wasmjit_emscripten_get_base_address(struct FuncInst *funcinst) {

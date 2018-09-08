@@ -36,6 +36,7 @@ DEFINE_VECTOR_GROW(func_types, struct FuncTypeVector);
 #ifdef __KERNEL__
 
 #include <linux/mm.h>
+#include <linux/sched/task_stack.h>
 
 void *wasmjit_map_code_segment(size_t code_size)
 {
@@ -57,7 +58,32 @@ int wasmjit_unmap_code_segment(void *code, size_t code_size)
 	return 1;
 }
 
+static void *ptrptr(void) {
+	/* NB: use space below entry of kernel stack for our jmp_buf pointer
+	   if task_pt_regs(current) does not point to the bottom of the stack,
+	   this will fail very badly. wasmjit_high_emscripten_invoke_main always
+	   restores the original value before returning, so while we in the system
+	   call it should be safe to reappropriate this space.
+	 */
+	return (char *)task_pt_regs(current) - sizeof(jmp_buf *);
+}
+
+jmp_buf *wasmjit_get_jmp_buf(void)
+{
+	jmp_buf *toret;
+	memcpy(&toret, ptrptr(), sizeof(toret));
+	return toret;
+}
+
+int wasmjit_set_jmp_buf(jmp_buf *jmpbuf)
+{
+	memcpy(ptrptr(), &jmpbuf, sizeof(jmpbuf));
+	return 1;
+}
+
 #else
+
+#include <wasmjit/tls.h>
 
 #include <sys/mman.h>
 
@@ -80,6 +106,28 @@ int wasmjit_mark_code_segment_executable(void *code, size_t code_size)
 int wasmjit_unmap_code_segment(void *code, size_t code_size)
 {
 	return !munmap(code, code_size);
+}
+
+wasmjit_tls_key_t jmp_buf_key;
+
+__attribute__((constructor))
+static void _init_jmp_buf(void)
+{
+	wasmjit_init_tls_key(&jmp_buf_key, NULL);
+}
+
+jmp_buf *wasmjit_get_jmp_buf(void)
+{
+	jmp_buf *toret;
+	int ret;
+	ret = wasmjit_get_tls_key(jmp_buf_key, &toret);
+	if (!ret) return NULL;
+	return toret;
+}
+
+int wasmjit_set_jmp_buf(jmp_buf *jmpbuf)
+{
+	return wasmjit_set_tls_key(jmp_buf_key, jmpbuf);
 }
 
 #endif
@@ -216,10 +264,9 @@ int _wasmjit_create_func_type(struct FuncType *ft,
 }
 
 __attribute__((noreturn))
-static void trap(void)
+void wasmjit_trap(int reason)
 {
-	asm("int $4");
-	__builtin_unreachable();
+	longjmp(*wasmjit_get_jmp_buf(), reason + 1);
 }
 
 void *wasmjit_resolve_indirect_call(const struct TableInst *tableinst,
@@ -229,14 +276,14 @@ void *wasmjit_resolve_indirect_call(const struct TableInst *tableinst,
 	struct FuncInst *funcinst;
 
 	if (idx >= tableinst->length)
-		trap();
+		wasmjit_trap(WASMJIT_TRAP_TABLE_OVERFLOW);
 
 	funcinst = tableinst->data[idx];
 	if (!funcinst)
-		trap();
+		wasmjit_trap(WASMJIT_TRAP_UNINITIALIZED_TABLE_ENTRY);
 
 	if (!wasmjit_typecheck_func(expected_type, funcinst))
-		trap();
+		wasmjit_trap(WASMJIT_TRAP_BAD_FUNCTION_TYPE);
 
 	return funcinst->compiled_code;
 }

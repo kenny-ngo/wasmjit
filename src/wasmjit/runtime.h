@@ -134,15 +134,54 @@ static int wasmjit_typelist_equal(size_t nelts, const wasmjit_valtype_t *elts,
 	return 1;
 }
 
+enum {
+	WASMJIT_TRAP_UNREACHABLE,
+	WASMJIT_TRAP_TABLE_OVERFLOW,
+	WASMJIT_TRAP_UNINITIALIZED_TABLE_ENTRY,
+	WASMJIT_TRAP_BAD_FUNCTION_TYPE,
+	WASMJIT_TRAP_MEMORY_OVERFLOW,
+	WASMJIT_TRAP_ABORT,
+};
+
+__attribute__ ((unused))
+static const char *wasmjit_trap_reason_to_string(int reason) {
+	const char *msg;
+	switch (reason) {
+	case WASMJIT_TRAP_UNREACHABLE:
+		msg = "unreachable instruction hit";
+		break;
+	case WASMJIT_TRAP_TABLE_OVERFLOW:
+		msg = "table overflow";
+		break;
+	case WASMJIT_TRAP_UNINITIALIZED_TABLE_ENTRY:
+		msg = "uninitialized table entry";
+		break;
+	case WASMJIT_TRAP_BAD_FUNCTION_TYPE:
+		msg = "bad function type";
+		break;
+	case WASMJIT_TRAP_MEMORY_OVERFLOW:
+		msg = "memory overflow";
+		break;
+	default:
+		assert(0);
+		__builtin_unreachable();
+	}
+	return msg;
+}
+
 void *wasmjit_resolve_indirect_call(const struct TableInst *tableinst,
 				    const struct FuncType *expected_type,
 				    uint32_t idx);
+void wasmjit_trap(int reason) __attribute__((noreturn));
 
 void wasmjit_free_module_inst(struct ModuleInst *module);
 
 void *wasmjit_map_code_segment(size_t code_size);
 int wasmjit_mark_code_segment_executable(void *code, size_t code_size);
 int wasmjit_unmap_code_segment(void *code, size_t code_size);
+
+int wasmjit_set_jmp_buf(jmp_buf *jmpbuf);
+jmp_buf *wasmjit_get_jmp_buf(void);
 
 union ExportPtr wasmjit_get_export(struct ModuleInst *, const char *name, wasmjit_desc_t type);
 

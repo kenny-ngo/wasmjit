@@ -25,6 +25,7 @@
 #include <wasmjit/kwasmjit.h>
 
 #include <wasmjit/high_level.h>
+#include <wasmjit/runtime.h>
 #include <wasmjit/sys.h>
 
 #include <linux/uaccess.h>

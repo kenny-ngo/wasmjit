@@ -629,6 +629,9 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 			case MEMREF_RESOLVE_INDIRECT_CALL:
 				val = (uintptr_t) &wasmjit_resolve_indirect_call;
 				break;
+			case MEMREF_TRAP:
+				val = (uintptr_t) &wasmjit_trap;
+				break;
 			default:
 				assert(0);
 				val = 0;

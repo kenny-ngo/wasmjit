@@ -233,6 +233,11 @@ int main(int argc, char *argv[])
 							  argc - optind,
 							  &argv[optind], 0);
 
+		if (WASMJIT_IS_TRAP_ERROR(ret)) {
+			fprintf(stderr, "TRAP: %s\n",
+				wasmjit_trap_reason_to_string(WASMJIT_DECODE_TRAP_ERROR(ret)));
+		}
+
 		wasmjit_high_close(&high);
 
 		wasmjit_free_module(&module);

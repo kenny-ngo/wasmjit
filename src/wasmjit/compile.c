@@ -292,6 +292,52 @@ struct InstructionMD {
 	} data;
 };
 
+#define TRAP_SIZE 17
+static int emit_trap(struct SizedBuffer *output,
+		     struct MemoryReferences *memrefs,
+		     int reason)
+{
+	char buf[8];
+#ifndef NDEBUG
+	size_t offset;
+
+	offset = output->n_elts;
+#endif
+
+	/* mov $reason, %edi */
+	OUTS("\xbf");
+	encode_le_uint32_t(reason, buf);
+	if (!output_buf(output, buf, sizeof(uint32_t)))
+		goto error;
+
+	/* mov $const, %rax */
+	OUTS("\x48\xb8");
+	OUTNULL(8);
+	{
+		size_t memref_idx;
+		memref_idx = memrefs->n_elts;
+		if (!memrefs_grow(memrefs, 1))
+			goto error;
+
+		memrefs->elts[memref_idx].type =
+			MEMREF_TRAP;
+		memrefs->elts[memref_idx].code_offset =
+			output->n_elts - 8;
+	}
+
+	/* call *%rax */
+	OUTS("\xff\xd0");
+
+#ifndef NDEBUG
+	assert(output->n_elts - offset == TRAP_SIZE);
+#endif
+
+	return 1;
+
+ error:
+	return 0;
+}
+
 static int wasmjit_compile_instruction(const struct FuncType *func_types,
 				       const struct ModuleTypes *module_types,
 				       const struct FuncType *type,
@@ -310,8 +356,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 
 	switch (instruction->opcode) {
 	case OPCODE_UNREACHABLE:
-		/* ud2 */
-		OUTS("\x0f\x0b");
+		if (!emit_trap(output, memrefs, WASMJIT_TRAP_UNREACHABLE))
+			goto error;
 		break;
 	case OPCODE_NOP:
 		break;
@@ -1076,9 +1122,10 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			OUTS("\x48\x39\xc6");
 
 			/* jle AFTER_TRAP: */
-			/* int $4 */
-			/* AFTER_TRAP1  */
-			OUTS("\x7e\x02\xcd\x04");
+			OUTS("\x7e");
+			OUTB(TRAP_SIZE);
+			if (!emit_trap(output, memrefs, WASMJIT_TRAP_MEMORY_OVERFLOW))
+				goto error;
 		}
 
 		/* LOGIC: data = store->mems.elts[maddr].data */
