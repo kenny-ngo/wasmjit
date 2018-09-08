@@ -2402,11 +2402,11 @@ char *wasmjit_compile_hostfunc(struct FuncType *type,
 		break;
 	case 4:
 		/* mov $const, %r8 */
-		movabs_str = "\x48\xb8";
+		movabs_str = "\x49\xb8";
 		break;
 	case 5:
 		/* mov $const, %r9 */
-		movabs_str = "\x48\xb9";
+		movabs_str = "\x49\xb9";
 		break;
 	default: {
 		size_t off = 0;
@@ -2438,7 +2438,7 @@ char *wasmjit_compile_hostfunc(struct FuncType *type,
 		/* mov $const, %rax */
 		memcpy(out + off, "\x48\xb8", 2);
 		off += 2;
-		encode_le_uint64_t((uintptr_t) hostfunc, out + off);
+		encode_le_uint64_t((uintptr_t) funcinst_ptr, out + off);
 		off += 8;
 		/* push %rax */
 		memcpy(out + off, "\x50", 1);
