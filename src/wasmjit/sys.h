@@ -32,7 +32,11 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 
+#ifdef NDEBUG
+#define assert(x)
+#else
 #define assert(x) BUG_ON(!(x))
+#endif
 
 #define OFF (sizeof(size_t) * 2)
 
