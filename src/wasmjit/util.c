@@ -103,4 +103,34 @@ char *wasmjit_load_file(const char *filename, size_t *size)
 	return input;
 }
 
+void wasmjit_unload_file(char *buf, size_t size)
+{
+	free(buf);
+	(void) size;
+}
+
+#else
+
+#include <linux/fs.h>
+
+char *wasmjit_load_file(const char *file_name, size_t *size)
+{
+	void *buf;
+	loff_t offsize;
+	int ret;
+	ret = kernel_read_file_from_path(file_name, &buf, &offsize,
+					 INT_MAX, READING_UNKNOWN);
+	if (ret < 0)
+		return NULL;
+
+	*size = offsize;
+	return buf;
+}
+
+void wasmjit_unload_file(char *buf, size_t size)
+{
+	vfree(buf);
+	(void) size;
+}
+
 #endif

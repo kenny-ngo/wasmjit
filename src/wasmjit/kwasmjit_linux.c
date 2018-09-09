@@ -88,9 +88,8 @@ static int kwasmjit_instantiate(struct kwasmjit_private *self,
 				struct kwasmjit_instantiate_args *arg)
 {
 	int retval;
-	void *buf = NULL;
-	loff_t size;
 	char *module_name = NULL;
+	char *file_name = NULL;
 
 	/*
 	  I know it's bad to read files from the kernel
@@ -98,12 +97,12 @@ static int kwasmjit_instantiate(struct kwasmjit_private *self,
 	  which does read files.
 	*/
 
-	/* TODO: do incremental reading */
-	retval = kernel_read_file_from_fd(arg->fd, &buf, &size,
-					  INT_MAX, READING_UNKNOWN);
-	if (retval)
+	file_name = kvstrndup_user(arg->file_name, 1024, GFP_KERNEL);
+	if (IS_ERR(file_name)) {
+		retval = PTR_ERR(file_name);
+		file_name = NULL;
 		goto error;
-
+	}
 
 	module_name = kvstrndup_user(arg->module_name, 1024, GFP_KERNEL);
 	if (IS_ERR(module_name)) {
@@ -112,7 +111,7 @@ static int kwasmjit_instantiate(struct kwasmjit_private *self,
 		goto error;
 	}
 
-	if (!wasmjit_high_instantiate_buf(&self->high, buf, size, module_name, 0)) {
+	if (!wasmjit_high_instantiate(&self->high, file_name, module_name, 0)) {
 		retval = -EINVAL;
 		goto error;
 	}
@@ -123,8 +122,8 @@ static int kwasmjit_instantiate(struct kwasmjit_private *self,
 	if (module_name)
 		kvfree(module_name);
 
-	if (buf)
-		vfree(buf);
+	if (file_name)
+		kvfree(file_name);
 
 	return retval;
 }

@@ -101,9 +101,9 @@ int wasmjit_high_init(struct WasmJITHigh *self)
 	return 1;
 }
 
-int wasmjit_high_instantiate_buf(struct WasmJITHigh *self,
-				 const char *buf, size_t size,
-				 const char *module_name, int flags)
+static int wasmjit_high_instantiate_buf(struct WasmJITHigh *self,
+					const char *buf, size_t size,
+					const char *module_name, int flags)
 {
 	int ret;
 	struct ParseState pstate;
@@ -111,10 +111,8 @@ int wasmjit_high_instantiate_buf(struct WasmJITHigh *self,
 	struct ModuleInst *module_inst = NULL;
 
 #if defined(__linux__) && !defined(__KERNEL__)
-	if (self->fd >= 0) {
-		/* not implemented */
-		goto error;
-	}
+	/* should not be using this if we are backending to kernel */
+	assert(self->fd < 0);
 #endif
 
 	(void)flags;
@@ -158,40 +156,25 @@ int wasmjit_high_instantiate_buf(struct WasmJITHigh *self,
 	return ret;
 }
 
-#ifndef __KERNEL__
-
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-
 int wasmjit_high_instantiate(struct WasmJITHigh *self, const char *filename, const char *module_name, int flags)
 {
 	int ret;
 	size_t size;
-	char *buf = NULL;
-#if defined(__linux__) && !defined(__KERNEL__)
-	int fd = -1;
-#endif
+	char *buf;
 
 #if defined(__linux__) && !defined(__KERNEL__)
 	if (self->fd >= 0) {
 		struct kwasmjit_instantiate_args arg;
-
-		fd = open(filename, O_RDONLY);
-		if (fd < 0)
-			goto error;
-
 		arg.version = 0;
-		arg.fd = fd;
+		arg.file_name = filename;
 		arg.module_name = module_name;
 		arg.flags = flags;
 
-		if (ioctl(self->fd, KWASMJIT_INSTANTIATE, &arg) < 0)
-			goto error;
-
-		goto success;
+		return !ioctl(self->fd, KWASMJIT_INSTANTIATE, &arg);
 	}
 #endif
+
+	/* TODO: do incremental reading */
 
 	buf = wasmjit_load_file(filename, &size);
 	if (!buf)
@@ -199,25 +182,16 @@ int wasmjit_high_instantiate(struct WasmJITHigh *self, const char *filename, con
 
 	ret = wasmjit_high_instantiate_buf(self, buf, size, module_name, flags);
 
- success:
 	if (0) {
 	error:
 		ret = 0;
 	}
 
 	if (buf)
-		free(buf);
-
-#if defined(__linux__) && !defined(__KERNEL__)
-	if (fd >= 0) {
-		close(fd);
-	}
-#endif
+		wasmjit_unload_file(buf, size);
 
 	return ret;
 }
-
-#endif
 
 int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
 						size_t tablemin,

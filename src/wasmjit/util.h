@@ -113,5 +113,6 @@ int output_buf(struct SizedBuffer *sstack, const void *buf,
 #endif
 
 char *wasmjit_load_file(const char *filename, size_t *size);
+void wasmjit_unload_file(char *buf, size_t size);
 
 #endif

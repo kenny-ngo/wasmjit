@@ -37,7 +37,7 @@
 
 struct kwasmjit_instantiate_args {
 	unsigned version;
-	int fd;
+	const char *file_name;
 	const char *module_name;
 	int flags;
 };
