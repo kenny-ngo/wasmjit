@@ -30,11 +30,13 @@
 #include <wasmjit/ktls.h>
 
 #include <linux/sched/signal.h>
+#include <linux/sched/mm.h>
 #include <linux/uaccess.h>
 #include <linux/cdev.h>
 #include <linux/fs.h>
 #include <linux/module.h>
 #include <linux/mm.h>
+#include <linux/mmu_context.h>
 #include <asm/fpu/api.h>
 #include <asm/fpu/internal.h>
 
@@ -288,6 +290,7 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 		struct KernelThreadLocal *preserve, ktls;
 		size_t real_size;
 		void *stack;
+		struct mm_struct *saved_mm;
 
 		preserve = wasmjit_get_ktls();
 
@@ -317,6 +320,14 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 		*/
 		set_fs(get_ds());
 
+		/*
+		   signal to kernel that we don't need our user mappings
+		   this makes context switching much faster
+		 */
+		saved_mm = current->mm;
+		mmgrab(saved_mm);
+		unuse_mm(saved_mm);
+
 		if (stack) {
 			void *stack2 = stack;
 #ifndef CONFIG_STACK_GROWSUP
@@ -331,6 +342,12 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 								     module_name,
 								     arg->argc, argv, arg->flags);
 		}
+
+		/*
+		  re-acquire our user mappings before returning to user space
+		 */
+		use_mm(saved_mm);
+		mmdrop(saved_mm);
 
 		set_fs(old_fs);
 
