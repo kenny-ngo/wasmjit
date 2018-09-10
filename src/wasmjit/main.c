@@ -327,6 +327,8 @@ int main(int argc, char *argv[])
 		if (WASMJIT_IS_TRAP_ERROR(ret)) {
 			fprintf(stderr, "TRAP: %s\n",
 				wasmjit_trap_reason_to_string(WASMJIT_DECODE_TRAP_ERROR(ret)));
+		} else if (ret < 0) {
+			fprintf(stderr, "failed to invoke main\n");
 		}
 
 		wasmjit_high_close(&high);
