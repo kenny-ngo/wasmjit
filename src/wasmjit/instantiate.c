@@ -596,7 +596,8 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 						    &funcinst->type,
 						    code,
 						    &memrefs,
-						    &code_size);
+						    &code_size,
+						    &funcinst->stack_usage);
 		if (!unmapped)
 			goto error;
 
@@ -631,6 +632,9 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 				break;
 			case MEMREF_TRAP:
 				val = (uintptr_t) &wasmjit_trap;
+				break;
+			case MEMREF_STACK_TOP:
+				val = (uintptr_t) &wasmjit_stack_top;
 				break;
 			default:
 				assert(0);

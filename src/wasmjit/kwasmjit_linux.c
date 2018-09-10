@@ -27,6 +27,7 @@
 #include <wasmjit/high_level.h>
 #include <wasmjit/runtime.h>
 #include <wasmjit/sys.h>
+#include <wasmjit/ktls.h>
 
 #include <linux/uaccess.h>
 #include <linux/cdev.h>
@@ -146,6 +147,28 @@ static int kwasmjit_instantiate_emscripten_runtime(struct kwasmjit_private *self
 	return retval;
 }
 
+static char *ptrptr(void) {
+	/* NB: use space below entry of kernel stack for our thread local info
+	   if task_pt_regs(current) does not point to the bottom of the stack,
+	   this will fail very badly. wasmjit_high_emscripten_invoke_main always
+	   restores the original value before returning, so while we in the system
+	   call it should be safe to reappropriate this space.
+	 */
+	return (char *)task_pt_regs(current) - sizeof(struct ThreadLocal *);
+}
+
+struct KernelThreadLocal *wasmjit_get_ktls(void)
+{
+	struct KernelThreadLocal *toret;
+	memcpy(&toret, ptrptr(), sizeof(toret));
+	return toret;
+}
+
+void wasmjit_set_ktls(struct KernelThreadLocal *ktls)
+{
+	memcpy(ptrptr(), &ktls, sizeof(ktls));
+}
+
 static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 					   struct kwasmjit_emscripten_invoke_main_args *arg)
 {
@@ -179,6 +202,14 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 
 	{
 		mm_segment_t old_fs = get_fs();
+		struct KernelThreadLocal *preserve, ktls;
+
+		preserve = wasmjit_get_ktls();
+
+		wasmjit_set_ktls(&ktls);
+
+		wasmjit_set_stack_top(end_of_stack(current));
+
 		/*
 		  we only handle kernel validated memory now
 		  so remove address limit
@@ -188,6 +219,8 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 							     module_name,
 							     arg->argc, argv, arg->flags);
 		set_fs(old_fs);
+
+		wasmjit_set_ktls(preserve);
 	}
 
 	if (retval < 0) {

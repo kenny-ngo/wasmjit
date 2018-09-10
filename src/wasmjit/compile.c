@@ -97,6 +97,18 @@ static int pop_stack(struct StaticStack *sstack)
 	return stack_truncate(sstack, sstack->n_elts - 1);
 }
 
+static size_t stack_depth(struct StaticStack *sstack)
+{
+	size_t i;
+	size_t cur_stack_depth = sstack->n_elts;
+	for (i = 0; i < sstack->n_elts; ++i) {
+		if (sstack->elts[i].type == STACK_LABEL) {
+			cur_stack_depth -= 1;
+		}
+	}
+	return cur_stack_depth;
+}
+
 static void encode_le_uint32_t(uint32_t val, char *buf)
 {
 	uint32_t le_val = uint32_t_swap_bytes(val);
@@ -104,6 +116,7 @@ static void encode_le_uint32_t(uint32_t val, char *buf)
 }
 
 #define MMIN(x, y) (((x) < (y)) ? (x) : (y))
+#define MMAX(x, y) (((x) > (y)) ? (x) : (y))
 
 #define OUTS(str)					   \
 	do {						   \
@@ -348,7 +361,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 				       size_t n_locals,
 				       size_t n_frame_locals,
 				       struct StaticStack *sstack,
-				       const struct Instr *instruction)
+				       const struct Instr *instruction,
+				       int check_stack)
 {
 	char buf[sizeof(uint64_t)];
 
@@ -560,12 +574,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		size_t cur_stack_depth = n_frame_locals;
 
 		/* add current stack depth */
-		for (i = sstack->n_elts; i;) {
-			i -= 1;
-			if (sstack->elts[i].type != STACK_LABEL) {
-				cur_stack_depth += 1;
-			}
-		}
+		cur_stack_depth += stack_depth(sstack);
 
 		if (instruction->opcode == OPCODE_CALL_INDIRECT) {
 			ft = &func_types[instruction->data.call_indirect.typeidx];
@@ -659,17 +668,13 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 					output->n_elts - 8;
 				memrefs->elts[memref_idx].idx = fidx;
 			}
-
-			/* mov compiled_code_off(%rax), %rax */
-			OUTS("\x48\x8b\x40");
-			OUTB(offsetof(struct FuncInst, compiled_code));
 		}
 
-		/* align stack to 16-byte boundary */
 		{
 			/* add stack contribution from spilled arguments */
 			n_movs = 0;
 			n_xmm_movs = 0;
+			n_stack = 0;
 			for (i = 0; i < ft->n_inputs; ++i) {
 				if ((ft->input_types[i] == VALTYPE_I32 ||
 				     ft->input_types[i] == VALTYPE_I64)
@@ -684,12 +689,97 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 					   && n_xmm_movs < 8) {
 					n_xmm_movs += 1;
 				} else {
-					cur_stack_depth += 1;
+					n_stack += 1;
 				}
 			}
 
+			aligned = (cur_stack_depth + n_stack) % 2;
+		}
 
-			aligned = cur_stack_depth % 2;
+		if (check_stack) {
+			/* save funcinst ptr */
+			/* push %rbx */
+			OUTS("\x53");
+			cur_stack_depth += 1;
+			/* mov %rax, %rbx */
+			OUTS("\x48\x89\xc3");
+
+			/* get stack limit */
+			/* mov $const, %rax */
+			OUTS("\x48\xb8");
+			OUTNULL(8);
+			{
+				size_t memref_idx;
+				memref_idx = memrefs->n_elts;
+				if (!memrefs_grow(memrefs, 1))
+					goto error;
+
+				memrefs->elts[memref_idx].type =
+					MEMREF_STACK_TOP;
+				memrefs->elts[memref_idx].code_offset =
+					output->n_elts - 8;
+			}
+
+			if (cur_stack_depth % 2) {
+				/* sub $8, %rsp */
+				OUTS("\x48\x83\xec\x08");
+			}
+			/* call *%rax */
+			OUTS("\xff\xd0");
+			if (cur_stack_depth % 2) {
+				/* add $8, %rsp */
+				OUTS("\x48\x83\xc4\x08");
+			}
+
+			/* mov stack_usage(%rbx), %rdx */
+			OUTS("\x48\x8b\x53");
+			OUTB(offsetof(struct FuncInst, stack_usage));
+
+			/* mov %rsp, %rdi */
+			OUTS("\x48\x89\xe7");
+
+			/* add burden of stack arguments and alignment
+			   to stack usage requirement of function */
+			if (n_stack + aligned) {
+				/* add $((n_stack + alignment)*8), %rdx */
+				OUTS("\x48\x81\xc2");
+				encode_le_uint32_t((n_stack + aligned) * 8, buf);
+				if (!output_buf(output, buf, sizeof(uint32_t)))
+					goto error;
+				/* NB: should not overflow */
+			}
+
+			/* sub %rdx, %rdi */
+			OUTS("\x48\x29\xd7");
+
+			/* check for overflow */
+			/* jb <next_instructions> */
+			OUTS("\x72");
+			OUTB(5);
+
+			/* cmp %rdi, %rax */
+			OUTS("\x48\x39\xf8");
+
+			/* jbe TRAP_SIZE */
+			OUTS("\x76");
+			OUTB(TRAP_SIZE);
+
+			emit_trap(output, memrefs, WASMJIT_TRAP_STACK_OVERFLOW);
+
+			/* restore funcinst ptr */
+			/* mov %rbx, %rax */
+			OUTS("\x48\x89\xd8");
+			cur_stack_depth -= 1;
+			/* pop %rbx */
+			OUTS("\x5b");
+		}
+
+		/* mov compiled_code_off(%rax), %rax */
+		OUTS("\x48\x8b\x40");
+		OUTB(offsetof(struct FuncInst, compiled_code));
+
+		/* align stack to 16-byte boundary */
+		{
 			if (aligned)
 				/* sub $8, %rsp */
 				OUTS("\x48\x83\xec\x08");
@@ -1867,7 +1957,8 @@ static int wasmjit_compile_instructions(const struct FuncType *func_types,
 					size_t n_frame_locals,
 					struct StaticStack *sstack,
 					const struct Instr *instructions,
-					size_t n_instructions)
+					size_t n_instructions,
+					size_t *max_stack)
 {
 	int ret;
 	size_t i;
@@ -1883,6 +1974,10 @@ static int wasmjit_compile_instructions(const struct FuncType *func_types,
 	stack[0].n_instructions = n_instructions;
 	stack[0].initiator = NULL;
 	stack[0].cont = 0;
+
+	if (max_stack) {
+		*max_stack = 0;
+	}
 
 	while (stack_sz) {
 		struct InstructionMD imd, *new_stack;
@@ -1981,9 +2076,16 @@ static int wasmjit_compile_instructions(const struct FuncType *func_types,
 								 n_locals,
 								 n_frame_locals,
 								 sstack,
-								 instruction))
+								 instruction,
+								 !!max_stack))
 					goto error;
 				break;
+			}
+
+			if (max_stack) {
+				size_t n_values;
+				n_values = stack_depth(sstack);
+				*max_stack = MMAX(*max_stack, n_values);
 			}
 
 			if (instruction->opcode == OPCODE_BLOCK ||
@@ -2129,7 +2231,9 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 			       const struct ModuleTypes *module_types,
 			       const struct FuncType *type,
 			       const struct CodeSectionCode *code,
-			       struct MemoryReferences *memrefs, size_t *out_size)
+			       struct MemoryReferences *memrefs,
+			       size_t *out_size,
+			       size_t *stack_usage)
 {
 	char buf[sizeof(uint32_t)];
 	struct SizedBuffer outputv = { 0, NULL };
@@ -2312,8 +2416,22 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 	if (!wasmjit_compile_instructions(func_types, module_types, type,
 					  output, &labels, &branches, memrefs,
 					  locals_md, n_locals, n_frame_locals, &sstack,
-					  code->instructions, code->n_instructions))
+					  code->instructions, code->n_instructions,
+					  stack_usage))
 		goto error;
+
+	if (stack_usage) {
+		/* 1 for return address */
+		/* 1 for rbp */
+		/* plus the locals stored on the frame */
+		*stack_usage += n_frame_locals + 1 + 1;
+		*stack_usage *= 8;
+		/*
+		  add buffer space for calls to runtime support
+		  functions (.e.g. wasmjit_resolve_indirect_call)
+		*/
+		*stack_usage += 128;
+	}
 
 	/* fix branch points */
 	{

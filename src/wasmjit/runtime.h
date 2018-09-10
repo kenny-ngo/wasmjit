@@ -48,6 +48,7 @@ struct FuncInst {
 	*/
 	void *compiled_code;
 	size_t compiled_code_size;
+	size_t stack_usage;
 	struct FuncType type;
 };
 
@@ -141,6 +142,7 @@ enum {
 	WASMJIT_TRAP_BAD_FUNCTION_TYPE,
 	WASMJIT_TRAP_MEMORY_OVERFLOW,
 	WASMJIT_TRAP_ABORT,
+	WASMJIT_TRAP_STACK_OVERFLOW,
 };
 
 __attribute__ ((unused))
@@ -162,6 +164,9 @@ static const char *wasmjit_trap_reason_to_string(int reason) {
 	case WASMJIT_TRAP_MEMORY_OVERFLOW:
 		msg = "memory overflow";
 		break;
+	case WASMJIT_TRAP_STACK_OVERFLOW:
+		msg = "stack overflow";
+		break;
 	default:
 		assert(0);
 		__builtin_unreachable();
@@ -169,10 +174,11 @@ static const char *wasmjit_trap_reason_to_string(int reason) {
 	return msg;
 }
 
-void *wasmjit_resolve_indirect_call(const struct TableInst *tableinst,
-				    const struct FuncType *expected_type,
-				    uint32_t idx);
+struct FuncInst *wasmjit_resolve_indirect_call(const struct TableInst *tableinst,
+					       const struct FuncType *expected_type,
+					       uint32_t idx);
 void wasmjit_trap(int reason) __attribute__((noreturn));
+void *wasmjit_stack_top(void);
 
 void wasmjit_free_module_inst(struct ModuleInst *module);
 
@@ -180,6 +186,7 @@ void *wasmjit_map_code_segment(size_t code_size);
 int wasmjit_mark_code_segment_executable(void *code, size_t code_size);
 int wasmjit_unmap_code_segment(void *code, size_t code_size);
 
+int wasmjit_set_stack_top(void *stack_top);
 int wasmjit_set_jmp_buf(jmp_buf *jmpbuf);
 jmp_buf *wasmjit_get_jmp_buf(void);
 

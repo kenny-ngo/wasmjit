@@ -44,6 +44,84 @@
 
 #include <unistd.h>
 
+#ifdef __linux__
+
+#include <sys/time.h>
+#include <sys/resource.h>
+
+void *get_stack_top(void)
+{
+	struct rlimit rlim;
+	uintptr_t stack_bottom;
+	FILE *stream;
+	void *stack_top;
+	char *pathname = NULL;
+
+	stream = fopen("/proc/self/maps", "r");
+	if (!stream)
+		goto error;
+
+	while (1) {
+		uintptr_t start_address, end_address;
+		char perms[4];
+		uint64_t offset;
+		uint8_t dev_major, dev_minor;
+		uint64_t inode;
+		int ret;
+
+		free(pathname);
+
+		ret = fscanf(stream,
+			     "%" SCNxPTR "-%" SCNxPTR "%*[ ]%4c%*[ ]%" SCNx64
+			     "%*[ ]%" SCNx8 ":%" SCNx8 "%*[ ]%" SCNu64
+			     "%*[ ]%m[^\n]%*[\n]",
+			     &start_address, &end_address, perms, &offset,
+			     &dev_major, &dev_minor, &inode, &pathname);
+		if (ret == 7) {
+			/* read newline if there was no pathname */
+			int c;
+			c = fgetc(stream);
+			if (c != '\n')
+				goto error;
+			pathname = NULL;
+		} else if (ret != 8) {
+			goto error;
+		}
+
+		if (pathname && !strcmp(pathname, "[stack]")) {
+			stack_bottom = end_address;
+			break;
+		}
+	}
+
+	if (getrlimit(RLIMIT_STACK, &rlim)) {
+		goto error;
+	}
+
+	stack_top = (void *)(stack_bottom - rlim.rlim_cur);
+
+	if (0) {
+ error:
+		stack_top = NULL;
+	}
+
+	free(pathname);
+
+	if (stream)
+		fclose(stream);
+
+	return stack_top;
+}
+
+#else
+
+void *get_stack_top(void)
+{
+	return NULL;
+}
+
+#endif
+
 int main(int argc, char *argv[])
 {
 	int ret;
@@ -212,6 +290,7 @@ int main(int argc, char *argv[])
 	{
 		struct WasmJITHigh high;
 		int ret;
+		void *stack_top;
 
 		if (!wasmjit_high_init(&high)) {
 			fprintf(stderr, "failed to initialize\n");
@@ -228,6 +307,13 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "failed to instantiate module\n");
 			return -1;
 		}
+
+		stack_top = get_stack_top();
+		if (!stack_top) {
+			fprintf(stderr, "warning: running without a stack limit\n");
+		}
+
+		wasmjit_set_stack_top(stack_top);
 
 		ret = wasmjit_high_emscripten_invoke_main(&high, "asm",
 							  argc - optind,

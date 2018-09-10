@@ -265,7 +265,7 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 	struct MemInst *meminst;
 	struct ModuleInst *module_inst;
 	int ret;
-	jmp_buf jmpbuf, *preserve;
+	jmp_buf jmpbuf;
 
 #if defined(__linux__) && !defined(__KERNEL__)
 	if (self->fd >= 0) {
@@ -317,8 +317,6 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 	if (!meminst)
 		return -1;
 
-	preserve = wasmjit_get_jmp_buf();
-
 	if ((ret = setjmp(jmpbuf))) {
 		/* if the code trapped, return error */
 		ret = (WASMJIT_TRAP_OFFSET + (ret - 1));
@@ -329,8 +327,6 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 						     main_inst,
 						     argc, argv);
 	}
-
-	wasmjit_set_jmp_buf(preserve);
 
 	wasmjit_emscripten_cleanup(env_module_inst);
 

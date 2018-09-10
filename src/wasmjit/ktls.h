@@ -22,53 +22,19 @@
   SOFTWARE.
  */
 
-#ifndef __WASMJIT__COMPILE_H__
-#define __WASMJIT__COMPILE_H__
+#ifndef __KWASMJIT__KTLS_H
+#define __KWASMJIT__KTLS_H
 
-#include <wasmjit/ast.h>
+#ifndef __KERNEL__
+#error Only for kernel
+#endif
 
-#include <wasmjit/sys.h>
-
-struct ModuleTypes {
-	struct FuncType *functypes;
-	struct TableType *tabletypes;
-	struct MemoryType *memorytypes;
-	struct GlobalType *globaltypes;
+struct KernelThreadLocal {
+	jmp_buf *jmp_buf;
+	void *stack_top;
 };
 
-struct MemoryReferences {
-	size_t n_elts;
-	struct MemoryReferenceElt {
-		enum {
-			MEMREF_TYPE,
-			MEMREF_FUNC,
-			MEMREF_TABLE,
-			MEMREF_MEM,
-			MEMREF_GLOBAL,
-			MEMREF_RESOLVE_INDIRECT_CALL,
-			MEMREF_TRAP,
-			MEMREF_STACK_TOP,
-		} type;
-		size_t code_offset;
-		size_t idx;
-	} *elts;
-};
-
-char *wasmjit_compile_function(const struct FuncType *func_types,
-			       const struct ModuleTypes *module_types,
-			       const struct FuncType *type,
-			       const struct CodeSectionCode *code,
-			       struct MemoryReferences *memrefs,
-			       size_t *out_size,
-			       size_t *stack_usage);
-
-char *wasmjit_compile_hostfunc(struct FuncType *type,
-			       void *hostfunc,
-			       void *funcinst_ptr,
-			       size_t *out_size);
-
-char *wasmjit_compile_invoker(struct FuncType *type,
-			      void *compiled_code,
-			      size_t *out_size);
+struct KernelThreadLocal *wasmjit_get_ktls(void);
+void wasmjit_set_ktls(struct KernelThreadLocal *ktls);
 
 #endif
