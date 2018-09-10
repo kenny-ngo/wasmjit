@@ -376,35 +376,43 @@ struct file_operations kwasmjit_ops = {
 	.release = kwasmjit_release,
 };
 
-static struct cdev *cdev = NULL;
-static dev_t device_number = 0;
+#define CLASS_NAME "wasm"
+#define DEVICE_NAME "wasm"
+static dev_t device_number = -1;
+static struct class *device_class = NULL;
+static struct device *device_handle = NULL;
 
 static void kwasmjit_cleanup_module(void)
 {
-	if (cdev)
-		cdev_del(cdev);
+	if (device_handle)
+		device_destroy(device_class, MKDEV(device_number, 0));
 
-	if (device_number)
-		unregister_chrdev_region(device_number, 1);
+	if (device_class)
+		class_unregister(device_class);
+
+	if (device_number >= 0)
+		unregister_chrdev(device_number, DEVICE_NAME);
 }
 
 static int __init kwasmjit_init(void)
 {
-	int retval;
-
-	retval = alloc_chrdev_region(&device_number, 0, 1, "wasm");
-	if (retval)
+	device_number = register_chrdev(0, DEVICE_NAME, &kwasmjit_ops);
+	if (device_number < 0) {
 		goto error;
+	}
 
-	cdev = cdev_alloc();
-	if (!cdev)
+	device_class = class_create(THIS_MODULE, CLASS_NAME);
+	if (IS_ERR(device_class)) {
+		device_class = NULL;
 		goto error;
+	}
 
-	cdev_init(cdev, &kwasmjit_ops);
-
-	retval = cdev_add(cdev, device_number, 1);
-	if (retval)
+	device_handle = device_create(device_class, NULL, MKDEV(device_number, 0),
+				      NULL, DEVICE_NAME);
+	if (IS_ERR(device_handle)) {
+		device_handle = NULL;
 		goto error;
+	}
 
 	if (0) {
 	error:
