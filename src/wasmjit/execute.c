@@ -65,10 +65,9 @@ int wasmjit_invoke_function(struct FuncInst *funcinst,
 		wasmjit_set_jmp_buf(&jmpbuf);
 		lout = mapped(values);
 		ret = 0;
+		if (out)
+			*out = lout;
 	}
-
-	if (out)
-		*out = lout;
 
  error:
 	if (mapped)
