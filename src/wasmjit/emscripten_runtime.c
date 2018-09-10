@@ -33,6 +33,8 @@ int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
 				   char *argv[]) {
 	uint32_t (*stack_alloc)(uint32_t);
 	char *base = meminst->data;
+	union ValueUnion out;
+	int ret;
 
 	if (!(stack_alloc_inst->type.n_inputs == 1 &&
 	      stack_alloc_inst->type.input_types[0] == VALTYPE_I32 &&
@@ -44,17 +46,14 @@ int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
 
 	if (main_inst->type.n_inputs == 0 &&
 	    main_inst->type.output_type == VALTYPE_I32) {
-		union ValueUnion out;
-		if (!wasmjit_invoke_function(main_inst, NULL, &out))
-			return -1;
-		return 0xff & out.i32;
+		ret = wasmjit_invoke_function(main_inst, NULL, &out);
 	} else if (main_inst->type.n_inputs == 2 &&
 		   main_inst->type.input_types[0] == VALTYPE_I32 &&
 		   main_inst->type.input_types[1] == VALTYPE_I32 &&
 		   main_inst->type.output_type == VALTYPE_I32) {
 		uint32_t argv_i, zero = 0;
 		int i;
-		union ValueUnion args[2], out;
+		union ValueUnion args[2];
 
 		argv_i = stack_alloc((argc + 1) * 4);
 
@@ -70,13 +69,15 @@ int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
 		args[0].i32 = argc;
 		args[1].i32 = argv_i;
 
-		if (!wasmjit_invoke_function(main_inst, args, &out))
-			return -1;
+		ret = wasmjit_invoke_function(main_inst, args, &out);
 
 		/* TODO: copy back mutations to argv? */
-
-		return 0xff & out.i32;
 	} else {
 		return -1;
 	}
+
+	if (ret)
+		return ret;
+
+	return 0xff & out.i32;
 }

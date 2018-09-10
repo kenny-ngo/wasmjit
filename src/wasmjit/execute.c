@@ -33,11 +33,12 @@ int wasmjit_invoke_function(struct FuncInst *funcinst,
 			    union ValueUnion *values,
 			    union ValueUnion *out)
 {
-	int ret = 0;
+	int ret = -1;
 	void *unmapped = NULL;
 	union ValueUnion (*mapped)(union ValueUnion *) = NULL;
 	size_t code_size;
 	union ValueUnion lout;
+	jmp_buf jmpbuf;
 
 	unmapped = wasmjit_compile_invoker(&funcinst->type,
 					   funcinst->compiled_code,
@@ -57,11 +58,17 @@ int wasmjit_invoke_function(struct FuncInst *funcinst,
 #ifndef __x86_64__
 #error Only works on x86_64
 #endif
+	if ((ret = setjmp(jmpbuf))) {
+		/* if the code trapped, return error */
+		ret = WASMJIT_INVOKE_ENCODE_TRAP_ERROR(ret - 1);
+	} else {
+		wasmjit_set_jmp_buf(&jmpbuf);
+		lout = mapped(values);
+		ret = 0;
+	}
 
-	lout = mapped(values);
 	if (out)
 		*out = lout;
-	ret = 1;
 
  error:
 	if (mapped)

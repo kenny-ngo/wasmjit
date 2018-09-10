@@ -29,6 +29,7 @@
 #include <wasmjit/instantiate.h>
 #include <wasmjit/dynamic_emscripten_runtime.h>
 #include <wasmjit/emscripten_runtime.h>
+#include <wasmjit/execute.h>
 #include <wasmjit/sys.h>
 #include <wasmjit/util.h>
 
@@ -265,7 +266,6 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 	struct MemInst *meminst;
 	struct ModuleInst *module_inst;
 	int ret;
-	jmp_buf jmpbuf;
 
 #if defined(__linux__) && !defined(__KERNEL__)
 	if (self->fd >= 0) {
@@ -317,15 +317,12 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 	if (!meminst)
 		return -1;
 
-	if ((ret = setjmp(jmpbuf))) {
-		/* if the code trapped, return error */
-		ret = (WASMJIT_TRAP_OFFSET + (ret - 1));
-	} else {
-		wasmjit_set_jmp_buf(&jmpbuf);
-		ret = wasmjit_emscripten_invoke_main(meminst,
-						     stack_alloc_inst,
-						     main_inst,
-						     argc, argv);
+	ret = wasmjit_emscripten_invoke_main(meminst,
+					     stack_alloc_inst,
+					     main_inst,
+					     argc, argv);
+	if (WASMJIT_INVOKE_IS_TRAP_ERROR(ret)) {
+		ret = WASMJIT_ENCODE_TRAP_ERROR(WASMJIT_INVOKE_DECODE_TRAP_ERROR(ret));
 	}
 
 	wasmjit_emscripten_cleanup(env_module_inst);

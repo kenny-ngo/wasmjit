@@ -27,6 +27,11 @@
 
 #include <wasmjit/runtime.h>
 
+#define WASMJIT_INVOKE_TRAP_OFFSET 0x100
+#define WASMJIT_INVOKE_IS_TRAP_ERROR(ret) ((ret) <= -WASMJIT_INVOKE_TRAP_OFFSET)
+#define WASMJIT_INVOKE_ENCODE_TRAP_ERROR(ret) (-(ret) - WASMJIT_INVOKE_TRAP_OFFSET)
+#define WASMJIT_INVOKE_DECODE_TRAP_ERROR(ret) (-(ret) - WASMJIT_INVOKE_TRAP_OFFSET)
+
 int wasmjit_invoke_function(struct FuncInst *funcinst, union ValueUnion *values,
 			    union ValueUnion *out);
 
