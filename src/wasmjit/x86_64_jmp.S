@@ -20,6 +20,9 @@
   SOFTWARE.
  */
 
+#include <linux/linkage.h>
+#include <asm/nospec-branch.h>
+
 .global invoke_on_stack
 .type invoke_on_stack,@function
 invoke_on_stack:
@@ -27,7 +30,7 @@ invoke_on_stack:
         mov %rsp, %rbp
         mov %rdi, %rsp
         mov %rdx, %rdi
-        call *%rsi
+        CALL_NOSPEC %rsi
         mov %rbp, %rsp
         pop %rbp
         ret
@@ -67,4 +70,4 @@ longjmp:
         mov 48(%rdi),%rdx       /* this ends up being the stack pointer */
         mov %rdx,%rsp
         mov 56(%rdi),%rdx       /* this is the instruction pointer */
-        jmp *%rdx               /* goto saved address without altering rsp */
+        JMP_NOSPEC %rdx               /* goto saved address without altering rsp */
