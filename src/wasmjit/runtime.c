@@ -264,7 +264,7 @@ int wasmjit_typecheck_global(const struct GlobalType *globaltype,
 		globalinst->mut == globaltype->mut;
 }
 
-int _wasmjit_create_func_type(struct FuncType *ft,
+void _wasmjit_create_func_type(struct FuncType *ft,
 			      size_t n_inputs,
 			      wasmjit_valtype_t *input_types,
 			      size_t n_outputs,
@@ -282,8 +282,6 @@ int _wasmjit_create_func_type(struct FuncType *ft,
 	} else {
 		ft->output_type = VALTYPE_NULL;
 	}
-
-	return 1;
 }
 
 __attribute__((noreturn))

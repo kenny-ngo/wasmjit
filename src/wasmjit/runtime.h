@@ -106,10 +106,10 @@ struct NamedModule {
 
 #define WASM_PAGE_SIZE ((size_t) (64 * 1024))
 
-int _wasmjit_create_func_type(struct FuncType *ft,
-			      size_t n_inputs,
-			      wasmjit_valtype_t *input_types,
-			      size_t n_outputs, wasmjit_valtype_t *output_types);
+void _wasmjit_create_func_type(struct FuncType *ft,
+			       size_t n_inputs,
+			       wasmjit_valtype_t *input_types,
+			       size_t n_outputs, wasmjit_valtype_t *output_types);
 
 int wasmjit_typecheck_func(const struct FuncType *expected_type,
 			   const struct FuncInst *func);
