@@ -29,6 +29,7 @@
 #include <wasmjit/sys.h>
 #include <wasmjit/ktls.h>
 
+#include <linux/sched/signal.h>
 #include <linux/uaccess.h>
 #include <linux/cdev.h>
 #include <linux/fs.h>
@@ -169,6 +170,88 @@ void wasmjit_set_ktls(struct KernelThreadLocal *ktls)
 	memcpy(ptrptr(), &ktls, sizeof(ktls));
 }
 
+#define PAGE_ORDER_UP(x) ((order_base_2(x)  + (PAGE_SHIFT - 1)) / PAGE_SHIFT)
+
+static void *alloc_stack(size_t requested_size, size_t *resulting_size)
+{
+#if !defined(CONFIG_THREAD_INFO_IN_TASK)
+	/* NB: if thread info is stored on the stack, we cannot change the size
+	   of the stack, otherwise the accessor functions won't work */
+	return NULL;
+#elif defined(CONFIG_VMAP_STACK) && defined(__x86_64__)
+	/* NB: arm64's version of CONFIG_VMAP_STACK uses alignment to check
+	   for corrupted stack, but this doesn't work if stack is larger than
+	   THREAD_SIZE, which is the point here.
+	 */
+	size_t stack_pages;
+	stack_pages = (requested_size >> PAGE_SHIFT) + ((requested_size & PAGE_MASK) ? 1 : 0);
+	*resulting_size = stack_pages << PAGE_SHIFT;
+	return __vmalloc(*resulting_size, THREADINFO_GFP, PAGE_KERNEL);
+#elif !defined(CONFIG_VMAP_STACK)
+	int node = NUMA_NO_NODE;
+	size_t size_order = PAGE_ORDER_UP(requested_size);
+	*resulting_size = size_order << (PAGE_SHIFT * size_order);
+	struct page *page = alloc_pages_node(node, THREADINFO_GFP, size_order);
+	return page ? page_address(page) : NULL;
+#else
+	return NULL;
+#endif
+}
+
+static void free_stack(void *ptr, size_t size)
+{
+	BUG_ON(!ptr);
+#ifdef CONFIG_VMAP_STACK
+	vfree(ptr);
+#else
+	__free_pages(virt_to_page(ptr), PAGE_ORDER_UP(size));
+#endif
+}
+
+#define MAX_STACK (8 * 1024 * 1024)
+
+#define MMAX(x, y) (((x) > (y)) ? (x) : (y))
+
+struct InvokeMainArgs {
+	struct WasmJITHigh *high;
+	const char *module_name;
+	int argc;
+	char **argv;
+	int flags;
+};
+
+static int handler(void *ctx)
+{
+	struct InvokeMainArgs *arg = ctx;
+	return wasmjit_high_emscripten_invoke_main(arg->high,
+						   arg->module_name,
+						   arg->argc,
+						   arg->argv,
+						   arg->flags);
+}
+
+int invoke_on_stack(void *stack, void *fptr, void *ctx);
+
+static int invoke_main_on_stack(void *stack,
+				struct WasmJITHigh *high,
+				const char *module_name,
+				int argc, char **argv,
+				int flags)
+{
+	struct InvokeMainArgs args = {
+		.high = high,
+		.module_name = module_name,
+		.argc = argc,
+		.argv = argv,
+		.flags = flags,
+	};
+#if defined(CONFIG_VMAP_STACK) && defined(__x86_64__)
+	/* fault in vmalloc area to pgd before jumping off */
+	READ_ONCE(*((char *)stack - PAGE_SIZE));
+#endif
+	return invoke_on_stack(stack, &handler, &args);
+}
+
 static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 					   struct kwasmjit_emscripten_invoke_main_args *arg)
 {
@@ -203,22 +286,50 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 	{
 		mm_segment_t old_fs = get_fs();
 		struct KernelThreadLocal *preserve, ktls;
+		size_t real_size;
+		void *stack;
 
 		preserve = wasmjit_get_ktls();
 
 		wasmjit_set_ktls(&ktls);
 
-		wasmjit_set_stack_top(end_of_stack(current));
+		stack = alloc_stack(MMAX(rlimit(RLIMIT_STACK), MAX_STACK), &real_size);
+		if (stack) {
+#ifdef CONFIG_STACK_GROWSUP
+			wasmjit_set_stack_top(stack + real_size);
+#else
+			wasmjit_set_stack_top(stack);
+#endif
+		} else {
+			wasmjit_set_stack_top(end_of_stack(current));
+		}
 
 		/*
 		  we only handle kernel validated memory now
 		  so remove address limit
 		*/
 		set_fs(get_ds());
-		retval = wasmjit_high_emscripten_invoke_main(&self->high,
-							     module_name,
-							     arg->argc, argv, arg->flags);
+
+		if (stack) {
+			void *stack2 = stack;
+#ifndef CONFIG_STACK_GROWSUP
+			stack2 = (char *)stack + real_size;
+#endif
+			retval = invoke_main_on_stack(stack2,
+						      &self->high,
+						      module_name,
+						      arg->argc, argv, arg->flags);
+		} else {
+			retval = wasmjit_high_emscripten_invoke_main(&self->high,
+								     module_name,
+								     arg->argc, argv, arg->flags);
+		}
+
 		set_fs(old_fs);
+
+		if (stack) {
+			free_stack(stack, real_size);
+		}
 
 		wasmjit_set_ktls(preserve);
 	}
