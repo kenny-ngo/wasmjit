@@ -301,7 +301,14 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 			wasmjit_set_stack_top(stack);
 #endif
 		} else {
-			wasmjit_set_stack_top(end_of_stack(current));
+			void *addr = end_of_stack(current);
+			/* account for STACK_END_MAGIC */
+#ifdef CONFIG_STACK_GROWSUP
+			addr = (unsigned long *)addr - 1;
+#else
+			addr = (unsigned long *)addr + 1;
+#endif
+			wasmjit_set_stack_top(addr);
 		}
 
 		/*
