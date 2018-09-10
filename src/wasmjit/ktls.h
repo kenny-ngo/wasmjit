@@ -35,6 +35,5 @@ struct KernelThreadLocal {
 };
 
 struct KernelThreadLocal *wasmjit_get_ktls(void);
-void wasmjit_set_ktls(struct KernelThreadLocal *ktls);
 
 #endif

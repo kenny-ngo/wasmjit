@@ -165,7 +165,7 @@ struct KernelThreadLocal *wasmjit_get_ktls(void)
 	return toret;
 }
 
-void wasmjit_set_ktls(struct KernelThreadLocal *ktls)
+static void wasmjit_set_ktls(struct KernelThreadLocal *ktls)
 {
 	memcpy(ptrptr(), &ktls, sizeof(ktls));
 }
