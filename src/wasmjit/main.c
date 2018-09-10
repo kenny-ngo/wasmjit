@@ -46,6 +46,8 @@
 
 #ifdef __linux__
 
+#include <valgrind/valgrind.h>
+
 #include <sys/time.h>
 #include <sys/resource.h>
 
@@ -56,6 +58,9 @@ void *get_stack_top(void)
 	FILE *stream;
 	void *stack_top;
 	char *pathname = NULL;
+
+	if (RUNNING_ON_VALGRIND)
+		return NULL;
 
 	stream = fopen("/proc/self/maps", "r");
 	if (!stream)
