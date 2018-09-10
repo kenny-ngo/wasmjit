@@ -139,7 +139,7 @@ enum {
 	WASMJIT_TRAP_UNREACHABLE,
 	WASMJIT_TRAP_TABLE_OVERFLOW,
 	WASMJIT_TRAP_UNINITIALIZED_TABLE_ENTRY,
-	WASMJIT_TRAP_BAD_FUNCTION_TYPE,
+	WASMJIT_TRAP_MISMATCHED_TYPE,
 	WASMJIT_TRAP_MEMORY_OVERFLOW,
 	WASMJIT_TRAP_ABORT,
 	WASMJIT_TRAP_STACK_OVERFLOW,
@@ -158,8 +158,8 @@ static const char *wasmjit_trap_reason_to_string(int reason) {
 	case WASMJIT_TRAP_UNINITIALIZED_TABLE_ENTRY:
 		msg = "uninitialized table entry";
 		break;
-	case WASMJIT_TRAP_BAD_FUNCTION_TYPE:
-		msg = "bad function type";
+	case WASMJIT_TRAP_MISMATCHED_TYPE:
+		msg = "mismatched type";
 		break;
 	case WASMJIT_TRAP_MEMORY_OVERFLOW:
 		msg = "memory overflow";

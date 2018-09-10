@@ -220,6 +220,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		global_symbol_start,
 		init_static_module_symbol,
 		resolve_indirect_call_symbol,
+		trap_symbol,
 		func_code_start,
 		n_imported_funcs, n_imported_tables,
 		n_imported_mems, n_imported_globals,
@@ -960,6 +961,18 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 			goto error;
 	}
 
+	trap_symbol = symbols->n_elts;
+	{
+		size_t string_offset;
+		string_offset = strtab->n_elts;
+		if (!output_buf(strtab, "wasmjit_trap",
+				strlen("wasmjit_trap") + 1))
+			goto error;
+		if (!add_symbol(symbols, string_offset, 0, STB_GLOBAL,
+				0, 0, 0, 0))
+			goto error;
+	}
+
 	/* add imported symbols */
 #define ADD_IMPORTED_SYMBOLS(_name)		\
 	do {							\
@@ -1115,6 +1128,9 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 				break;
 			case MEMREF_RESOLVE_INDIRECT_CALL:
 				symidx = resolve_indirect_call_symbol;
+				break;
+			case MEMREF_TRAP:
+				symidx = trap_symbol;
 				break;
 			default:
 				assert(0);

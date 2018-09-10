@@ -27,12 +27,21 @@
 #include <wasmjit/runtime.h>
 
 #include <stdint.h>
+#include <stdio.h>
+
+int wasmjit_unmap_code_segment(void *code, size_t code_size)
+{
+	(void)code;
+	(void)code_size;
+	return 1;
+}
 
 __attribute__((noreturn))
-static void ltrap(void)
+void wasmjit_trap(int reason)
 {
-	__builtin_trap();
-	__builtin_unreachable();
+	fprintf(stderr, "TRAP: %s\n",
+		wasmjit_trap_reason_to_string(reason));
+	exit(-1);
 }
 
 void wasmjit_init_static_module(struct StaticModuleInst *smi)
@@ -45,28 +54,28 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi)
 		struct FuncInst *ref = smi->module.funcs.elts[i];
 		struct FuncType *expected_type = &smi->func_types.elts[i];
 		if (!wasmjit_typecheck_func(expected_type, ref))
-			ltrap();
+			wasmjit_trap(WASMJIT_TRAP_MISMATCHED_TYPE);
 	}
 
 	for (i = 0; i < smi->table_types.n_elts; ++i) {
 		struct TableInst *ref = smi->module.tables.elts[i];
 		struct TableType *expected_type = &smi->table_types.elts[i];
 		if (!wasmjit_typecheck_table(expected_type, ref))
-			ltrap();
+			wasmjit_trap(WASMJIT_TRAP_MISMATCHED_TYPE);
 	}
 
 	for (i = 0; i < smi->mem_types.n_elts; ++i) {
 		struct MemInst *ref = smi->module.mems.elts[i];
 		struct MemoryType *expected_type = &smi->mem_types.elts[i];
 		if (!wasmjit_typecheck_memory(expected_type, ref))
-			ltrap();
+			wasmjit_trap(WASMJIT_TRAP_MISMATCHED_TYPE);
 	}
 
 	for (i = 0; i < smi->global_types.n_elts; ++i) {
 		struct GlobalInst *ref = smi->module.globals.elts[i];
 		struct GlobalType *expected_type = &smi->global_types.elts[i];
 		if (!wasmjit_typecheck_global(expected_type, ref))
-			ltrap();
+			wasmjit_trap(WASMJIT_TRAP_MISMATCHED_TYPE);
 	}
 
 	/* init non-imported globals */
@@ -88,7 +97,7 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi)
 
 		if (element->offset_source_type == GLOBAL_CONST_INIT) {
 			if (element->offset.constant.type != VALTYPE_I32)
-				ltrap();
+				wasmjit_trap(WASMJIT_TRAP_MISMATCHED_TYPE);
 			offset = element->offset.constant.data.i32;
 		} else {
 			struct GlobalInit *gitr = element->offset.global;
@@ -96,12 +105,12 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi)
 				gitr = gitr->init.parent;
 			}
 			if (gitr->init.constant.type != VALTYPE_I32)
-				ltrap();
+				wasmjit_trap(WASMJIT_TRAP_MISMATCHED_TYPE);
 			offset = gitr->init.constant.data.i32;
 		}
 
 		if (element->n_funcidxs + offset > table->length)
-			ltrap();
+			wasmjit_trap(WASMJIT_TRAP_TABLE_OVERFLOW);
 
 		for (j = 0; j < element->n_funcidxs; ++j) {
 			table->data[offset + j] = smi->module.funcs.elts[element->funcidxs[j]];
@@ -116,7 +125,7 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi)
 
 		if (data->offset_source_type == GLOBAL_CONST_INIT) {
 			if (data->offset.constant.type != VALTYPE_I32)
-				ltrap();
+				wasmjit_trap(WASMJIT_TRAP_MISMATCHED_TYPE);
 			offset = data->offset.constant.data.i32;
 		} else {
 			struct GlobalInit *gitr = data->offset.global;
@@ -124,12 +133,12 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi)
 				gitr = gitr->init.parent;
 			}
 			if (gitr->init.constant.type != VALTYPE_I32)
-				ltrap();
+				wasmjit_trap(WASMJIT_TRAP_MISMATCHED_TYPE);
 			offset = gitr->init.constant.data.i32;
 		}
 
 		if (data->buf_size + offset > mem->size)
-			ltrap();
+			wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
 
 		memcpy(mem->data + offset,
 		       data->buf,
@@ -141,7 +150,7 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi)
 		void (*start)(void);
 		_wasmjit_create_func_type(&expected_type, 0, NULL, 0, NULL);
 		if (!wasmjit_typecheck_func(&expected_type, smi->start_func))
-			ltrap();
+			wasmjit_trap(WASMJIT_TRAP_MISMATCHED_TYPE);
 		start = smi->start_func->compiled_code;
 		start();
 	}
