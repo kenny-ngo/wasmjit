@@ -275,6 +275,22 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 		void *stack;
 		struct mm_struct *saved_mm;
 
+		/* set base address once so it's a quick load in the runtime */
+		{
+			size_t i;
+			for (i = 0; i < self->high.n_modules; ++i) {
+				if (!strcmp("env", self->high.modules[i].name)) {
+					struct ModuleInst *inst = self->high.modules[i].module;
+					ktls.base_address = inst->mems.elts[0]->data;
+					break;
+				}
+			}
+			if (i == self->high.n_modules) {
+				retval = -EINVAL;
+				goto error;
+			}
+		}
+
 		preserve = wasmjit_get_ktls();
 
 		wasmjit_set_ktls(&ktls);

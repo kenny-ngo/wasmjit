@@ -118,7 +118,7 @@ static void my_abort(const char *msg)
 }
 
 char *wasmjit_emscripten_get_base_address(struct FuncInst *funcinst) {
-	return funcinst->module_inst->mems.elts[0]->data;
+	return wasmjit_get_ktls()->base_address;
 }
 
 void wasmjit_emscripten_abortStackOverflow(uint32_t allocSize, struct FuncInst *funcinst)

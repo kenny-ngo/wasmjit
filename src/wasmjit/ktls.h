@@ -35,6 +35,7 @@ struct KernelThreadLocal {
 	jmp_buf *jmp_buf;
 	void *stack_top;
 	struct pt_regs regs;
+	char *base_address;
 };
 
 static inline char *ptrptr(void) {
