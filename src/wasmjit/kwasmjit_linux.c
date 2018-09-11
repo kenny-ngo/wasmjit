@@ -385,6 +385,12 @@ static int kwasmjit_open(struct inode *inode, struct file *filp)
 				      GFP_KERNEL);
 	if (!filp->private_data)
 		return -ENOMEM;
+
+	if (wasmjit_high_init(&((struct kwasmjit_private *)filp->private_data)->high)) {
+		kvfree(filp->private_data);
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
