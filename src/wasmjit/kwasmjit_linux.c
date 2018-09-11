@@ -529,8 +529,13 @@ static void kwasmjit_cleanup_module(void)
 		unregister_chrdev(device_number, DEVICE_NAME);
 }
 
+int wasmjit_emscripten_linux_kernel_init(void);
+
 static int __init kwasmjit_init(void)
 {
+	if (!wasmjit_emscripten_linux_kernel_init())
+		goto error;
+
 	device_number = register_chrdev(0, DEVICE_NAME, &kwasmjit_ops);
 	if (device_number < 0) {
 		goto error;

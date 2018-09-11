@@ -1,5 +1,3 @@
-/* -*-mode:c; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*- */
-
 /*
   Copyright (c) 2018 Rian Hunter
 
@@ -22,19 +20,7 @@
   SOFTWARE.
  */
 
-#ifndef __KWASMJIT__KTLS_H
-#define __KWASMJIT__KTLS_H
-
-#ifndef __KERNEL__
-#error Only for kernel
-#endif
-
-struct KernelThreadLocal {
-	jmp_buf *jmp_buf;
-	void *stack_top;
-	struct pt_regs regs;
-};
-
-struct KernelThreadLocal *wasmjit_get_ktls(void);
-
-#endif
+KWSC3(lseek, unsigned int, off_t, unsigned int)
+KWSC3(writev, unsigned long, const struct iovec *, unsigned long)
+KWSC3(write, unsigned int, void *, size_t)
+KWSC1(close, unsigned int)

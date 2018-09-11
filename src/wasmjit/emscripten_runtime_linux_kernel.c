@@ -28,9 +28,87 @@
 #include <wasmjit/runtime.h>
 #include <wasmjit/util.h>
 #include <wasmjit/sys.h>
+#include <wasmjit/ktls.h>
 
 #include <linux/uio.h>
 #include <linux/sched.h>
+#include <linux/kallsyms.h>
+
+#define __KMAP0(m,...)
+#define __KMAP1(m,t,...) m(t,_1)
+#define __KMAP2(m,t,...) m(t,_2), __KMAP1(m,__VA_ARGS__)
+#define __KMAP3(m,t,...) m(t,_3), __KMAP2(m,__VA_ARGS__)
+#define __KMAP4(m,t,...) m(t,_4), __KMAP3(m,__VA_ARGS__)
+#define __KMAP5(m,t,...) m(t,_5), __KMAP4(m,__VA_ARGS__)
+#define __KMAP6(m,t,...) m(t,_6), __KMAP5(m,__VA_ARGS__)
+#define __KMAP(n,...) __KMAP##n(__VA_ARGS__)
+
+#define __KT(t, a) t
+#define __KA(t, a) a
+#define __KDECL(t, a) t a
+#define __KINIT(t, a) . t = (unsigned long) a
+#define __KSET(t, a) vals-> t = (unsigned long) a
+
+#define KWSC1(name, ...) KWSCx(1, name, __VA_ARGS__)
+#define KWSC3(name, ...) KWSCx(3, name, __VA_ARGS__)
+
+#ifdef __x86_64__
+
+#define KWSCx(x, name, ...) long (*name)(struct pt_regs *);
+
+static struct {
+#include <wasmjit/linux_syscalls.h>
+} sctable;
+
+
+#undef KWSCx
+#define KWSCx(x, name, ...)						\
+	static long sys_ ## name(__KMAP(x, __KDECL, __VA_ARGS__))	\
+	{								\
+		struct pt_regs *vals = &wasmjit_get_ktls()->regs;	\
+		__KMAP(x, __KSET, di, si, dx, cx, r8, r9);		\
+		return sctable. name (vals);				\
+	}
+
+#include <wasmjit/linux_syscalls.h>
+
+#define SCPREFIX "__x64_sys_"
+
+#else
+
+#define KWSCx(x, name, ...) long (*name)(__KMAP(x, __KT, __VA_ARGS__));
+
+static struct {
+#include <wasmjit/linux_syscalls.h>
+} sctable;
+
+#undef KWSCx
+#define KWSCx(x, name, ...)						\
+	static long sys_ ## name(__KMAP(x, __KDECL, __VA_ARGS__)) {	\
+		return sctable. name (__KMAP(x, __KA, __VA_ARGS__));	\
+	}
+
+#include <wasmjit/linux_syscalls.h>
+
+#define SCPREFIX "sys_"
+
+#endif
+
+#undef KWSCx
+
+int wasmjit_emscripten_linux_kernel_init(void) {
+#define KWSCx(x, n, ...)					\
+	do {							\
+		sctable. n = (void *)kallsyms_lookup_name(SCPREFIX #n);	\
+		if (!sctable. n)				\
+			return 0;				\
+	}							\
+	while (0);
+
+#include <wasmjit/linux_syscalls.h>
+
+	return 1;
+}
 
 __attribute__((noreturn))
 static void my_abort(const char *msg)
@@ -101,8 +179,6 @@ void wasmjit_emscripten____setErrNo(uint32_t value, struct FuncInst *funcinst)
 	my_abort("failed to set errno from JS");
 }
 
-long sys_lseek(unsigned int fd, off_t offset, unsigned int whence);
-
 /*  _llseek */
 uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
 {
@@ -135,9 +211,6 @@ uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs, stru
 		return 0;
 	}
 }
-
-long sys_writev(unsigned long fd, const struct iovec *vec,
-		unsigned long vlen);
 
 /* writev */
 uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
@@ -190,9 +263,6 @@ uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, stru
 	}
 }
 
-long sys_write(unsigned int fd, void *vec,
-	       size_t vlen);
-
 /* write */
 uint32_t wasmjit_emscripten____syscall4(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
 {
@@ -230,8 +300,6 @@ uint32_t wasmjit_emscripten____syscall54(uint32_t which, uint32_t varargs, struc
 	(void)varargs;
 	return 0;
 }
-
-long sys_close(unsigned int fd);
 
 /* close */
 uint32_t wasmjit_emscripten____syscall6(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
