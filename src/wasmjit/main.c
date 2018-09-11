@@ -297,18 +297,18 @@ int main(int argc, char *argv[])
 		int ret;
 		void *stack_top;
 
-		if (!wasmjit_high_init(&high)) {
+		if (wasmjit_high_init(&high)) {
 			fprintf(stderr, "failed to initialize\n");
 			return -1;
 		}
 
-		if (!wasmjit_high_instantiate_emscripten_runtime(&high,
-								 tablemin, tablemax, 0)) {
+		if (wasmjit_high_instantiate_emscripten_runtime(&high,
+								tablemin, tablemax, 0)) {
 			fprintf(stderr, "failed to instantiate emscripten runtime\n");
 			return -1;
 		}
 
-		if (!wasmjit_high_instantiate(&high, filename, "asm", 0)) {
+		if (wasmjit_high_instantiate(&high, filename, "asm", 0)) {
 			fprintf(stderr, "failed to instantiate module\n");
 			return -1;
 		}

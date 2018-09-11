@@ -91,7 +91,7 @@ int wasmjit_high_init(struct WasmJITHigh *self)
 		fd = open("/dev/wasm", O_RDWR | O_CLOEXEC);
 		if (fd >= 0) {
 			self->fd = fd;
-			return 1;
+			return 0;
 		}
 	}
 	self->fd = -1;
@@ -99,7 +99,7 @@ int wasmjit_high_init(struct WasmJITHigh *self)
 
 	self->n_modules = 0;
 	self->modules = NULL;
-	return 1;
+	return 0;
 }
 
 static int wasmjit_high_instantiate_buf(struct WasmJITHigh *self,
@@ -143,9 +143,9 @@ static int wasmjit_high_instantiate_buf(struct WasmJITHigh *self,
 
 	if (0) {
  error:
-		ret = 0;
+		ret = -1;
 	} else {
-		ret = 1;
+		ret = 0;
 	}
 
 	wasmjit_free_module(&module);
@@ -185,7 +185,7 @@ int wasmjit_high_instantiate(struct WasmJITHigh *self, const char *filename, con
 
 	if (0) {
 	error:
-		ret = 0;
+		ret = -1;
 	}
 
 	if (buf)
@@ -237,11 +237,11 @@ int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
 #if defined(__linux__) && !defined(__KERNEL__)
  success:
 #endif
-	ret = 1;
+	ret = 0;
 
 	if (0) {
 	error:
-		ret = 0;
+		ret = -1;
 	}
 
 	if (modules) {
