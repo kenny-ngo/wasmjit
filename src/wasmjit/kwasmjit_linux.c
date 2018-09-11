@@ -150,23 +150,6 @@ static int kwasmjit_instantiate_emscripten_runtime(struct kwasmjit_private *self
 	return retval;
 }
 
-static char *ptrptr(void) {
-	/* NB: use space below entry of kernel stack for our thread local info
-	   if task_pt_regs(current) does not point to the bottom of the stack,
-	   this will fail very badly. wasmjit_high_emscripten_invoke_main always
-	   restores the original value before returning, so while we in the system
-	   call it should be safe to reappropriate this space.
-	 */
-	return (char *)task_pt_regs(current) - sizeof(struct ThreadLocal *);
-}
-
-struct KernelThreadLocal *wasmjit_get_ktls(void)
-{
-	struct KernelThreadLocal *toret;
-	memcpy(&toret, ptrptr(), sizeof(toret));
-	return toret;
-}
-
 static void wasmjit_set_ktls(struct KernelThreadLocal *ktls)
 {
 	memcpy(ptrptr(), &ktls, sizeof(ktls));
