@@ -96,6 +96,8 @@ struct ModuleInst {
 	DEFINE_ANON_VECTOR(struct Export) exports;
 	size_t n_imported_funcs, n_imported_tables,
 		n_imported_mems, n_imported_globals;
+	void *private_data;
+	void (*free_private_data)(void *);
 };
 
 DECLARE_VECTOR_GROW(func_types, struct FuncTypeVector);

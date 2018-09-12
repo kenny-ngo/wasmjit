@@ -82,6 +82,8 @@ void wasmjit_free_func_inst(struct FuncInst *funcinst)
 void wasmjit_free_module_inst(struct ModuleInst *module)
 {
 	size_t i;
+	if (module->free_private_data)
+		module->free_private_data(module->private_data);
 	free(module->types.elts);
 	for (i = module->n_imported_funcs; i < module->funcs.n_elts; ++i) {
 		wasmjit_free_func_inst(module->funcs.elts[i]);
