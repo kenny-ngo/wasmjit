@@ -131,13 +131,13 @@ uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs, stru
 	off_t rret;
 
 	(void)which;
-	assert(which == 140);
 
 	base = wasmjit_emscripten_get_base_address(funcinst);
 
 	memcpy(&args, base + varargs, sizeof(args));
 	// emscripten off_t is 32-bits, offset_high is useless
-	assert(!args.offset_high);
+	if (args.offset_high)
+		return -EINVAL;
 	rret = lseek(args.fd, args.offset_low, args.whence);
 
 	if ((off_t) -1 == rret) {
@@ -165,7 +165,6 @@ uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, stru
 
 
 	(void)which;
-	assert(which == 146);
 	base = wasmjit_emscripten_get_base_address(funcinst);
 
 	memcpy(&args, base + varargs, sizeof(args));
@@ -211,7 +210,6 @@ uint32_t wasmjit_emscripten____syscall4(uint32_t which, uint32_t varargs, struct
 	ssize_t rret;
 
 	(void)which;
-	assert(which == 4);
 	base = wasmjit_emscripten_get_base_address(funcinst);
 
 	memcpy(&args, base + varargs, sizeof(args));
@@ -232,7 +230,6 @@ uint32_t wasmjit_emscripten____syscall54(uint32_t which, uint32_t varargs, struc
 {
 	(void)funcinst;
 	/* TODO: need to define non-no filesystem case */
-	assert(which == 54);
 	(void)which;
 	(void)varargs;
 	return 0;
@@ -249,7 +246,6 @@ uint32_t wasmjit_emscripten____syscall6(uint32_t which, uint32_t varargs, struct
 	} args;
 	int ret;
 
-	assert(which == 6);
 	(void)which;
 
 	base = wasmjit_emscripten_get_base_address(funcinst);
