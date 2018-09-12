@@ -26,6 +26,26 @@
 
 #include <wasmjit/runtime.h>
 
+int wasmjit_emscripten_init_for_module(struct EmscriptenContext *ctx,
+				       struct FuncInst *errno_location_inst)
+{
+	struct FuncType errno_location_type;
+	wasmjit_valtype_t errno_location_return_type = VALTYPE_I32;
+
+	_wasmjit_create_func_type(&errno_location_type,
+				  0, NULL,
+				  1, &errno_location_return_type);
+
+	if (!wasmjit_typecheck_func(&errno_location_type,
+				    errno_location_inst)) {
+		return -1;
+	}
+
+	ctx->errno_location_inst = errno_location_inst;
+
+	return 0;
+}
+
 int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
 				   struct FuncInst *stack_alloc_inst,
 				   struct FuncInst *main_inst,

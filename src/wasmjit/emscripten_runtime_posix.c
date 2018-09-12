@@ -55,6 +55,12 @@ void wasmjit_emscripten_abortStackOverflow(uint32_t allocSize, struct FuncInst *
 	my_abort("Stack overflow!");
 }
 
+/* shortcut function */
+struct EmscriptenContext *_wasmjit_emscripten_get_context(struct FuncInst *funcinst)
+{
+	return wasmjit_emscripten_get_context(funcinst->module_inst);
+}
+
 uint32_t wasmjit_emscripten_abortOnCannotGrowMemory(struct FuncInst *funcinst)
 {
 	(void)funcinst;
@@ -98,11 +104,20 @@ void wasmjit_emscripten____setErrNo(uint32_t value, struct FuncInst *funcinst)
 {
 	(void)funcinst;
 	(void)value;
-	// TODO: get errno location from memory
-	// struct Value value;
-	// wasmjit_get_global("env", "___errno_location", &value);
-	// store value in errno location
-	my_abort("failed to set errno from JS");
+	union ValueUnion out;
+	int ret;
+	struct EmscriptenContext *ctx =
+		_wasmjit_emscripten_get_context(funcinst);
+
+	ret = wasmjit_invoke_function(ctx->errno_location_inst, NULL, &out);
+	if (ret) {
+		my_abort("failed to set errno from JS");
+		return;
+	}
+
+	base = wasmjit_emscripten_get_base_address(funcinst);
+
+	memcpy(base + out.i32, &value, sizeof(value));
 }
 
 /*  _llseek */

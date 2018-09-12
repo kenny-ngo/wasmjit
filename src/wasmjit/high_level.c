@@ -261,7 +261,7 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 {
 	size_t i;
 	struct ModuleInst *env_module_inst;
-	struct FuncInst *main_inst, *stack_alloc_inst;
+	struct FuncInst *main_inst, *stack_alloc_inst, *errno_location_inst;
 	struct MemInst *meminst;
 	struct ModuleInst *module_inst;
 	int ret;
@@ -315,6 +315,16 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 	meminst = wasmjit_get_export(env_module_inst, "memory",
 				     IMPORT_DESC_TYPE_MEM).mem;
 	if (!meminst)
+		return -1;
+
+	errno_location_inst = wasmjit_get_export(module_inst, "___errno_location",
+						 IMPORT_DESC_TYPE_FUNC).func;
+	if (!errno_location_inst)
+		return -1;
+
+	ret = wasmjit_emscripten_init_for_module(wasmjit_emscripten_get_context(env_module_inst),
+						 errno_location_inst);
+	if (ret < 0)
 		return -1;
 
 	if ((ret = setjmp(jmpbuf))) {

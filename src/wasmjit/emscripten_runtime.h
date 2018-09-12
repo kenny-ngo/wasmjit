@@ -34,6 +34,7 @@ enum {
 };
 
 struct EmscriptenContext {
+	struct FuncInst *errno_location_inst;
 };
 
 void wasmjit_emscripten_abortStackOverflow(uint32_t allocSize, struct FuncInst *funcinst);
@@ -54,6 +55,9 @@ uint32_t wasmjit_emscripten__emscripten_memcpy_big(uint32_t dest, uint32_t src, 
 
 struct EmscriptenContext *wasmjit_emscripten_get_context(struct ModuleInst *);
 void wasmjit_emscripten_cleanup(struct ModuleInst *);
+
+int wasmjit_emscripten_init_for_module(struct EmscriptenContext *,
+				       struct FuncInst *errno_location_inst);
 
 int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
 				   struct FuncInst *stack_alloc_inst,
