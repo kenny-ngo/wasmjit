@@ -28,7 +28,6 @@
 #include <wasmjit/runtime.h>
 #include <wasmjit/compile.h>
 #include <wasmjit/util.h>
-#include <wasmjit/execute.h>
 
 #include <wasmjit/sys.h>
 
@@ -404,6 +403,7 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 
 		tmp_func->module_inst = module_inst;
 		tmp_func->compiled_code = NULL;
+		tmp_func->invoker = NULL;
 		tmp_func->type =
 			module->type_section.types[module->
 						   function_section.typeidxs[i]];
@@ -653,6 +653,34 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 		funcinst->compiled_code = mapped;
 		funcinst->compiled_code_size = code_size;
 		mapped = NULL;
+
+		/* also need an invoker */
+		{
+			size_t invoker_size;
+
+			if (unmapped)
+				free(unmapped);
+
+			assert(mapped == NULL);
+			unmapped = wasmjit_compile_invoker(&funcinst->type,
+							   funcinst->compiled_code,
+							   &invoker_size);
+			if (!unmapped)
+				goto error;
+
+			mapped = wasmjit_map_code_segment(code_size);
+			if (!mapped)
+				goto error;
+
+			memcpy(mapped, unmapped, invoker_size);
+
+			if (!wasmjit_mark_code_segment_executable(mapped, code_size))
+				goto error;
+
+			funcinst->invoker = mapped;
+			funcinst->invoker_size = invoker_size;
+			mapped = NULL;
+		}
 	}
 
 	for (i = 0; i < module->data_section.n_datas; ++i) {

@@ -123,19 +123,23 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi);
 #define CTYPE_VALTYPE_NULL void
 #define CTYPE(val) CTYPE_ ## val
 
+#define VALUE_MEMBER_VALTYPE_I32 i32
+#define VALUE_MEMBER(val) VALUE_MEMBER_ ## val
 
-#define ITER_0(m)
-#define ITER_1(m, first, ...) m(1, first)
-#define ITER_2(m, first, ...) m(2, first), ITER_1(m, __VA_ARGS__)
-#define ITER_3(m, first, ...) m(3, first), ITER_2(m, __VA_ARGS__)
-#define ITER(_n, ...) ITER_##_n(__VA_ARGS__)
+#define ITER_0(t, m)
+#define ITER_1(t, m, first, ...) m(t, 1, first)
+#define ITER_2(t, m, first, ...) m(t, 2, first), ITER_1(t, m, __VA_ARGS__)
+#define ITER_3(t, m, first, ...) m(t, 3, first), ITER_2(t, m, __VA_ARGS__)
+#define ITER(_n, ...) ITER_##_n(_n, __VA_ARGS__)
 
-#define CT(n, t) CTYPE(t) CAT(arg, n)
+#define CT(to, n, t) CTYPE(t) CAT(arg, n)
 #define EXPAND_PARAMS(_n, ...) ITER(_n, CT, ##__VA_ARGS__)
 
-#define ARG(n, t) CAT(arg, n)
+#define ARG(to, n, t) CAT(arg, n)
 #define EXPAND_ARGS(_n, ...) ITER(_n, ARG, ##__VA_ARGS__)
 
+#define VALUE(to, n, t) args[to - n]. VALUE_MEMBER(t)
+#define EXPAND_VALUES(_n, ...) ITER(_n, VALUE, ##__VA_ARGS__)
 
 #define COMMA_0
 #define COMMA_1 ,
@@ -143,8 +147,36 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi);
 #define COMMA_3 ,
 #define COMMA_IF_NOT_EMPTY(_n) CAT(COMMA_, _n)
 
+#define _DEFINE_INVOKER_VALTYPE_NULL(_module, _name, _fptr, _unused, _n, ...) \
+	union ValueUnion CAT(CAT(CAT(_module,  __), _name),  __emscripten__hostfunc__invoker)(union ValueUnion *args) \
+	{								\
+		union ValueUnion rout;					\
+		(void)args;						\
+		(*_fptr)(EXPAND_VALUES(_n, ##__VA_ARGS__) COMMA_IF_NOT_EMPTY(_n) &WASM_FUNC_SYMBOL(_module, _name));	\
+		memset(&rout.null, 0, sizeof(rout.null));		\
+		return rout;						\
+	}								\
+
+#define _DEFINE_INVOKER_VALTYPE_NON_NULL(_module, _name, _fptr, _output, _n, ...) \
+	union ValueUnion CAT(CAT(CAT(_module,  __), _name),  __emscripten__hostfunc__invoker)(union ValueUnion *args) \
+	{								\
+		CTYPE(_output) out;					\
+		union ValueUnion rout;					\
+		(void)args;						\
+		out = (*_fptr)(EXPAND_VALUES(_n, ##__VA_ARGS__) COMMA_IF_NOT_EMPTY(_n) &WASM_FUNC_SYMBOL(_module, _name));	\
+		rout. VALUE_MEMBER(_output) = out;			\
+		return rout;						\
+	}								\
+
+#define _DEFINE_INVOKER_VALTYPE_I32 _DEFINE_INVOKER_VALTYPE_NON_NULL
+
+#define _DEFINE_INVOKER(_module, _name, _fptr, _output, _n, ...) \
+	_DEFINE_INVOKER_ ## _output(_module, _name, _fptr, _output, _n, ##__VA_ARGS__)
+
 #define _DEFINE_WASM_FUNCTION(_module, _name, _fptr, _output, _n, ...)	\
 	extern struct FuncInst WASM_FUNC_SYMBOL(_module, _name);	\
+									\
+	_DEFINE_INVOKER(_module, _name, _fptr, _output, _n, ##__VA_ARGS__) \
 									\
 	CTYPE(_output) CAT(CAT(CAT(_module,  __), _name),  __emscripten__hostfunc__)(EXPAND_PARAMS(_n, ##__VA_ARGS__)) \
 	{								\
@@ -154,6 +186,7 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi);
 	struct FuncInst WASM_FUNC_SYMBOL(_module, _name) = {		\
 		.module_inst = &WASM_MODULE_SYMBOL(_module),		\
 		.compiled_code = CAT(CAT(CAT(_module,  __), _name),  __emscripten__hostfunc__),	\
+		.invoker = CAT(CAT(CAT(_module,  __), _name),  __emscripten__hostfunc__invoker), \
 		.type = {						\
 			.n_inputs = _n,		\
 			.input_types = { __VA_ARGS__ },			\

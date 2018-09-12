@@ -2663,9 +2663,9 @@ char *wasmjit_compile_hostfunc(struct FuncType *type,
 	return out;
 }
 
-char *wasmjit_compile_invoker(struct FuncType *type,
-			      void *compiled_code,
-			      size_t *out_size)
+char *wasmjit_compile_invoker_offset(struct FuncType *type,
+				     size_t *compiled_code_offset,
+				     size_t *out_size)
 {
 	size_t i;
 	size_t n_movs = 0, n_xmm_movs = 0, n_stack = 0;
@@ -2801,9 +2801,8 @@ char *wasmjit_compile_invoker(struct FuncType *type,
 
 	/* movabs $const, %rax */
 	OUTS("\x48\xb8");
+	*compiled_code_offset = output->n_elts;
 	OUTNULL(8);
-	encode_le_uint64_t((uintptr_t) compiled_code,
-			   &output->elts[output->n_elts - 8]);
 
 	/* call *%rax */
 	OUTS("\xff\xd0");
@@ -2838,6 +2837,19 @@ char *wasmjit_compile_invoker(struct FuncType *type,
 	}
 
 	return out;
+}
+
+char *wasmjit_compile_invoker(struct FuncType *type,
+			      void *compiled_code,
+			      size_t *out_size)
+{
+	size_t offset;
+	char *ret = wasmjit_compile_invoker_offset(type, &offset, out_size);
+	if (!ret)
+		return NULL;
+
+	encode_le_uint64_t((uintptr_t) compiled_code, &ret[offset]);
+	return ret;
 }
 
 #undef INC_LABELS

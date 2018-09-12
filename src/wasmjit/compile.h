@@ -71,4 +71,8 @@ char *wasmjit_compile_invoker(struct FuncType *type,
 			      void *compiled_code,
 			      size_t *out_size);
 
+char *wasmjit_compile_invoker_offset(struct FuncType *type,
+				     size_t *compiled_code_offset,
+				     size_t *out_size);
+
 #endif

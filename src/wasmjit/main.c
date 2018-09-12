@@ -28,7 +28,6 @@
 #include <wasmjit/parse.h>
 #include <wasmjit/runtime.h>
 #include <wasmjit/instantiate.h>
-#include <wasmjit/execute.h>
 #include <wasmjit/emscripten_runtime.h>
 #include <wasmjit/dynamic_emscripten_runtime.h>
 #include <wasmjit/elf_relocatable.h>

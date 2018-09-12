@@ -36,6 +36,7 @@ struct Value {
 		uint64_t i64;
 		float f32;
 		double f64;
+		struct {} null;
 	} data;
 };
 
@@ -48,6 +49,8 @@ struct FuncInst {
 	*/
 	void *compiled_code;
 	size_t compiled_code_size;
+	union ValueUnion (*invoker)(union ValueUnion *);
+	size_t invoker_size;
 	size_t stack_usage;
 	struct FuncType type;
 };
@@ -180,6 +183,7 @@ struct FuncInst *wasmjit_resolve_indirect_call(const struct TableInst *tableinst
 void wasmjit_trap(int reason) __attribute__((noreturn));
 void *wasmjit_stack_top(void);
 
+void wasmjit_free_func_inst(struct FuncInst *funcinst);
 void wasmjit_free_module_inst(struct ModuleInst *module);
 
 void *wasmjit_map_code_segment(size_t code_size);
@@ -192,7 +196,7 @@ jmp_buf *wasmjit_get_jmp_buf(void);
 
 union ExportPtr wasmjit_get_export(const struct ModuleInst *, const char *name, wasmjit_desc_t type);
 
-int _wasmjit_static_invoke_function(struct FuncInst *funcinst, union ValueUnion *values,
-				    union ValueUnion *out);
+int wasmjit_invoke_function(struct FuncInst *funcinst, union ValueUnion *values,
+			    union ValueUnion *out);
 
 #endif

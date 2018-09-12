@@ -24,7 +24,7 @@
 
 #include <wasmjit/emscripten_runtime.h>
 
-#include <wasmjit/execute.h>
+#include <wasmjit/runtime.h>
 
 int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
 				   struct FuncInst *stack_alloc_inst,

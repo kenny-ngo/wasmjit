@@ -846,6 +846,10 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		memrefs->n_elts = 0;
 		memrefs->elts = NULL;
 
+		/* NB: we use the first memref to store information about
+		   the invoker */
+		LVECTOR_GROW(memrefs, 1);
+
 		code = wasmjit_compile_function(module->type_section.types,
 						&module_types,
 						ft,
@@ -868,6 +872,25 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		}
 
 		OUT(code, code_size);
+
+		code = wasmjit_compile_invoker_offset(ft,
+						      &memrefs->elts[0].code_offset,
+						      &code_size);
+		if (!code)
+			goto error;
+
+		{
+			size_t string_offset;
+			int ret;
+			string_offset = strtab->n_elts;
+			ret = snprintf(buf, sizeof(buf), "function_invoker_%zu", i);
+			if (!output_buf(strtab, buf, ret + 1))
+				goto error;
+
+			ADD_FUNC_SYMBOL_STR(string_offset, code_size);
+		}
+
+		OUT(code, code_size);
 	}
 
 	/* add code references */
@@ -880,7 +903,11 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 
 		ADD_DATA_PTR_RELOCATION_RAW(off +
 					    offsetof(struct FuncInst, compiled_code),
-					    func_code_start + i - n_imported_funcs);
+					    func_code_start + (i - n_imported_funcs) * 2);
+
+		ADD_DATA_PTR_RELOCATION_RAW(off +
+					    offsetof(struct FuncInst, invoker),
+					    func_code_start + (i - n_imported_funcs) * 2 + 1);
 	}
 
 	text_section_end = output->n_elts;
@@ -1102,10 +1129,11 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 	/* add code relocations */
 	for (i = 0; i < module->function_section.n_typeidxs; ++i) {
 		size_t j;
-		size_t offset = symbols->elts[func_code_start + i].st_value + text_section_start;
+		size_t offset = symbols->elts[func_code_start + i * 2].st_value + text_section_start;
 		struct MemoryReferences *memrefs = &code_memrefs.elts[i];
 
-		for (j = 0; j < memrefs->n_elts; ++j) {
+		/* NB: j = 1 to skip memref used for invoker */
+		for (j = 1; j < memrefs->n_elts; ++j) {
 			struct MemoryReferenceElt *elt =
 				&memrefs->elts[j];
 			size_t symidx;
@@ -1137,6 +1165,15 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 				__builtin_unreachable();
 			}
 
+			ADD_FUNC_PTR_RELOCATION_RAW(offset + elt->code_offset,
+						    symidx, 0);
+		}
+
+		/* add invoker relocation */
+		{
+			offset = symbols->elts[func_code_start + i * 2 + 1].st_value + text_section_start;
+			struct MemoryReferenceElt *elt = &memrefs->elts[0];
+			size_t symidx = func_code_start + i * 2;
 			ADD_FUNC_PTR_RELOCATION_RAW(offset + elt->code_offset,
 						    symidx, 0);
 		}

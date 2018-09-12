@@ -112,6 +112,21 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t tablemin,
 		if (!wasmjit_mark_code_segment_executable(tmp_func->compiled_code,\
 							  tmp_func->compiled_code_size)) \
 			goto error;					\
+		if (tmp_unmapped)					\
+			free(tmp_unmapped);				\
+		tmp_unmapped =						\
+			wasmjit_compile_invoker(&tmp_func->type,	\
+						tmp_func->compiled_code, \
+						&tmp_func->invoker_size); \
+		if (!tmp_unmapped)					\
+			goto error;					\
+		tmp_func->invoker =					\
+			wasmjit_map_code_segment(tmp_func->invoker_size); \
+		memcpy(tmp_func->invoker, tmp_unmapped,			\
+		       tmp_func->invoker_size);				\
+		if (!wasmjit_mark_code_segment_executable(tmp_func->invoker, \
+							  tmp_func->invoker_size)) \
+			goto error;					\
 		LVECTOR_GROW(&module->funcs, 1);			\
 		module->funcs.elts[module->funcs.n_elts - 1] = tmp_func; \
 		tmp_func = NULL;					\
@@ -212,10 +227,7 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t tablemin,
 		wasmjit_free_module_inst(module);
 	}
 	if (tmp_func) {
-		if (tmp_func->compiled_code)
-			wasmjit_unmap_code_segment(tmp_func->compiled_code,
-						   tmp_func->compiled_code_size);
-		free(tmp_func);
+		wasmjit_free_func_inst(tmp_func);
 	}
 	if (tmp_table_buf)
 		free(tmp_table_buf);
