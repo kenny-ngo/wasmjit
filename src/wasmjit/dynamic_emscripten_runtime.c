@@ -85,7 +85,7 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t tablemin,
 #define START_FUNCTION_DEFS()
 #define END_FUNCTION_DEFS()
 
-#define DEFINE_WASM_FUNCTION(_name, _fptr, _output, ...)	  \
+#define DEFINE_WASM_FUNCTION(_name, _fptr, _output, n, ...)	  \
 	{							  \
 		wasmjit_valtype_t inputs[] = { __VA_ARGS__ };		\
 		tmp_func = calloc(1, sizeof(struct FuncInst));		\
