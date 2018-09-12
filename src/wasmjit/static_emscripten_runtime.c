@@ -126,6 +126,14 @@ extern struct TableInst WASM_TABLE_SYMBOL(env, table);
 extern struct FuncInst WASM_FUNC_SYMBOL(asm, _main);
 extern struct FuncInst WASM_FUNC_SYMBOL(asm, stackAlloc);
 
+struct EmscriptenContext g_emscripten_ctx;
+
+struct EmscriptenContext *wasmjit_emscripten_get_context(struct ModuleInst *module_inst)
+{
+	(void)module_inst;
+	return &g_emscripten_ctx;
+}
+
 int main(int argc, char *argv[]) {
 	return wasmjit_emscripten_invoke_main(&WASM_MEMORY_SYMBOL(env, memory),
 					      &WASM_FUNC_SYMBOL(asm, stackAlloc),

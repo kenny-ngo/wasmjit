@@ -29,6 +29,11 @@
 
 #include <wasmjit/sys.h>
 
+struct EmscriptenContext *wasmjit_emscripten_get_context(struct ModuleInst *module_inst)
+{
+	return module_inst->private_data;
+}
+
 struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t tablemin,
 							   size_t tablemax,
 							   size_t *amt)
@@ -68,6 +73,12 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t tablemin,
 
 #define END_MODULE()							\
 	{								\
+		if (!strcmp(XSTR(CURRENT_MODULE), "env")) {		\
+			module->private_data = calloc(1, sizeof(struct EmscriptenContext)); \
+			if (!module->private_data)			\
+				goto error;				\
+			module->free_private_data = &free;		\
+		}							\
 		LVECTOR_GROW(&modules, 1);				\
 		modules.elts[modules.n_elts - 1].name = strdup(XSTR(CURRENT_MODULE)); \
 		modules.elts[modules.n_elts - 1].module = module;	\

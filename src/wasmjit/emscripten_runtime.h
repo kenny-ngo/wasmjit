@@ -33,6 +33,9 @@ enum {
 	WASMJIT_EMSCRIPTEN_TOTAL_MEMORY = 16777216,
 };
 
+struct EmscriptenContext {
+};
+
 void wasmjit_emscripten_abortStackOverflow(uint32_t allocSize, struct FuncInst *funcinst);
 uint32_t wasmjit_emscripten_abortOnCannotGrowMemory(struct FuncInst *funcinst);
 uint32_t wasmjit_emscripten_enlargeMemory(struct FuncInst *funcinst);
@@ -48,6 +51,8 @@ uint32_t wasmjit_emscripten____syscall54(uint32_t which, uint32_t varargs, struc
 uint32_t wasmjit_emscripten____syscall6(uint32_t which, uint32_t varargs, struct FuncInst *funcinst);
 void wasmjit_emscripten____unlock(uint32_t x, struct FuncInst *funcinst);
 uint32_t wasmjit_emscripten__emscripten_memcpy_big(uint32_t dest, uint32_t src, uint32_t num, struct FuncInst *funcinst);
+
+struct EmscriptenContext *wasmjit_emscripten_get_context(struct ModuleInst *);
 void wasmjit_emscripten_cleanup(struct ModuleInst *);
 
 int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
