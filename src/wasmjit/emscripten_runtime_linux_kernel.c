@@ -110,6 +110,13 @@ int wasmjit_emscripten_linux_kernel_init(void) {
 	return 1;
 }
 
+static int32_t check_ret(long ret) {
+	if (ret > INT32_MAX || ret < INT32_MIN) {
+		wasmjit_trap(WASMJIT_TRAP_INTEGER_OVERFLOW);
+	}
+	return ret;
+}
+
 __attribute__((noreturn))
 static void my_abort(const char *msg)
 {
@@ -187,7 +194,7 @@ uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs, stru
 		uint32_t fd, offset_high, offset_low,
 			result, whence;
 	} args;
-	long rret;
+	int32_t ret;
 
 	(void)which;
 	assert(which == 140);
@@ -198,15 +205,11 @@ uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs, stru
 	// emscripten off_t is 32-bits, offset_high is useless
 	assert(!args.offset_high);
 
-	rret = sys_lseek(args.fd, args.offset_low, args.whence);
+	ret = check_ret(sys_lseek(args.fd, args.offset_low, args.whence));
 
-	if (rret < 0) {
-		/* TODO: set errno */
-		return -1;
+	if (ret) {
+		return ret;
 	} else {
-		int32_t ret;
-		assert(rret <= INT32_MAX && rret >= INT32_MIN);
-		ret = rret;
 		memcpy(base + args.result, &ret, sizeof(ret));
 		return 0;
 	}
@@ -233,8 +236,7 @@ uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, stru
 	liov = wasmjit_alloc_vector(args.iovcnt,
 				    sizeof(struct iovec), NULL);
 	if (!liov) {
-		/* TODO: set errno */
-		return -1;
+		return -ENOMEM;
 	}
 
 	for (i = 0; i < args.iovcnt; ++i) {
@@ -252,15 +254,7 @@ uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, stru
 	rret = sys_writev(args.fd, liov, args.iovcnt);
 	free(liov);
 
-	if (rret < 0) {
-		/* TODO: set errno */
-		return -1;
-	} else {
-		int32_t ret;
-		assert(rret <= INT32_MAX && rret >= INT32_MIN);
-		ret = rret;
-		return ret;
-	}
+	return check_ret(rret);
 }
 
 /* write */
@@ -278,16 +272,7 @@ uint32_t wasmjit_emscripten____syscall4(uint32_t which, uint32_t varargs, struct
 
 	memcpy(&args, base + varargs, sizeof(args));
 
-	rret = sys_write(args.fd, base + args.buf, args.count);
-	if (rret < 0) {
-		/* TODO: set errno */
-		return -1;
-	} else {
-		int32_t ret;
-		assert(rret <= INT32_MAX && rret >= INT32_MIN);
-		ret = rret;
-		return ret;
-	}
+	return check_ret(sys_write(args.fd, base + args.buf, args.count));
 }
 
 /* ioctl */
@@ -317,8 +302,7 @@ uint32_t wasmjit_emscripten____syscall6(uint32_t which, uint32_t varargs, struct
 	base = wasmjit_emscripten_get_base_address(funcinst);
 
 	memcpy(&args, base + varargs, sizeof(args));
-	ret = sys_close(args.fd);
-	return ret ? -1 : 0;
+	return check_ret(sys_close(args.fd));
 }
 
 void wasmjit_emscripten____unlock(uint32_t x, struct FuncInst *funcinst)
