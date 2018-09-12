@@ -192,5 +192,7 @@ jmp_buf *wasmjit_get_jmp_buf(void);
 
 union ExportPtr wasmjit_get_export(const struct ModuleInst *, const char *name, wasmjit_desc_t type);
 
+int _wasmjit_static_invoke_function(struct FuncInst *funcinst, union ValueUnion *values,
+				    union ValueUnion *out);
 
 #endif

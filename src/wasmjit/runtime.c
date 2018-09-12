@@ -179,3 +179,39 @@ struct FuncInst *wasmjit_resolve_indirect_call(const struct TableInst *tableinst
 
 	return funcinst;
 }
+
+int _wasmjit_static_invoke_function(struct FuncInst *funcinst,
+				    union ValueUnion *values,
+				    union ValueUnion *out)
+{
+	/* TODO:
+	   check if there is enough stack space before invoking
+	   function
+	*/
+	if (funcinst->type.n_inputs == 0 &&
+	    funcinst->type.output_type == VALTYPE_I32) {
+		uint32_t (*func)(void) = funcinst->compiled_code;
+		uint32_t mout;
+
+		mout = func();
+		if (out)
+			out->i32 = mout;
+
+		return 0;
+	} else if (funcinst->type.n_inputs == 2 &&
+		   funcinst->type.input_types[0] == VALTYPE_I32 &&
+		   funcinst->type.input_types[1] == VALTYPE_I32 &&
+		   funcinst->type.output_type == VALTYPE_I32) {
+		uint32_t (*func)(uint32_t, uint32_t) = funcinst->compiled_code;
+		uint32_t mout;
+
+		mout = func(values[0].i32, values[1].i32);
+		if (out)
+			out->i32 = mout;
+
+		return 0;
+
+	} else {
+		return -1;
+	}
+}
