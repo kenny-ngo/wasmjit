@@ -2116,16 +2116,19 @@ static int wasmjit_compile_instructions(const struct FuncType *func_types,
 			switch (instruction->opcode) {
 			case OPCODE_BLOCK:
 			case OPCODE_LOOP: {
+				size_t j;
 				size_t arity =
 					instruction->data.block.blocktype !=
 					VALTYPE_NULL ? 1 : 0;
 
-				/* shift stack results over label */
-				memmove(&sstack->elts[imd.data.block.stack_idx],
-					&sstack->elts[sstack->n_elts - arity],
-					arity * sizeof(sstack->elts[0]));
+				/* fix up static stack */
+				/* remove label and push output types */
 				if (!stack_truncate(sstack, imd.data.block.stack_idx + arity))
 					goto error;
+
+				for (j = 0; j < arity; ++j) {
+					sstack->elts[imd.data.if_.stack_idx + j].type = instruction->data.block.blocktype;
+				}
 
 				switch (instruction->opcode) {
 				case OPCODE_BLOCK:
@@ -2178,6 +2181,10 @@ static int wasmjit_compile_instructions(const struct FuncType *func_types,
 					   }
 					*/
 
+					/* reset stack */
+					if (!stack_truncate(sstack, imd.data.if_.stack_idx + 1))
+						goto error;
+
 					/* push else chain onto stack */
 					stack_sz += 1;
 					new_stack = realloc(stack, stack_sz * sizeof(stack[0]));
@@ -2194,13 +2201,16 @@ static int wasmjit_compile_instructions(const struct FuncType *func_types,
 					       &imd,
 					       sizeof(imd));
 				} else {
+					size_t j;
+
 					/* fix up static stack */
-					/* shift stack results over label */
-					memmove(&sstack->elts[imd.data.if_.stack_idx],
-						&sstack->elts[sstack->n_elts - arity],
-						arity * sizeof(sstack->elts[0]));
+					/* remove label and push output types */
 					if (!stack_truncate(sstack, imd.data.if_.stack_idx + arity))
 						goto error;
+
+					for (j = 0; j < arity; ++j) {
+						sstack->elts[imd.data.if_.stack_idx + j].type = instruction->data.if_.blocktype;
+					}
 
 					/* set labels position */
 					labels->elts[imd.data.if_.label_idx] = output->n_elts;

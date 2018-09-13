@@ -57,8 +57,6 @@ int wasmjit_vector_set_size(void *, size_t *, size_t, size_t);
 
 #define DEFINE_VECTOR_TRUNCATE(name, _type)				\
 	int name ## _truncate(_type *sstack, size_t amt) {		\
-		assert(amt <= sstack->n_elts);				\
-									\
 		return wasmjit_vector_set_size(&sstack->elts,		\
 					       &sstack->n_elts,		\
 					       amt,			\
