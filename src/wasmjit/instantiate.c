@@ -261,6 +261,8 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 				/* add funcinst to func table */
 				LVECTOR_GROW(&module_inst->funcs, 1);
 				module_inst->funcs.elts[module_inst->funcs.n_elts - 1] = funcinst;
+				module_inst->n_imported_funcs++;
+
 				break;
 			}
 			case IMPORT_DESC_TYPE_TABLE: {
@@ -285,6 +287,8 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 				/* add tableinst to table table */
 				LVECTOR_GROW(&module_inst->tables, 1);
 				module_inst->tables.elts[module_inst->tables.n_elts - 1] = tableinst;
+				module_inst->n_imported_tables++;
+
 
 				break;
 			}
@@ -308,6 +312,7 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 				/* add meminst to mems table */
 				LVECTOR_GROW(&module_inst->mems, 1);
 				module_inst->mems.elts[module_inst->mems.n_elts - 1] = meminst;
+				module_inst->n_imported_mems++;
 
 				break;
 			}
@@ -332,6 +337,7 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 				/* add globalinst to globals tables */
 				LVECTOR_GROW(&module_inst->globals, 1);
 				module_inst->globals.elts[module_inst->globals.n_elts - 1] = globalinst;
+				module_inst->n_imported_globals++;
 
 				break;
 			}
@@ -389,11 +395,6 @@ struct ModuleInst *wasmjit_instantiate(const struct Module *module,
 			goto error;
 		}
 	}
-
-	module_inst->n_imported_funcs = module_inst->funcs.n_elts;
-	module_inst->n_imported_tables = module_inst->tables.n_elts;
-	module_inst->n_imported_mems = module_inst->mems.n_elts;
-	module_inst->n_imported_globals = module_inst->globals.n_elts;
 
 	for (i = 0; i < module->function_section.n_typeidxs; ++i) {
 		assert(tmp_func == NULL);
