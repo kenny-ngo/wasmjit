@@ -38,6 +38,8 @@
 #include <unistd.h>
 #include <sys/uio.h>
 
+#define PATH_MAX 4096
+
 #endif
 
 #include <wasmjit/util.h>

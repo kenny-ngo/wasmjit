@@ -61,6 +61,22 @@ static size_t wasmjit_emscripten_copy_from_user(struct MemInst *meminst,
 	return 0;
 }
 
+static int _wasmjit_emscripten_check_string(struct FuncInst *funcinst,
+					    uint32_t user_ptr,
+					    size_t max)
+{
+	struct MemInst *meminst = wasmjit_emscripten_get_mem_inst(funcinst);
+	size_t len = 0;
+
+	while (user_ptr + len < meminst->size && len < max) {
+		if (!*(meminst->data + user_ptr + len))
+			return 1;
+		len += 1;
+	}
+
+	return 0;
+}
+
 /* shortcut functions */
 #define _wasmjit_emscripten_check_range(funcinst, user_ptr, src_size) \
 	wasmjit_emscripten_check_range(wasmjit_emscripten_get_mem_inst(funcinst), \
@@ -409,10 +425,13 @@ __attribute__((noreturn))
 void wasmjit_emscripten_abort(uint32_t what, struct FuncInst *funcinst)
 {
 	struct MemInst *meminst = wasmjit_emscripten_get_mem_inst(funcinst);
-	/* make sure string doesn't overrun data segment */
-	meminst->data[meminst->size - 1] = '\0';
-	char *str_addr = meminst->data + MMIN(what, meminst->size - 1);
-	wasmjit_emscripten_internal_abort(str_addr);
+	char *abort_string;
+	if (!_wasmjit_emscripten_check_string(funcinst, what, 256)) {
+		abort_string = "Invalid abort string";
+	} else {
+		abort_string = meminst->data + what;
+	}
+	wasmjit_emscripten_internal_abort(abort_string);
 }
 
 extern char **environ;
@@ -454,6 +473,28 @@ void wasmjit_emscripten____buildEnvironment(uint32_t environ_arg,
 					     &poolPtr,
 					     sizeof(poolPtr)))
 		wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
+}
+
+uint32_t wasmjit_emscripten____syscall10(uint32_t which, uint32_t varargs,
+					 struct FuncInst *funcinst)
+{
+	char *base;
+	struct {
+		uint32_t pathname;
+	} args;
+
+	(void)which;
+
+	base = wasmjit_emscripten_get_base_address(funcinst);
+
+	if (_wasmjit_emscripten_copy_from_user(funcinst, &args,
+					       varargs, sizeof(args)))
+		return -EFAULT;
+
+	if (!_wasmjit_emscripten_check_string(funcinst, args.pathname, PATH_MAX))
+		return -EFAULT;
+
+	return check_ret(sys_unlink(base + args.pathname));
 }
 
 void wasmjit_emscripten_cleanup(struct ModuleInst *moduleinst) {
