@@ -415,6 +415,47 @@ void wasmjit_emscripten_abort(uint32_t what, struct FuncInst *funcinst)
 	wasmjit_emscripten_internal_abort(str_addr);
 }
 
+extern char **environ;
+void wasmjit_emscripten____buildEnvironment(uint32_t environ_arg,
+					    struct FuncInst *funcinst)
+{
+	char *base = wasmjit_emscripten_get_base_address(funcinst);
+	uint32_t envPtr;
+	uint32_t poolPtr;
+	size_t i = 0;
+
+	if (_wasmjit_emscripten_copy_from_user(funcinst,
+					       &envPtr,
+					       environ_arg,
+					       sizeof(envPtr)))
+		wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
+	if (_wasmjit_emscripten_copy_from_user(funcinst,
+					       &poolPtr,
+					       envPtr,
+					       sizeof(poolPtr)))
+		wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
+
+	for (char **env = environ; *env; ++env, ++i) {
+		size_t len = strlen(*env);
+		if (!_wasmjit_emscripten_check_range(funcinst, poolPtr, len + 1))
+			wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
+		memcpy(base + poolPtr, *env, len + 1);
+		if (_wasmjit_emscripten_copy_to_user(funcinst,
+						     envPtr + i * sizeof(uint32_t),
+						     &poolPtr,
+						     sizeof(poolPtr)))
+			wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
+		poolPtr += len + 1;
+	}
+
+	poolPtr = 0;
+	if (_wasmjit_emscripten_copy_to_user(funcinst,
+					     envPtr + i * sizeof(uint32_t),
+					     &poolPtr,
+					     sizeof(poolPtr)))
+		wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
+}
+
 void wasmjit_emscripten_cleanup(struct ModuleInst *moduleinst) {
 	(void)moduleinst;
 	/* TODO: implement */

@@ -53,6 +53,7 @@ uint32_t wasmjit_emscripten____syscall6(uint32_t which, uint32_t varargs, struct
 void wasmjit_emscripten____unlock(uint32_t x, struct FuncInst *funcinst);
 uint32_t wasmjit_emscripten__emscripten_memcpy_big(uint32_t dest, uint32_t src, uint32_t num, struct FuncInst *funcinst);
 void wasmjit_emscripten_abort(uint32_t, struct FuncInst *) __attribute__((noreturn));
+void wasmjit_emscripten____buildEnvironment(uint32_t, struct FuncInst *);
 
 struct EmscriptenContext *wasmjit_emscripten_get_context(struct ModuleInst *);
 void wasmjit_emscripten_cleanup(struct ModuleInst *);
