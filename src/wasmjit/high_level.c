@@ -98,6 +98,7 @@ int wasmjit_high_init(struct WasmJITHigh *self)
 
 	self->n_modules = 0;
 	self->modules = NULL;
+	memset(self->error_buffer, 0, sizeof(self->error_buffer));
 	return 0;
 }
 
@@ -130,7 +131,7 @@ static int wasmjit_high_instantiate_buf(struct WasmJITHigh *self,
 	/* TODO: validate module */
 
 	module_inst = wasmjit_instantiate(&module, self->n_modules, self->modules,
-					  NULL, 0);
+					  self->error_buffer, sizeof(self->error_buffer));
 	if (!module_inst) {
 		goto error;
 	}
@@ -173,6 +174,8 @@ int wasmjit_high_instantiate(struct WasmJITHigh *self, const char *filename, con
 		return !ioctl(self->fd, KWASMJIT_INSTANTIATE, &arg);
 	}
 #endif
+
+	self->error_buffer[0] = '\0';
 
 	/* TODO: do incremental reading */
 
@@ -217,6 +220,8 @@ int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
 		goto success;
 	}
 #endif
+
+	self->error_buffer[0] = '\0';
 
 	modules = wasmjit_instantiate_emscripten_runtime(tablemin,
 							 tablemax,
@@ -280,6 +285,8 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 		return ioctl(self->fd, KWASMJIT_EMSCRIPTEN_INVOKE_MAIN, &arg);
 	}
 #endif
+
+	self->error_buffer[0] = '\0';
 
 	module_inst = NULL;
 	for (i = 0; i < self->n_modules; ++i) {
@@ -355,6 +362,8 @@ void wasmjit_high_close(struct WasmJITHigh *self)
 	}
 #endif
 
+	self->error_buffer[0] = '\0';
+
 	for (i = 0; i < self->n_modules; ++i) {
 		free(self->modules[i].name);
 		wasmjit_free_module_inst(self->modules[i].module);
@@ -362,4 +371,26 @@ void wasmjit_high_close(struct WasmJITHigh *self)
 	if (self->modules)
 		free(self->modules);
 
+}
+
+int wasmjit_high_error_message(struct WasmJITHigh *self,
+			      char *buf, size_t buf_size)
+{
+#if defined(__linux__) && !defined(__KERNEL__)
+	if (self->fd >= 0) {
+		struct kwasmjit_error_message_args arg;
+
+		arg.version = 0;
+		arg.buffer = buf;
+		arg.size = buf_size;
+
+		return ioctl(self->fd, KWASMJIT_ERROR_MESSAGE, &arg);
+	}
+#endif
+
+	strncpy(buf, self->error_buffer, buf_size);
+	if (buf_size > 0)
+		buf[buf_size - 1] = '\0';
+
+	return 0;
 }

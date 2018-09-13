@@ -36,6 +36,7 @@ struct WasmJITHigh {
 #endif
 	size_t n_modules;
 	struct NamedModule *modules;
+	char error_buffer[256];
 };
 
 #define WASMJIT_TRAP_OFFSET 0x101
@@ -57,5 +58,7 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 					int argc, char **argv,
 					int flags);
 void wasmjit_high_close(struct WasmJITHigh *self);
+int wasmjit_high_error_message(struct WasmJITHigh *self, char *buf, size_t buf_size);
+
 
 #endif

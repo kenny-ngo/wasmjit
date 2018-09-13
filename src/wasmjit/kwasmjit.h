@@ -56,8 +56,15 @@ struct kwasmjit_emscripten_invoke_main_args {
 	int flags;
 };
 
+struct kwasmjit_error_message_args {
+	unsigned version;
+	char *buffer;
+	size_t size;
+};
+
 #define KWASMJIT_INSTANTIATE _IOW(KWASMJIT_MAGIC, 0, struct kwasmjit_instantiate_args)
 #define KWASMJIT_INSTANTIATE_EMSCRIPTEN_RUNTIME _IOW(KWASMJIT_MAGIC, 1, struct kwasmjit_instantiate_emscripten_runtime_args)
 #define KWASMJIT_EMSCRIPTEN_INVOKE_MAIN _IOW(KWASMJIT_MAGIC, 2, struct kwasmjit_emscripten_invoke_main_args)
+#define KWASMJIT_ERROR_MESSAGE _IOW(KWASMJIT_MAGIC, 3, struct kwasmjit_error_message_args)
 
 #endif

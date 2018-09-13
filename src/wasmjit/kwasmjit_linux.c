@@ -377,6 +377,18 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 	return retval;
 }
 
+static int kwasmjit_error_message(struct kwasmjit_private *self,
+				  struct kwasmjit_error_message_args *arg)
+{
+	size_t src_len = strlen(self->high.error_buffer);
+	size_t to_copy = MMIN(src_len, arg->size - 1);
+	if (copy_to_user(arg->buffer, self->high.error_buffer, to_copy))
+		return -EFAULT;
+	if (put_user(0, &arg->buffer[to_copy]))
+		return -EFAULT;
+	return 0;
+}
+
 static int kwasmjit_open(struct inode *inode, struct file *filp)
 {
 	/* allocate kwasmjit_private */
@@ -482,6 +494,24 @@ static long kwasmjit_unlocked_ioctl(struct file *filp,
 		}
 
 		retval = kwasmjit_emscripten_invoke_main(self, &arg);
+		break;
+	}
+	case KWASMJIT_ERROR_MESSAGE: {
+		struct kwasmjit_error_message_args arg;
+		unsigned version;
+
+		get_user(version, (unsigned *) parg);
+		if (version > 0) {
+			retval = -EINVAL;
+			goto error;
+		}
+
+		if (copy_from_user(&arg, parg, sizeof(arg))) {
+			retval = -EFAULT;
+			goto error;
+		}
+
+		retval = kwasmjit_error_message(self, &arg);
 		break;
 	}
 	default:
