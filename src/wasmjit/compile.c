@@ -31,6 +31,10 @@
 
 #include <wasmjit/sys.h>
 
+#ifndef DEBUG_STACK
+#define DEBUG_STACK 0
+#endif
+
 #define FUNC_EXIT_CONT SIZE_MAX
 
 static DEFINE_VECTOR_GROW(memrefs, struct MemoryReferences);
@@ -2049,6 +2053,22 @@ static int wasmjit_compile_instructions(const struct FuncType *func_types,
 			struct InstructionMD imd2;
 			const struct Instr *instruction = &imd.instructions[i];
 
+			if (DEBUG_STACK) {
+				/* mov %rsp, %rax */
+				OUTS("\x48\x89\xe0");
+				/* add $const, %rax */
+				OUTS("\x48\x05");
+				OUTB(0); OUTB(0); OUTB(0); OUTB(0);
+				encode_le_uint32_t(8 * stack_depth(sstack),
+						   &output->elts[output->n_elts - 4]);
+				/* cmp %rax, %rbx */
+				OUTS("\x48\x39\xc3");
+				/* je +1 */
+				OUTS("\x74\x01");
+				/* int 13 */
+				OUTS("\xcc");
+			}
+
 			switch (instruction->opcode) {
 			case OPCODE_BLOCK:
 			case OPCODE_LOOP: {
@@ -2477,6 +2497,13 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 		}
 	}
 
+	if (DEBUG_STACK) {
+		/* push %rbx */
+		OUTS("\x53");
+		/* mov %rsp, %rbx */
+		OUTS("\x48\x89\xe3");
+	}
+
 	if (!wasmjit_compile_instructions(func_types, module_types, type,
 					  output, &labels, &branches, memrefs,
 					  locals_md, n_locals, n_frame_locals, &sstack,
@@ -2538,6 +2565,12 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 			/* pop %rax */
 			OUTS("\x58");
 		}
+	}
+
+
+	if (DEBUG_STACK) {
+		/* pop %rbx */
+		OUTS("\x5b");
 	}
 
 	/* add $(8 * (n_frame_locals)), %rsp */
