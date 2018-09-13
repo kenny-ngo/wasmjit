@@ -115,9 +115,6 @@ static void encode_le_uint32_t(uint32_t val, char *buf)
 	memcpy(buf, &le_val, sizeof(le_val));
 }
 
-#define MMIN(x, y) (((x) < (y)) ? (x) : (y))
-#define MMAX(x, y) (((x) > (y)) ? (x) : (y))
-
 #define OUTS(str)					   \
 	do {						   \
 		if (!output_buf(output, str, strlen(str))) \

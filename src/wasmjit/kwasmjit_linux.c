@@ -28,6 +28,7 @@
 #include <wasmjit/runtime.h>
 #include <wasmjit/sys.h>
 #include <wasmjit/ktls.h>
+#include <wasmjit/util.h>
 
 #include <linux/sched/signal.h>
 #include <linux/sched/mm.h>
@@ -194,8 +195,6 @@ static void free_stack(void *ptr, size_t size)
 }
 
 #define MAX_STACK (8 * 1024 * 1024)
-
-#define MMAX(x, y) (((x) > (y)) ? (x) : (y))
 
 struct InvokeMainArgs {
 	struct WasmJITHigh *high;

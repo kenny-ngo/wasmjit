@@ -124,4 +124,7 @@ void wasmjit_unload_file(char *buf, size_t size);
 #define __KMAP6(to,m,t,...) m(to,6,t), __KMAP5(to,m,__VA_ARGS__)
 #define __KMAP(n,...) __KMAP##n(n, __VA_ARGS__)
 
+#define MMIN(x, y) (((x) < (y)) ? (x) : (y))
+#define MMAX(x, y) (((x) > (y)) ? (x) : (y))
+
 #endif
