@@ -295,21 +295,24 @@ int main(int argc, char *argv[])
 		struct WasmJITHigh high;
 		int ret;
 		void *stack_top;
+		int high_init = 0;
+		const char *msg;
 
 		if (wasmjit_high_init(&high)) {
-			fprintf(stderr, "failed to initialize\n");
-			return -1;
+			msg = "failed to initialize";
+			goto error;
 		}
+		high_init = 1;
 
 		if (wasmjit_high_instantiate_emscripten_runtime(&high,
 								tablemin, tablemax, 0)) {
-			fprintf(stderr, "failed to instantiate emscripten runtime\n");
-			return -1;
+			msg = "failed to instantiate emscripten runtime";
+			goto error;
 		}
 
 		if (wasmjit_high_instantiate(&high, filename, "asm", 0)) {
-			fprintf(stderr, "failed to instantiate module\n");
-			return -1;
+			msg = "failed to instantiate module";
+			goto error;
 		}
 
 		stack_top = get_stack_top();
@@ -327,10 +330,26 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "TRAP: %s\n",
 				wasmjit_trap_reason_to_string(WASMJIT_DECODE_TRAP_ERROR(ret)));
 		} else if (ret < 0) {
-			fprintf(stderr, "failed to invoke main\n");
+			msg = "failed to invoke main";
+			goto error;
 		}
 
-		wasmjit_high_close(&high);
+		if (0) {
+			char error_buffer[256];
+
+		error:
+			ret = wasmjit_high_error_message(&high,
+							 error_buffer,
+							 sizeof(error_buffer));
+			if (!ret) {
+				fprintf(stderr, "%s: %s\n",
+					msg, error_buffer);
+				ret = -1;
+			}
+		}
+
+		if (high_init)
+			wasmjit_high_close(&high);
 
 		wasmjit_free_module(&module);
 
