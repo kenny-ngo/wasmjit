@@ -1104,6 +1104,32 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 	case OPCODE_I32_STORE8:
 	case OPCODE_I32_STORE16: {
 		const struct LoadStoreExtra *extra;
+		size_t mem_size;
+
+		switch (instruction->opcode) {
+		case OPCODE_I64_LOAD:
+		case OPCODE_F64_LOAD:
+		case OPCODE_I64_STORE:
+		case OPCODE_F64_STORE:
+			mem_size = 8;
+			break;
+		case OPCODE_I32_LOAD:
+		case OPCODE_F32_LOAD:
+		case OPCODE_I32_STORE:
+		case OPCODE_F32_STORE:
+			mem_size = 4;
+			break;
+		case OPCODE_I32_STORE16:
+			mem_size = 2;
+			break;
+		case OPCODE_I32_LOAD8_S:
+		case OPCODE_I32_STORE8:
+			mem_size = 1;
+			break;
+		default:
+			assert(0);
+			__builtin_unreachable();
+		}
 
 		switch (instruction->opcode) {
 		case OPCODE_I32_LOAD:
@@ -1165,12 +1191,12 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			goto error;
 		OUTS("\x5e");
 
-		if (4 + extra->offset != 0) {
+		if (mem_size + extra->offset != 0) {
 			/* LOGIC: ea += memarg.offset + 4 */
 
 			/* add <VAL>, %rsi */
 			OUTS("\x48\x81\xc6");
-			encode_le_uint32_t(4 +
+			encode_le_uint32_t(mem_size +
 					   extra->offset, buf);
 			if (!output_buf(output, buf, sizeof(uint32_t)))
 				goto error;
@@ -1254,12 +1280,14 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			/* LOGIC: push_stack(data[ea - 4]) */
 			switch (instruction->opcode) {
 			case OPCODE_I32_LOAD8_S:
-				/* movsbl -4(%rax, %rsi), %eax */
-				OUTS("\x0f\xbe\x44\x30\xfc");
+				assert(1 == mem_size);
+				/* movsbl -1(%rax, %rsi), %eax */
+				OUTS("\x0f\xbe\x44\x30\xff");
 				valtype = STACK_I32;
 				break;
 			case OPCODE_I32_LOAD:
 			case OPCODE_F32_LOAD:
+				assert(4 == mem_size);
 				/* movl -4(%rax, %rsi), %eax */
 				OUTS("\x8b\x44\x30\xfc");
 				switch (instruction->opcode) {
@@ -1270,8 +1298,9 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 				break;
 			case OPCODE_I64_LOAD:
 			case OPCODE_F64_LOAD:
-				/* movq -4(%rax, %rsi), %rax */
-				OUTS("\x48\x8b\x44\x30\xfc");
+				assert(8 == mem_size);
+				/* movq -8(%rax, %rsi), %rax */
+				OUTS("\x48\x8b\x44\x30\xf8");
 				switch (instruction->opcode) {
 				case OPCODE_I64_LOAD: valtype = STACK_I64; break;
 				case OPCODE_F64_LOAD: valtype = STACK_F64; break;
@@ -1293,24 +1322,28 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		}
 		case OPCODE_I32_STORE:
 		case OPCODE_F32_STORE:
+			assert(4 == mem_size);
 			/* LOGIC: data[ea - 4] = pop_stack() */
 			/* movl %edi, -4(%rax, %rsi) */
 			OUTS("\x89\x7c\x30\xfc");
 			break;
 		case OPCODE_I32_STORE8:
-			/* LOGIC: data[ea - 4] = pop_stack() */
-			/* movb %dil, -4(%rax, %rsi) */
-			OUTS("\x40\x88\x7c\x30\xfc");
+			assert(1 == mem_size);
+			/* LOGIC: data[ea - 1] = pop_stack() */
+			/* movb %dil, -1(%rax, %rsi) */
+			OUTS("\x40\x88\x7c\x30\xff");
 			break;
 		case OPCODE_I32_STORE16:
-			/* movw %di, -4(%rax, %rsi) */
-			OUTS("\x66\x89\x7c\x30\xfc");
+			assert(2 == mem_size);
+			/* movw %di, -2(%rax, %rsi) */
+			OUTS("\x66\x89\x7c\x30\xfe");
 			break;
 		case OPCODE_I64_STORE:
 		case OPCODE_F64_STORE:
-			/* LOGIC: data[ea - 4] = pop_stack() */
-			/* movq %rdi, -4(%rax, %rsi) */
-			OUTS("\x48\x89\x7c\x30\xfc");
+			assert(8 == mem_size);
+			/* LOGIC: data[ea - 8] = pop_stack() */
+			/* movq %rdi, -8(%rax, %rsi) */
+			OUTS("\x48\x89\x7c\x30\xf8");
 			break;
 		default:
 			assert(0);
