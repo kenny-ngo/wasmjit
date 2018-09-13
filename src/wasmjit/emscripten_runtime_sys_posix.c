@@ -30,8 +30,8 @@
 
 #include <errno.h>
 
-#define __KDECL(t, a) t a
-#define __KA(t, a) a
+#define __KDECL(to,n,t) t _##n
+#define __KA(to,n,t) _##n
 
 #define KWSCx(x, name, ...)					\
 	long sys_ ## name(__KMAP(x, __KDECL, __VA_ARGS__))	\

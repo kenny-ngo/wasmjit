@@ -30,11 +30,11 @@
 #include <wasmjit/sys.h>
 #include <wasmjit/ktls.h>
 
-#define __KT(t, a) t
-#define __KA(t, a) a
-#define __KDECL(t, a) t a
-#define __KINIT(t, a) . t = (unsigned long) a
-#define __KSET(t, a) vals-> t = (unsigned long) a
+#define __KT(to,n,t) t
+#define __KA(to,n,t) _##n
+#define __KDECL(to,n,t) t _##n
+#define __KINIT(to,n,t) . t = (unsigned long) _##n
+#define __KSET(to,n,t) vals-> t = (unsigned long) _##n
 
 #define KWSC1(name, ...) KWSCx(1, name, __VA_ARGS__)
 #define KWSC3(name, ...) KWSCx(3, name, __VA_ARGS__)

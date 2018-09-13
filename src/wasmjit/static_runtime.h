@@ -126,11 +126,7 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi);
 #define VALUE_MEMBER_VALTYPE_I32 i32
 #define VALUE_MEMBER(val) VALUE_MEMBER_ ## val
 
-#define ITER_0(t, m)
-#define ITER_1(t, m, first, ...) m(t, 1, first)
-#define ITER_2(t, m, first, ...) m(t, 2, first), ITER_1(t, m, __VA_ARGS__)
-#define ITER_3(t, m, first, ...) m(t, 3, first), ITER_2(t, m, __VA_ARGS__)
-#define ITER(_n, ...) ITER_##_n(_n, __VA_ARGS__)
+#define ITER __KMAP
 
 #define CT(to, n, t) CTYPE(t) CAT(arg, n)
 #define EXPAND_PARAMS(_n, ...) ITER(_n, CT, ##__VA_ARGS__)

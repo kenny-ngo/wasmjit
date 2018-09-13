@@ -44,7 +44,7 @@
 
 /* declare all sys calls */
 
-#define __KDECL(t, a) t a
+#define __KDECL(to,n,t) t _##n
 
 #define KWSCx(_n, _name, ...) long sys_ ## _name(__KMAP(_n, __KDECL, __VA_ARGS__));
 
