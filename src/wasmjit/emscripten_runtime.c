@@ -25,7 +25,7 @@
 #include <wasmjit/emscripten_runtime.h>
 
 #include <wasmjit/emscripten_runtime_sys.h>
-
+#include <wasmjit/util.h>
 #include <wasmjit/runtime.h>
 
 static int wasmjit_emscripten_check_range(struct MemInst *meminst,
@@ -191,13 +191,13 @@ void wasmjit_emscripten_abortStackOverflow(uint32_t allocSize, struct FuncInst *
 {
 	(void)funcinst;
 	(void)allocSize;
-	wasmjit_emscripten_abort("Stack overflow!");
+	wasmjit_emscripten_internal_abort("Stack overflow!");
 }
 
 uint32_t wasmjit_emscripten_abortOnCannotGrowMemory(struct FuncInst *funcinst)
 {
 	(void)funcinst;
-	wasmjit_emscripten_abort("Cannot enlarge memory arrays.");
+	wasmjit_emscripten_internal_abort("Cannot enlarge memory arrays.");
 	return 0;
 }
 
@@ -217,14 +217,14 @@ void wasmjit_emscripten_nullFunc_ii(uint32_t x, struct FuncInst *funcinst)
 {
 	(void)funcinst;
 	(void)x;
-	wasmjit_emscripten_abort("Invalid function pointer called with signature 'ii'. Perhaps this is an invalid value (e.g. caused by calling a virtual method on a NULL pointer)? Or calling a function with an incorrect type, which will fail? (it is worth building your source files with -Werror (warnings are errors), as warnings can indicate undefined behavior which can cause this)");
+	wasmjit_emscripten_internal_abort("Invalid function pointer called with signature 'ii'. Perhaps this is an invalid value (e.g. caused by calling a virtual method on a NULL pointer)? Or calling a function with an incorrect type, which will fail? (it is worth building your source files with -Werror (warnings are errors), as warnings can indicate undefined behavior which can cause this)");
 }
 
 void wasmjit_emscripten_nullFunc_iiii(uint32_t x, struct FuncInst *funcinst)
 {
 	(void)funcinst;
 	(void)x;
-	wasmjit_emscripten_abort("Invalid function pointer called with signature 'iiii'. Perhaps this is an invalid value (e.g. caused by calling a virtual method on a NULL pointer)? Or calling a function with an incorrect type, which will fail? (it is worth building your source files with -Werror (warnings are errors), as warnings can indicate undefined behavior which can cause this)");
+	wasmjit_emscripten_internal_abort("Invalid function pointer called with signature 'iiii'. Perhaps this is an invalid value (e.g. caused by calling a virtual method on a NULL pointer)? Or calling a function with an incorrect type, which will fail? (it is worth building your source files with -Werror (warnings are errors), as warnings can indicate undefined behavior which can cause this)");
 }
 
 void wasmjit_emscripten____lock(uint32_t x, struct FuncInst *funcinst)
@@ -244,7 +244,7 @@ void wasmjit_emscripten____setErrNo(uint32_t value, struct FuncInst *funcinst)
 	if (!ret &&
 	    !_wasmjit_emscripten_copy_to_user(funcinst, out.i32, &value, sizeof(value)))
 			return;
-	wasmjit_emscripten_abort("failed to set errno from JS");
+	wasmjit_emscripten_internal_abort("failed to set errno from JS");
 }
 
 /*  _llseek */
@@ -403,6 +403,16 @@ uint32_t wasmjit_emscripten__emscripten_memcpy_big(uint32_t dest, uint32_t src, 
 	}
 	memcpy(dest + base, src + base, num);
 	return dest;
+}
+
+__attribute__((noreturn))
+void wasmjit_emscripten_abort(uint32_t what, struct FuncInst *funcinst)
+{
+	struct MemInst *meminst = wasmjit_emscripten_get_mem_inst(funcinst);
+	/* make sure string doesn't overrun data segment */
+	meminst->data[meminst->size - 1] = '\0';
+	char *str_addr = meminst->data + MMIN(what, meminst->size - 1);
+	wasmjit_emscripten_internal_abort(str_addr);
 }
 
 void wasmjit_emscripten_cleanup(struct ModuleInst *moduleinst) {

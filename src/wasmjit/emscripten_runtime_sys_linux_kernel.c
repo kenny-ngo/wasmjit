@@ -84,7 +84,7 @@ static struct {
 #undef KWSCx
 
 __attribute__((noreturn))
-void wasmjit_emscripten_abort(const char *msg)
+void wasmjit_emscripten_internal_abort(const char *msg)
 {
 	printk(KERN_NOTICE "kwasmjit abort PID %d: %s", current->pid, msg);
 	wasmjit_trap(WASMJIT_TRAP_ABORT);

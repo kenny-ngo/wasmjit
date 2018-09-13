@@ -54,7 +54,7 @@ struct MemInst *wasmjit_emscripten_get_mem_inst(struct FuncInst *funcinst) {
 }
 
 __attribute__((noreturn))
-void wasmjit_emscripten_abort(const char *msg)
+void wasmjit_emscripten_internal_abort(const char *msg)
 {
 	fprintf(stderr, "%s", msg);
 	wasmjit_trap(WASMJIT_TRAP_ABORT);
