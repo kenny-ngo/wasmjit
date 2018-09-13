@@ -115,4 +115,13 @@ int output_buf(struct SizedBuffer *sstack, const void *buf,
 char *wasmjit_load_file(const char *filename, size_t *size);
 void wasmjit_unload_file(char *buf, size_t size);
 
+#define __KMAP0(m,...)
+#define __KMAP1(m,t,...) m(t,_1)
+#define __KMAP2(m,t,...) m(t,_2), __KMAP1(m,__VA_ARGS__)
+#define __KMAP3(m,t,...) m(t,_3), __KMAP2(m,__VA_ARGS__)
+#define __KMAP4(m,t,...) m(t,_4), __KMAP3(m,__VA_ARGS__)
+#define __KMAP5(m,t,...) m(t,_5), __KMAP4(m,__VA_ARGS__)
+#define __KMAP6(m,t,...) m(t,_6), __KMAP5(m,__VA_ARGS__)
+#define __KMAP(n,...) __KMAP##n(__VA_ARGS__)
+
 #endif

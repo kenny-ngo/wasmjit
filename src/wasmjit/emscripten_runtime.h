@@ -56,6 +56,9 @@ uint32_t wasmjit_emscripten__emscripten_memcpy_big(uint32_t dest, uint32_t src, 
 struct EmscriptenContext *wasmjit_emscripten_get_context(struct ModuleInst *);
 void wasmjit_emscripten_cleanup(struct ModuleInst *);
 
+void wasmjit_emscripten_abort(const char *msg) __attribute__((noreturn));
+char *wasmjit_emscripten_get_base_address(struct FuncInst *funcinst);
+
 int wasmjit_emscripten_init_for_module(struct EmscriptenContext *,
 				       struct FuncInst *errno_location_inst);
 
