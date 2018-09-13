@@ -57,7 +57,7 @@ struct EmscriptenContext *wasmjit_emscripten_get_context(struct ModuleInst *);
 void wasmjit_emscripten_cleanup(struct ModuleInst *);
 
 void wasmjit_emscripten_abort(const char *msg) __attribute__((noreturn));
-char *wasmjit_emscripten_get_base_address(struct FuncInst *funcinst);
+struct MemInst *wasmjit_emscripten_get_mem_inst(struct FuncInst *funcinst);
 
 int wasmjit_emscripten_init_for_module(struct EmscriptenContext *,
 				       struct FuncInst *errno_location_inst);

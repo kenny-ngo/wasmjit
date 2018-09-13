@@ -28,6 +28,61 @@
 
 #include <wasmjit/runtime.h>
 
+static int wasmjit_emscripten_check_range(struct MemInst *meminst,
+					  uint32_t user_ptr,
+					  size_t extent)
+{
+	return user_ptr + extent <= meminst->size;
+}
+
+static size_t wasmjit_emscripten_copy_to_user(struct MemInst *meminst,
+					      uint32_t user_dest_ptr,
+					      void *src,
+					      size_t src_size)
+{
+	if (!wasmjit_emscripten_check_range(meminst, user_dest_ptr, src_size)) {
+		return src_size;
+	}
+
+	memcpy(user_dest_ptr + meminst->data, src, src_size);
+	return 0;
+}
+
+static size_t wasmjit_emscripten_copy_from_user(struct MemInst *meminst,
+						void *dest,
+						uint32_t user_src_ptr,
+						size_t src_size)
+{
+	if (!wasmjit_emscripten_check_range(meminst, user_src_ptr, src_size)) {
+		return src_size;
+	}
+
+	memcpy(dest, user_src_ptr + meminst->data, src_size);
+	return 0;
+}
+
+/* shortcut functions */
+#define _wasmjit_emscripten_check_range(funcinst, user_ptr, src_size) \
+	wasmjit_emscripten_check_range(wasmjit_emscripten_get_mem_inst(funcinst), \
+				       user_ptr,			\
+				       src_size)			\
+
+#define _wasmjit_emscripten_copy_to_user(funcinst, user_dest_ptr, src, src_size) \
+	wasmjit_emscripten_copy_to_user(wasmjit_emscripten_get_mem_inst(funcinst), \
+					user_dest_ptr,			\
+					src,				\
+					src_size)			\
+
+#define _wasmjit_emscripten_copy_from_user(funcinst, dest, user_src_ptr, src_size) \
+	wasmjit_emscripten_copy_from_user(wasmjit_emscripten_get_mem_inst(funcinst), \
+					  dest,				\
+					  user_src_ptr,			\
+					  src_size)			\
+
+static char *wasmjit_emscripten_get_base_address(struct FuncInst *funcinst) {
+	return wasmjit_emscripten_get_mem_inst(funcinst)->data;
+}
+
 int wasmjit_emscripten_init_for_module(struct EmscriptenContext *ctx,
 				       struct FuncInst *errno_location_inst)
 {
@@ -54,7 +109,6 @@ int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
 				   int argc,
 				   char *argv[]) {
 	uint32_t (*stack_alloc)(uint32_t);
-	char *base = meminst->data;
 	union ValueUnion out;
 	int ret;
 
@@ -82,11 +136,24 @@ int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
 		for (i = 0; i < argc; ++i) {
 			size_t len = strlen(argv[i]) + 1;
 			uint32_t ret = stack_alloc(len);
-			memcpy(base + ret, argv[i], len);
-			memcpy(base + argv_i + i * 4, &ret, 4);
+
+			if (wasmjit_emscripten_copy_to_user(meminst,
+							    ret,
+							    argv[i],
+							    len))
+				return -1;
+
+			if (wasmjit_emscripten_copy_to_user(meminst,
+							    argv_i + i * 4,
+							    &ret,
+							    4))
+				return -1;
 		}
 
-		memcpy(base + argv_i + argc * 4, &zero, 4);
+		if (wasmjit_emscripten_copy_to_user(meminst,
+						    argv_i + argc * 4,
+						    &zero, 4))
+			return -1;
 
 		args[0].i32 = argc;
 		args[1].i32 = argv_i;
@@ -111,9 +178,12 @@ static struct EmscriptenContext *_wasmjit_emscripten_get_context(struct FuncInst
 }
 
 static int32_t check_ret(long ret) {
+	/* these are defined by GCC */
+#if __LONG_MAX__ > __INT32_MAX__
 	if (ret > INT32_MAX || ret < INT32_MIN) {
 		wasmjit_trap(WASMJIT_TRAP_INTEGER_OVERFLOW);
 	}
+#endif
 	return ret;
 }
 
@@ -167,19 +237,14 @@ void wasmjit_emscripten____setErrNo(uint32_t value, struct FuncInst *funcinst)
 {
 	union ValueUnion out;
 	int ret;
-	char *base;
 	struct EmscriptenContext *ctx =
 		_wasmjit_emscripten_get_context(funcinst);
 
 	ret = wasmjit_invoke_function(ctx->errno_location_inst, NULL, &out);
-	if (ret) {
-		wasmjit_emscripten_abort("failed to set errno from JS");
-		return;
-	}
-
-	base = wasmjit_emscripten_get_base_address(funcinst);
-
-	memcpy(base + out.i32, &value, sizeof(value));
+	if (!ret &&
+	    !_wasmjit_emscripten_copy_to_user(funcinst, out.i32, &value, sizeof(value)))
+			return;
+	wasmjit_emscripten_abort("failed to set errno from JS");
 }
 
 /*  _llseek */
@@ -196,7 +261,13 @@ uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs, stru
 
 	base = wasmjit_emscripten_get_base_address(funcinst);
 
-	memcpy(&args, base + varargs, sizeof(args));
+	if (_wasmjit_emscripten_copy_from_user(funcinst,
+					       &args, varargs, sizeof(args)))
+		return -EFAULT;
+
+	if (!_wasmjit_emscripten_check_range(funcinst, args.result, 4))
+		return -EFAULT;
+
 	// emscripten off_t is 32-bits, offset_high is useless
 	if (args.offset_high)
 		return -EINVAL;
@@ -225,7 +296,10 @@ uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, stru
 	(void)which;
 	base = wasmjit_emscripten_get_base_address(funcinst);
 
-	memcpy(&args, base + varargs, sizeof(args));
+	if (_wasmjit_emscripten_copy_from_user(funcinst,
+					       &args, varargs,
+					       sizeof(args)))
+		return -EFAULT;
 
 	/* TODO: do UIO_FASTIOV stack optimization */
 	liov = wasmjit_alloc_vector(args.iovcnt,
@@ -239,14 +313,29 @@ uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, stru
 			uint32_t iov_base;
 			uint32_t iov_len;
 		} iov;
-		memcpy(&iov, base + args.iov + sizeof(struct em_iovec) * i,
-		       sizeof(struct em_iovec));
+		if (_wasmjit_emscripten_copy_from_user(funcinst,
+						       &iov,
+						       args.iov +
+						       sizeof(struct em_iovec) * i,
+						       sizeof(struct em_iovec))) {
+			rret = -EFAULT;
+			goto error;
+		}
+
+		if (!_wasmjit_emscripten_check_range(funcinst,
+						     iov.iov_base,
+						     iov.iov_len)) {
+			rret = -EFAULT;
+			goto error;
+		}
 
 		liov[i].iov_base = base + iov.iov_base;
 		liov[i].iov_len = iov.iov_len;
 	}
 
 	rret = sys_writev(args.fd, liov, args.iovcnt);
+
+ error:
 	free(liov);
 
 	return check_ret(rret);
@@ -261,9 +350,14 @@ uint32_t wasmjit_emscripten____syscall4(uint32_t which, uint32_t varargs, struct
 	} args;
 
 	(void)which;
-	base = wasmjit_emscripten_get_base_address(funcinst);
 
-	memcpy(&args, base + varargs, sizeof(args));
+	if (_wasmjit_emscripten_copy_from_user(funcinst, &args, varargs, sizeof(args)))
+		return -EFAULT;
+
+	if (!_wasmjit_emscripten_check_range(funcinst, args.buf, args.count))
+		return -EFAULT;
+
+	base = wasmjit_emscripten_get_base_address(funcinst);
 
 	return check_ret(sys_write(args.fd, base + args.buf, args.count));
 }
@@ -282,16 +376,15 @@ uint32_t wasmjit_emscripten____syscall54(uint32_t which, uint32_t varargs, struc
 uint32_t wasmjit_emscripten____syscall6(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
 {
 	/* TODO: need to define non-no filesystem case */
-	char *base;
 	struct {
 		uint32_t fd;
 	} args;
 
 	(void)which;
 
-	base = wasmjit_emscripten_get_base_address(funcinst);
+	if (_wasmjit_emscripten_copy_from_user(funcinst, &args, varargs, sizeof(args)))
+		return -EFAULT;
 
-	memcpy(&args, base + varargs, sizeof(args));
 	return check_ret(sys_close(args.fd));
 }
 
@@ -304,6 +397,10 @@ void wasmjit_emscripten____unlock(uint32_t x, struct FuncInst *funcinst)
 uint32_t wasmjit_emscripten__emscripten_memcpy_big(uint32_t dest, uint32_t src, uint32_t num, struct FuncInst *funcinst)
 {
 	char *base = wasmjit_emscripten_get_base_address(funcinst);
+	if (!_wasmjit_emscripten_check_range(funcinst, dest, num) ||
+	    !_wasmjit_emscripten_check_range(funcinst, src, num)) {
+		wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
+	}
 	memcpy(dest + base, src + base, num);
 	return dest;
 }

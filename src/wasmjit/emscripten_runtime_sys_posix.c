@@ -49,8 +49,8 @@
 
 #include <wasmjit/emscripten_runtime_sys_def.h>
 
-char *wasmjit_emscripten_get_base_address(struct FuncInst *funcinst) {
-	return funcinst->module_inst->mems.elts[0]->data;
+struct MemInst *wasmjit_emscripten_get_mem_inst(struct FuncInst *funcinst) {
+	return funcinst->module_inst->mems.elts[0];
 }
 
 __attribute__((noreturn))

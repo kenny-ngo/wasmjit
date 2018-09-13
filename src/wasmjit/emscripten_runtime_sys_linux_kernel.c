@@ -90,9 +90,9 @@ void wasmjit_emscripten_abort(const char *msg)
 	wasmjit_trap(WASMJIT_TRAP_ABORT);
 }
 
-char *wasmjit_emscripten_get_base_address(struct FuncInst *funcinst)
+struct MemInst *wasmjit_emscripten_get_mem_inst(struct FuncInst *funcinst)
 {
-	return wasmjit_get_ktls()->base_address;
+	return wasmjit_get_ktls()->mem_inst;
 }
 
 int wasmjit_emscripten_linux_kernel_init(void) {
