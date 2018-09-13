@@ -102,16 +102,18 @@ static char *wasmjit_emscripten_get_base_address(struct FuncInst *funcinst) {
 int wasmjit_emscripten_init_for_module(struct EmscriptenContext *ctx,
 				       struct FuncInst *errno_location_inst)
 {
-	struct FuncType errno_location_type;
-	wasmjit_valtype_t errno_location_return_type = VALTYPE_I32;
+	if (errno_location_inst) {
+		struct FuncType errno_location_type;
+		wasmjit_valtype_t errno_location_return_type = VALTYPE_I32;
 
-	_wasmjit_create_func_type(&errno_location_type,
-				  0, NULL,
-				  1, &errno_location_return_type);
+		_wasmjit_create_func_type(&errno_location_type,
+					  0, NULL,
+					  1, &errno_location_return_type);
 
-	if (!wasmjit_typecheck_func(&errno_location_type,
-				    errno_location_inst)) {
-		return -1;
+		if (!wasmjit_typecheck_func(&errno_location_type,
+					    errno_location_inst)) {
+			return -1;
+		}
 	}
 
 	ctx->errno_location_inst = errno_location_inst;
@@ -252,12 +254,11 @@ void wasmjit_emscripten____lock(uint32_t x, struct FuncInst *funcinst)
 void wasmjit_emscripten____setErrNo(uint32_t value, struct FuncInst *funcinst)
 {
 	union ValueUnion out;
-	int ret;
 	struct EmscriptenContext *ctx =
 		_wasmjit_emscripten_get_context(funcinst);
 
-	ret = wasmjit_invoke_function(ctx->errno_location_inst, NULL, &out);
-	if (!ret &&
+	if (ctx->errno_location_inst &&
+	    !wasmjit_invoke_function(ctx->errno_location_inst, NULL, &out) &&
 	    !_wasmjit_emscripten_copy_to_user(funcinst, out.i32, &value, sizeof(value)))
 			return;
 	wasmjit_emscripten_internal_abort("failed to set errno from JS");

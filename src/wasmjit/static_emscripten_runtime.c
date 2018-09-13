@@ -125,7 +125,7 @@ extern struct TableInst WASM_TABLE_SYMBOL(env, table);
 
 extern struct FuncInst WASM_FUNC_SYMBOL(asm, _main);
 extern struct FuncInst WASM_FUNC_SYMBOL(asm, stackAlloc);
-extern struct FuncInst WASM_FUNC_SYMBOL(asm, ___errno_location);
+extern struct FuncInst WASM_FUNC_SYMBOL(asm, ___errno_location) __attribute__((weak));
 
 struct EmscriptenContext g_emscripten_ctx;
 

@@ -326,8 +326,6 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 
 	errno_location_inst = wasmjit_get_export(module_inst, "___errno_location",
 						 IMPORT_DESC_TYPE_FUNC).func;
-	if (!errno_location_inst)
-		return -1;
 
 	ret = wasmjit_emscripten_init_for_module(wasmjit_emscripten_get_context(env_module_inst),
 						 errno_location_inst);
