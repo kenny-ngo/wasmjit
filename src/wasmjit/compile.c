@@ -2088,8 +2088,13 @@ static int wasmjit_compile_instructions(const struct FuncType *func_types,
 			case OPCODE_LOOP: {
 				size_t arity;
 
-				arity = instruction->data.block.blocktype !=
-					VALTYPE_NULL ? 1 : 0;
+				if (instruction->opcode == OPCODE_BLOCK) {
+					arity = instruction->data.block.blocktype !=
+						VALTYPE_NULL ? 1 : 0;
+				} else {
+					assert(instruction->opcode == OPCODE_LOOP);
+					arity = 0;
+				}
 
 				imd2.data.block.label_idx = labels->n_elts;
 				INC_LABELS();
