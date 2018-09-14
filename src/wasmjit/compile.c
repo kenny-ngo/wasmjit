@@ -29,6 +29,10 @@
 #include <wasmjit/vector.h>
 #include <wasmjit/runtime.h>
 
+#ifdef DEBUG_COMPILE
+#include <wasmjit/ast_dump.h>
+#endif
+
 #include <wasmjit/sys.h>
 
 #ifndef DEBUG_STACK
@@ -2088,6 +2092,20 @@ static int wasmjit_compile_instructions(const struct FuncType *func_types,
 			case OPCODE_LOOP: {
 				size_t arity;
 
+
+#ifdef DEBUG_COMPILE
+					const char *result = "";
+					if (instruction->data.if_.blocktype != VALTYPE_NULL) {
+						result = wasmjit_valtype_repr(instruction->data.if_.blocktype);
+					}
+					if (instruction->opcode == OPCODE_BLOCK) {
+						printf("%*sblock %s\n", (int)stack_sz * 2, "", result);
+					} else {
+						assert(instruction->opcode == OPCODE_LOOP);
+						printf("%*sloop\n", (int)stack_sz * 2, "");
+					}
+#endif
+
 				if (instruction->opcode == OPCODE_BLOCK) {
 					arity = instruction->data.block.blocktype !=
 						VALTYPE_NULL ? 1 : 0;
@@ -2121,6 +2139,14 @@ static int wasmjit_compile_instructions(const struct FuncType *func_types,
 				int arity =
 					instruction->data.if_.blocktype !=
 					VALTYPE_NULL ? 1 : 0;
+
+#ifdef DEBUG_COMPILE
+					const char *result = "";
+					if (instruction->data.if_.blocktype != VALTYPE_NULL) {
+						result = wasmjit_valtype_repr(instruction->data.if_.blocktype);
+					}
+					printf("%*sif %s\n", (int)stack_sz * 2, "", result);
+#endif
 
 				/* test top of stack */
 				assert(peek_stack(sstack) == STACK_I32);
@@ -2159,6 +2185,9 @@ static int wasmjit_compile_instructions(const struct FuncType *func_types,
 				break;
 			}
 			default:
+#ifdef DEBUG_COMPILE
+					dump_instruction(instruction, stack_sz);
+#endif
 				if (!wasmjit_compile_instruction(func_types,
 								 module_types,
 								 type,
@@ -2276,6 +2305,10 @@ static int wasmjit_compile_instructions(const struct FuncType *func_types,
 					   output else case
 					   }
 					*/
+
+#ifdef DEBUG_COMPILE
+						printf("%*selse\n", (int)(stack_sz - 1) * 2, "");
+#endif
 
 					/* reset stack */
 					if (!stack_truncate(sstack, imd.data.if_.stack_idx + 1))
