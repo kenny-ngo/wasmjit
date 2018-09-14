@@ -1109,7 +1109,8 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 	case OPCODE_F64_STORE:
 	case OPCODE_I32_STORE8:
 	case OPCODE_I32_STORE16:
-	case OPCODE_I64_STORE32: {
+	case OPCODE_I64_STORE32:
+	case OPCODE_I64_STORE8: {
 		const struct LoadStoreExtra *extra;
 		size_t mem_size;
 
@@ -1134,6 +1135,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		case OPCODE_I32_LOAD8_S:
 		case OPCODE_I32_LOAD8_U:
 		case OPCODE_I32_STORE8:
+		case OPCODE_I64_STORE8:
 			mem_size = 1;
 			break;
 		default:
@@ -1186,6 +1188,10 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		case OPCODE_F64_STORE:
 			assert(peek_stack(sstack) == STACK_F64);
 			extra = &instruction->data.f64_store;
+			goto after;
+		case OPCODE_I64_STORE8:
+			assert(peek_stack(sstack) == STACK_I64);
+			extra = &instruction->data.i64_store8;
 			goto after;
 		case OPCODE_I64_STORE32:
 			assert(peek_stack(sstack) == STACK_I64);
@@ -1363,6 +1369,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 			OUTS("\x89\x7c\x30\xfc");
 			break;
 		case OPCODE_I32_STORE8:
+		case OPCODE_I64_STORE8:
 			assert(1 == mem_size);
 			/* LOGIC: data[ea - 1] = pop_stack() */
 			/* movb %dil, -1(%rax, %rsi) */
