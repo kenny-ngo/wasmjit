@@ -50,6 +50,7 @@ int wasmjit_high_instantiate(struct WasmJITHigh *self,
 			     const char *module_name,
 			     int flags);
 int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
+						uint32_t static_bump,
 						size_t tablemin,
 						size_t tablemax,
 						int flags);

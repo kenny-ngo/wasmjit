@@ -502,3 +502,32 @@ void wasmjit_emscripten_cleanup(struct ModuleInst *moduleinst) {
 	(void)moduleinst;
 	/* TODO: implement */
 }
+
+void wasmjit_emscripten_derive_memory_globals(uint32_t static_bump,
+					      struct WasmJITEmscriptenMemoryGlobals *out)
+{
+
+#define staticAlloc(_top , s)                           \
+	(((_top) + (s) + 15) & ((uint32_t) -16))
+
+#define alignMemory(size, factor) \
+	(((size) % (factor)) ? ((size) - ((size) % (factor)) + (factor)) : (size))
+
+#define TOTAL_STACK 5242880
+#define STACK_ALIGN_V 16
+#define GLOBAL_BASE 1024
+#define STATIC_BASE GLOBAL_BASE
+#define STATICTOP (STATIC_BASE + static_bump)
+
+#define tempDoublePtr_V (staticAlloc(STATICTOP, 16))
+#define DYNAMICTOP_PTR_V (staticAlloc(tempDoublePtr_V, 4))
+#define STACKTOP_V (alignMemory(DYNAMICTOP_PTR_V, STACK_ALIGN_V))
+#define STACK_BASE_V (STACKTOP_V)
+#define STACK_MAX_V (STACK_BASE_V + TOTAL_STACK)
+
+	out->memoryBase = STATIC_BASE;
+	out->DYNAMICTOP_PTR = DYNAMICTOP_PTR_V;
+	out->tempDoublePtr = tempDoublePtr_V;
+	out->STACKTOP =  STACKTOP_V;
+	out->STACK_MAX = STACK_MAX_V;
+}

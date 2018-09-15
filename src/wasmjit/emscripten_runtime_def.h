@@ -27,24 +27,6 @@
 #define DEFINE_WASM_F64_GLOBAL(_name, _init, _mut)             \
 	DEFINE_WASM_GLOBAL(_name, _init, VALTYPE_F64, f64, _mut)
 
-#define staticAlloc(_top , s)                           \
-	(((_top) + (s) + 15) & ((uint32_t) -16))
-
-#define alignMemory(size, factor) \
-	(((size) % (factor)) ? ((size) - ((size) % (factor)) + (factor)) : (size))
-
-#define TOTAL_STACK 5242880
-#define STACK_ALIGN_V 16
-#define GLOBAL_BASE 1024
-#define STATIC_BASE (GLOBAL_BASE)
-#define STATICTOP ((STATIC_BASE) + 5472 - 16)
-#define tempDoublePtr_V (staticAlloc((STATICTOP), 16))
-#define DYNAMICTOP_PTR_V (staticAlloc((tempDoublePtr_V), 4))
-#define STACKTOP_V (alignMemory((DYNAMICTOP_PTR_V), (STACK_ALIGN_V)))
-#define STACK_BASE_V (STACKTOP_V)
-#define STACK_MAX_V ((STACK_BASE_V) + (TOTAL_STACK))
-
-
 #define CURRENT_MODULE global
 
 START_MODULE()
@@ -79,13 +61,8 @@ DEFINE_WASM_MEMORY(memory, 256, 256)
 END_MEMORY_DEFS()
 
 START_GLOBAL_DEFS()
-DEFINE_WASM_I32_GLOBAL(memoryBase, STATIC_BASE, 0)
 DEFINE_WASM_I32_GLOBAL(tableBase, 0, 0)
-DEFINE_WASM_I32_GLOBAL(DYNAMICTOP_PTR, DYNAMICTOP_PTR_V, 0)
-DEFINE_WASM_I32_GLOBAL(tempDoublePtr, tempDoublePtr_V, 0)
 DEFINE_WASM_I32_GLOBAL(ABORT, 0, 0)
-DEFINE_WASM_I32_GLOBAL(STACKTOP, STACKTOP_V, 0)
-DEFINE_WASM_I32_GLOBAL(STACK_MAX, STACK_MAX_V, 0)
 END_GLOBAL_DEFS()
 
 #define DEFINE_EMSCRIPTEN_FUNCTION(_name, _output, _n, ...)		\

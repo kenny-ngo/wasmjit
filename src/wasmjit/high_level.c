@@ -197,6 +197,7 @@ int wasmjit_high_instantiate(struct WasmJITHigh *self, const char *filename, con
 }
 
 int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
+						uint32_t static_bump,
 						size_t tablemin,
 						size_t tablemax,
 						int flags)
@@ -210,6 +211,7 @@ int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
 		struct kwasmjit_instantiate_emscripten_runtime_args arg;
 
 		arg.version = 0;
+		arg.static_bump = static_bump;
 		arg.tablemin = tablemin;
 		arg.tablemax = tablemax;
 		arg.flags = flags;
@@ -223,7 +225,8 @@ int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
 
 	self->error_buffer[0] = '\0';
 
-	modules = wasmjit_instantiate_emscripten_runtime(tablemin,
+	modules = wasmjit_instantiate_emscripten_runtime(static_bump,
+							 tablemin,
 							 tablemax,
 							 &n_modules);
 	if (!modules) {

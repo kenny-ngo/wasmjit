@@ -139,6 +139,7 @@ static int kwasmjit_instantiate_emscripten_runtime(struct kwasmjit_private *self
 	int retval;
 
 	if (wasmjit_high_instantiate_emscripten_runtime(&self->high,
+							args->static_bump,
 							args->tablemin,
 							args->tablemax, args->flags)) {
 		retval = -EINVAL;

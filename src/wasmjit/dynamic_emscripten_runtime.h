@@ -27,7 +27,8 @@
 
 #include <wasmjit/runtime.h>
 
-struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t tablemin,
+struct NamedModule *wasmjit_instantiate_emscripten_runtime(uint32_t static_bump,
+							   size_t tablemin,
 							   size_t tablemax,
 							   size_t *amt);
 

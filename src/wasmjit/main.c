@@ -36,12 +36,17 @@
 
 #include <assert.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include <errno.h>
+#include <regex.h>
 #include <unistd.h>
+
+#include <sys/types.h>
 
 #ifdef __linux__
 
@@ -126,6 +131,72 @@ void *get_stack_top(void)
 
 #endif
 
+int get_static_bump(const char *filename, uint32_t *static_bump)
+{
+	char *js_path = NULL, *filebuf = NULL, *filebuf2 = NULL;
+	size_t fnlen, filesize;
+	regex_t re;
+	regmatch_t pmatch[4];
+	int ret, compiled = 0;
+	long result;
+
+	fnlen = strlen(filename);
+	if (fnlen < 4)
+		goto error;
+
+	js_path = malloc(fnlen + 1);
+	memcpy(js_path, filename, fnlen - 4);
+	strcpy(&js_path[fnlen - 4], "js");
+
+	filebuf = wasmjit_load_file(js_path, &filesize);
+	if (!filebuf)
+		goto error;
+
+	/* we need to null terminal the file... */
+	filebuf2 = malloc(filesize + 1);
+	if (!filebuf2)
+		goto error;
+
+	memcpy(filebuf2, filebuf, filesize);
+	filebuf2[filesize] = '\0';
+
+	ret = regcomp(&re, "(^|;) *var +STATIC_BUMP *= *([0-9]+) *(;|$)", REG_EXTENDED);
+	if (ret) {
+		fprintf(stderr, "regcomp error %d\n", ret);
+		goto error;
+	}
+
+	compiled = 1;
+
+	ret = regexec(&re, filebuf2, 4, pmatch, 0);
+	if (ret)
+		goto error;
+
+	result = strtol(filebuf2 + pmatch[2].rm_so, NULL, 10);
+	if ((result == LONG_MIN || result == LONG_MAX) && errno == ERANGE)
+		goto error;
+
+	if (result < 0 || result > UINT32_MAX)
+		goto error;
+
+	*static_bump = result;
+
+	ret = 0;
+
+	if (0) {
+ error:
+		ret = -1;
+	}
+
+	if (compiled)
+		regfree(&re);
+	free(filebuf2);
+	wasmjit_unload_file(filebuf, filesize);
+	free(js_path);
+
+	return ret;
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
@@ -134,6 +205,7 @@ int main(int argc, char *argv[])
 	char *filename;
 	int dump_module, create_relocatable, create_relocatable_helper, opt;
 	size_t tablemin = 0, tablemax = 0, i;
+	uint32_t static_bump;
 	void *buf;
 	size_t size;
 
@@ -262,13 +334,32 @@ int main(int argc, char *argv[])
 		break;
 	}
 
-	if (create_relocatable_helper) {
+	/* get static bump */
+	ret = get_static_bump(filename, &static_bump);
+	if (ret) {
+		fprintf(stderr, "Couldn't find static bump in JS runtime file\n");
+		return -1;
+	}
 
+	if (create_relocatable_helper) {
+		struct WasmJITEmscriptenMemoryGlobals globals;
+
+		wasmjit_emscripten_derive_memory_globals(static_bump, &globals);
 
 		printf("#include <wasmjit/static_runtime.h>\n");
 		printf("#define CURRENT_MODULE env\n");
 		printf("DEFINE_WASM_TABLE(table, ELEMTYPE_ANYFUNC, %zu, %zu)\n",
 		       tablemin, tablemax);
+		printf("DEFINE_WASM_GLOBAL(memoryBase, %" PRIu32 ", VALTYPE_I32, i32, 0)\n",
+		       globals.memoryBase);
+		printf("DEFINE_WASM_GLOBAL(tempDoublePtr, %" PRIu32 ", VALTYPE_I32, i32, 0)\n",
+		       globals.tempDoublePtr);
+		printf("DEFINE_WASM_GLOBAL(DYNAMICTOP_PTR, %" PRIu32 ", VALTYPE_I32, i32, 0)\n",
+		       globals.DYNAMICTOP_PTR);
+		printf("DEFINE_WASM_GLOBAL(STACKTOP, %" PRIu32 ", VALTYPE_I32, i32, 0)\n",
+		       globals.STACKTOP);
+		printf("DEFINE_WASM_GLOBAL(STACK_MAX, %" PRIu32 ", VALTYPE_I32, i32, 0)\n",
+		       globals.STACK_MAX);
 
 		return 0;
 	}
@@ -287,6 +378,7 @@ int main(int argc, char *argv[])
 		high_init = 1;
 
 		if (wasmjit_high_instantiate_emscripten_runtime(&high,
+								static_bump,
 								tablemin, tablemax, 0)) {
 			msg = "failed to instantiate emscripten runtime";
 			goto error;

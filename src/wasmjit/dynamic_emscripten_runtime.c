@@ -34,7 +34,8 @@ struct EmscriptenContext *wasmjit_emscripten_get_context(struct ModuleInst *modu
 	return module_inst->private_data;
 }
 
-struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t tablemin,
+struct NamedModule *wasmjit_instantiate_emscripten_runtime(uint32_t static_bump,
+							   size_t tablemin,
 							   size_t tablemax,
 							   size_t *amt)
 {
@@ -51,6 +52,9 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t tablemin,
 	struct ModuleInst *module = NULL;
 	struct NamedModule *ret;
 	void *tmp_unmapped = NULL;
+	struct WasmJITEmscriptenMemoryGlobals globals;
+
+	wasmjit_emscripten_derive_memory_globals(static_bump, &globals);
 
 	/* TODO: add exports */
 
@@ -91,7 +95,12 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(size_t tablemin,
 #define END_TABLE_DEFS()
 #define START_MEMORY_DEFS()
 #define END_MEMORY_DEFS()
-#define START_GLOBAL_DEFS()
+#define START_GLOBAL_DEFS()						\
+	DEFINE_WASM_GLOBAL(memoryBase, globals.memoryBase, VALTYPE_I32, i32, 0)	\
+		DEFINE_WASM_GLOBAL(tempDoublePtr, globals.tempDoublePtr, VALTYPE_I32, i32, 0) \
+		DEFINE_WASM_GLOBAL(DYNAMICTOP_PTR, globals.DYNAMICTOP_PTR, VALTYPE_I32, i32, 0)	\
+		DEFINE_WASM_GLOBAL(STACKTOP, globals.STACKTOP, VALTYPE_I32, i32, 0) \
+		DEFINE_WASM_GLOBAL(STACK_MAX, globals.STACK_MAX, VALTYPE_I32, i32, 0)
 #define END_GLOBAL_DEFS()
 #define START_FUNCTION_DEFS()
 #define END_FUNCTION_DEFS()

@@ -44,6 +44,7 @@ struct kwasmjit_instantiate_args {
 
 struct kwasmjit_instantiate_emscripten_runtime_args {
 	unsigned version;
+	uint32_t static_bump;
 	size_t tablemin, tablemax;
 	int flags;
 };

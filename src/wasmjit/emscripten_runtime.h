@@ -71,4 +71,15 @@ int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
 				   int argc,
 				   char *argv[]);
 
+struct WasmJITEmscriptenMemoryGlobals {
+	uint32_t memoryBase;
+	uint32_t tempDoublePtr;
+	uint32_t DYNAMICTOP_PTR;
+	uint32_t STACKTOP;
+	uint32_t STACK_MAX;
+};
+
+void wasmjit_emscripten_derive_memory_globals(uint32_t static_bump,
+					      struct WasmJITEmscriptenMemoryGlobals *out);
+
 #endif
