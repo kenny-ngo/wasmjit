@@ -263,30 +263,12 @@ int main(int argc, char *argv[])
 	}
 
 	if (create_relocatable_helper) {
-		void *a_out;
-		size_t size;
-		struct Module env_module;
-		struct TableSectionTable table;
-		struct ExportSectionExport export;
 
-		memset(&env_module, 0, sizeof(env_module));
 
-		table.elemtype = ELEMTYPE_ANYFUNC;
-		table.limits.min = tablemin;
-		table.limits.max = tablemax;
-
-		env_module.table_section.n_tables = 1;
-		env_module.table_section.tables = &table;
-
-		export.name = "table";
-		export.idx_type = IMPORT_DESC_TYPE_TABLE;
-		export.idx = 0;
-
-		env_module.export_section.n_exports = 1;
-		env_module.export_section.exports = &export;
-
-		a_out = wasmjit_output_elf_relocatable("env", &env_module, &size);
-		write(1, a_out, size);
+		printf("#include <wasmjit/static_runtime.h>\n");
+		printf("#define CURRENT_MODULE env\n");
+		printf("DEFINE_WASM_TABLE(table, ELEMTYPE_ANYFUNC, %zu, %zu)\n",
+		       tablemin, tablemax);
 
 		return 0;
 	}

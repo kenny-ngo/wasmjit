@@ -175,7 +175,7 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi);
 	}								\
 									\
 	struct FuncInst WASM_FUNC_SYMBOL(_module, _name) = {		\
-		.module_inst = &WASM_MODULE_SYMBOL(_module),		\
+		.module_inst = &WASM_MODULE_SYMBOL(_module).module,	\
 		.compiled_code = CAT(CAT(CAT(_module,  __), _name),  __emscripten__hostfunc__),	\
 		.invoker = CAT(CAT(CAT(_module,  __), _name),  __emscripten__hostfunc__invoker), \
 		.type = {						\

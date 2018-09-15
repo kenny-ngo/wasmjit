@@ -31,7 +31,7 @@
 #include <wasmjit/emscripten_runtime.h>
 
 #define START_MODULE()				\
-	static struct ModuleInst WASM_MODULE_SYMBOL(CURRENT_MODULE);
+	struct StaticModuleInst WASM_MODULE_SYMBOL(CURRENT_MODULE);
 
 #define END_MODULE()
 #define START_TABLE_DEFS()
@@ -102,24 +102,26 @@ extern struct TableInst WASM_TABLE_SYMBOL(env, table);
 		};
 
 #define END_MODULE()							\
-	__attribute__((unused))						\
-	static struct ModuleInst WASM_MODULE_SYMBOL(CURRENT_MODULE) = {	\
-		.funcs = {						\
-			.n_elts = ARRAY_LEN(CAT(CURRENT_MODULE, _funcs)), \
-			.elts = CAT(CURRENT_MODULE, _funcs),		\
+	struct StaticModuleInst WASM_MODULE_SYMBOL(CURRENT_MODULE) = {	\
+		.module = {						\
+			.funcs = {					\
+				.n_elts = ARRAY_LEN(CAT(CURRENT_MODULE, _funcs)), \
+				.elts = CAT(CURRENT_MODULE, _funcs),	\
+			},						\
+			.tables = {					\
+				.n_elts = ARRAY_LEN(CAT(CURRENT_MODULE, _tables)), \
+				.elts = CAT(CURRENT_MODULE, _tables),	\
+			},						\
+			.mems = {					\
+				.n_elts = ARRAY_LEN(CAT(CURRENT_MODULE, _mems)), \
+				.elts = CAT(CURRENT_MODULE, _mems),	\
+			},						\
+			.globals = {					\
+				.n_elts = ARRAY_LEN(CAT(CURRENT_MODULE, _globals)), \
+				.elts = CAT(CURRENT_MODULE, _globals),	\
+			},						\
 		},							\
-		.tables = {						\
-			.n_elts = ARRAY_LEN(CAT(CURRENT_MODULE, _tables)), \
-			.elts = CAT(CURRENT_MODULE, _tables),		\
-		},							\
-		.mems = {						\
-			.n_elts = ARRAY_LEN(CAT(CURRENT_MODULE, _mems)),	\
-			.elts = CAT(CURRENT_MODULE, _mems),		\
-		},							\
-		.globals = {						\
-			.n_elts = ARRAY_LEN(CAT(CURRENT_MODULE, _globals)), \
-			.elts = CAT(CURRENT_MODULE, _globals),		\
-		},							\
+		.initted = 1,						\
 	};
 
 #include <wasmjit/emscripten_runtime_def.h>

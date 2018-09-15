@@ -6,10 +6,11 @@ make clean
 
 make wasmjit
 
-./wasmjit -p "$1" > "$1.helper.o"
+./wasmjit -p "$1" > src/wasmjit/static_emscripten_runtime_helper.c
+
 ./wasmjit -o "$1" > "$1.o"
 
-SUPPORT="static_runtime emscripten_runtime emscripten_runtime_sys_posix runtime vector static_emscripten_runtime"
+SUPPORT="static_runtime emscripten_runtime emscripten_runtime_sys_posix runtime vector static_emscripten_runtime static_emscripten_runtime_helper"
 SUPPORT_FILES=""
 for FILE in $SUPPORT
 do
@@ -19,4 +20,4 @@ do
 done
 
 
-cc -o "$1.exe" "$1.o" "$1.helper.o" $SUPPORT_FILES
+cc -o "$1.exe" "$1.o" $SUPPORT_FILES
