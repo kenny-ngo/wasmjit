@@ -29,6 +29,16 @@
 #include <wasmjit/runtime.h>
 #include <wasmjit/sys.h>
 
+#ifdef __KERNEL__
+#include <linux/socket.h>
+#include <linux/net.h>
+#include <uapi/linux/in.h>
+#else
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#endif
+
 enum {
 #define ERRNO(name, value) SYS_ ## name = value,
 #include <wasmjit/emscripten_runtime_sys_errno_def.h>
@@ -551,6 +561,182 @@ uint32_t wasmjit_emscripten____syscall10(uint32_t which, uint32_t varargs,
 		return -SYS_EFAULT;
 
 	return check_ret(sys_unlink(base + args.pathname));
+}
+
+#if __INT_WIDTH__ < 32
+#error This runtime requires at least 32-bit ints
+#endif
+
+#if (defined(__linux__) || defined(__KERNEL__)) && !defined(__mips__)
+
+static int convert_socket_type_to_local(int32_t type)
+{
+	return type;
+}
+
+#else
+
+static int convert_socket_type_to_local(int32_t type)
+{
+	int ltype, nonblock_type, cloexec_type;
+
+#define SYS_SOCK_NONBLOCK 2048
+	nonblock_type = !!(type & SYS_SOCK_NONBLOCK);
+	type &= ~(int) SYS_SOCK_NONBLOCK;
+#define SYS_SOCK_CLOEXEC 524288
+	cloexec_type = !!(type & SYS_SOCK_CLOEXEC);
+	type &= ~(int) SYS_SOCK_CLOEXEC;
+
+	switch (type) {
+	case 1: ltype = SOCK_STREAM; break;
+	case 2: ltype = SOCK_DGRAM; break;
+	case 5: ltype = SOCK_SEQPACKET; break;
+	case 3: ltype = SOCK_RAW; break;
+	case 4: ltype = SOCK_RDM; break;
+	case 10: ltype = SOCK_PACKET; break;
+	default: return -1;
+	}
+
+	if (nonblock_type)
+		ltype |= SOCK_NONBLOCK;
+
+	if (cloexec_type)
+		ltype |= SOCK_CLOEXEC;
+
+	return ltype;
+}
+
+#endif
+
+#if defined(__linux__) || defined(__KERNEL__)
+
+static int convert_socket_domain_to_local(int32_t domain)
+{
+	return domain;
+}
+
+static int convert_proto_to_local(int domain, int32_t proto)
+{
+	(void)domain;
+	return proto;
+}
+
+#else
+
+static int convert_socket_domain_to_local(int32_t domain)
+{
+	switch (domain) {
+	case 1: return AF_UNIX;
+	case 2: return AF_INET;
+	case 10: return AF_INET6;
+	case 4: return AF_IPX;
+	case 16: return AF_NETLINK;
+	case 9: return AF_X25;
+	case 3: return AF_AX25;
+	case 8: return AF_ATMPVC;
+	case 5: return AF_APPLETALK;
+	case 17: return AF_PACKET;
+	default: return -1;
+	}
+}
+
+static int convert_proto_to_local(int domain, int32_t proto)
+{
+	if (domain == AF_INET) {
+		switch (proto) {
+		case 0: return IPPROTO_IP;
+		case 1: return IPPROTO_ICMP;
+		case 2: return IPPROTO_IGMP;
+		case 4: return IPPROTO_IPIP;
+		case 6: return IPPROTO_TCP;
+		case 8: return IPPROTO_EGP;
+		case 12: return IPPROTO_PUP;
+		case 17: return IPPROTO_UDP;
+		case 22: return IPPROTO_IDP;
+		case 29: return IPPROTO_TP;
+		case 33: return IPPROTO_DCCP;
+		case 41: return IPPROTO_IPV6;
+		case 46: return IPPROTO_RSVP;
+		case 47: return IPPROTO_GRE;
+		case 50: return IPPROTO_ESP;
+		case 51: return IPPROTO_AH;
+		case 92: return IPPROTO_MTP;
+		case 94: return IPPROTO_BEETPH;
+		case 98: return IPPROTO_ENCAP;
+		case 103: return IPPROTO_PIM;
+		case 108: return IPPROTO_COMP;
+		case 132: return IPPROTO_SCTP;
+		case 136: return IPPROTO_UDPLITE;
+		case 137: return IPPROTO_MPLS;
+		case 255: return IPPROTO_RAW;
+		default: return -1;
+		}
+	} else {
+		if (proto)
+			return -SYS_EINVAL;
+		return 0;
+	}
+}
+
+#endif
+
+uint32_t wasmjit_emscripten____syscall102(uint32_t call, uint32_t varargs,
+					  struct FuncInst *funcinst)
+{
+	long ret;
+	switch (call) {
+	case 1: { // socket
+		struct {
+			int32_t domain, type, protocol;
+		} args;
+		int domain, type, protocol;
+		if (_wasmjit_emscripten_copy_from_user(funcinst, &args,
+						       varargs, sizeof(args)))
+			return -SYS_EFAULT;
+
+		domain = convert_socket_domain_to_local(args.domain);
+		type = convert_socket_type_to_local(args.type);
+		protocol = convert_proto_to_local(domain, args.protocol);
+
+		ret = sys_socket(domain, type, protocol);
+		break;
+	}
+	case 2: { // bind
+	}
+	case 3: { // connect
+	}
+	case 4: { // listen
+	}
+	case 5: { // accept
+	}
+	case 6: { // getsockname
+	}
+	case 7: { // getpeername
+	}
+	case 11: { // sendto
+	}
+	case 12: { // recvfrom
+	}
+	case 14: { // setsockopt
+	}
+	case 15: { // getsockopt
+	}
+	case 16: { // sendmsg
+	}
+	case 17: { // recvmsg
+	}
+		ret = -EINVAL;
+		break;
+	default: {
+		char buf[64];
+		snprintf(buf, sizeof(buf),
+			 "unsupported socketcall syscall %d", call);
+		wasmjit_emscripten_internal_abort(buf);
+		ret = -EINVAL;
+		break;
+	}
+	}
+	return check_ret(ret);
 }
 
 void wasmjit_emscripten_cleanup(struct ModuleInst *moduleinst) {

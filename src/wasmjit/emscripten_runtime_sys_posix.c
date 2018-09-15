@@ -30,6 +30,9 @@
 
 #include <errno.h>
 
+#include <sys/types.h>
+#include <sys/socket.h>
+
 #define __KDECL(to,n,t) t _##n
 #define __KA(to,n,t) _##n
 
