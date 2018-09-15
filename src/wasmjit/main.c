@@ -55,7 +55,7 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 
-void *get_stack_top(void)
+static void *get_stack_top(void)
 {
 	struct rlimit rlim;
 	uintptr_t stack_bottom;
@@ -124,7 +124,7 @@ void *get_stack_top(void)
 
 #else
 
-void *get_stack_top(void)
+static void *get_stack_top(void)
 {
 	return NULL;
 }
