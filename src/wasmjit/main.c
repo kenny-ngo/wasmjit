@@ -131,7 +131,107 @@ static void *get_stack_top(void)
 
 #endif
 
-int get_static_bump(const char *filename, uint32_t *static_bump)
+static int parse_module(const char *filename, struct Module *module)
+{
+	char *buf = NULL;
+	int ret, result;
+	size_t size;
+	struct ParseState pstate;
+
+	buf = wasmjit_load_file(filename, &size);
+	if (!buf)
+		goto error;
+
+	ret = init_pstate(&pstate, buf, size);
+	if (!ret)
+		goto error;
+
+	ret = read_module(&pstate, module, NULL, 0);
+	if (!ret)
+		goto error;
+
+	result = 0;
+
+	if (0) {
+	error:
+		result = -1;
+	}
+
+	if (buf)
+		wasmjit_unload_file(buf, size);
+	return result;
+}
+
+static int dump_wasm_module(const char *filename)
+{
+	uint32_t i;
+	struct Module module;
+	int res = -1;
+
+	wasmjit_init_module(&module);
+
+	if (parse_module(filename, &module))
+		goto error;
+
+	/* the most basic validation */
+	if (module.code_section.n_codes != module.function_section.n_typeidxs) {
+		fprintf(stderr,
+			"# Functions != # Codes %" PRIu32 " != %" PRIu32 "\n",
+			module.function_section.n_typeidxs,
+			module.code_section.n_codes);
+		goto error;
+	}
+
+	for (i = 0; i < module.code_section.n_codes; ++i) {
+		uint32_t j;
+		struct TypeSectionType *type;
+		struct CodeSectionCode *code =
+			&module.code_section.codes[i];
+
+		type =
+			&module.type_section.types[module.function_section.
+						   typeidxs[i]];
+
+		printf("Code #%" PRIu32 "\n", i);
+
+		printf("Locals (%" PRIu32 "):\n", code->n_locals);
+		for (j = 0; j < code->n_locals; ++j) {
+			printf("  %s (%" PRIu32 ")\n",
+			       wasmjit_valtype_repr(code->locals[j].
+						    valtype),
+			       code->locals[j].count);
+		}
+
+		printf("Signature: [");
+		for (j = 0; j < type->n_inputs; ++j) {
+			printf("%s,",
+			       wasmjit_valtype_repr(type->
+						    input_types[j]));
+		}
+		printf("] -> [");
+		for (j = 0; j < FUNC_TYPE_N_OUTPUTS(type); ++j) {
+			printf("%s,",
+			       wasmjit_valtype_repr(FUNC_TYPE_OUTPUT_IDX(type, j)));
+		}
+		printf("]\n");
+
+		printf("Instructions:\n");
+		dump_instructions(module.code_section.codes[i].
+				  instructions,
+				  module.code_section.codes[i].
+				  n_instructions, 1);
+		printf("\n");
+	}
+
+	res = 0;
+
+ error:
+	wasmjit_free_module(&module);
+
+	return res;
+}
+
+static int get_static_bump(const char *filename, uint32_t *static_bump)
 {
 	char *js_path = NULL, *filebuf = NULL, *filebuf2 = NULL;
 	size_t fnlen, filesize;
@@ -195,17 +295,122 @@ int get_static_bump(const char *filename, uint32_t *static_bump)
 	return ret;
 }
 
+static int get_emscripten_runtime_parameters(const char *filename,
+					     uint32_t *static_bump,
+					     size_t *tablemin, size_t *tablemax)
+{
+	size_t i;
+	int ret;
+	struct Module module;
+
+	wasmjit_init_module(&module);
+
+	if (parse_module(filename, &module))
+		goto error;
+
+	/* find correct tablemin and tablemax */
+	for (i = 0; i < module.import_section.n_imports; ++i) {
+		struct ImportSectionImport *import;
+		import = &module.import_section.imports[i];
+		if (strcmp(import->module, "env") ||
+		    strcmp(import->name, "table") ||
+		    import->desc_type != IMPORT_DESC_TYPE_TABLE)
+			continue;
+
+		*tablemin = import->desc.tabletype.limits.min;
+		*tablemax = import->desc.tabletype.limits.max;
+		break;
+	}
+
+	if (i == module.import_section.n_imports)
+		goto error;
+
+	ret = get_static_bump(filename, static_bump);
+
+	if (0) {
+	error:
+		ret = -1;
+	}
+
+	wasmjit_free_module(&module);
+
+	return ret;
+}
+
+static int run_emscripten_file(const char *filename,
+			       uint32_t static_bump,
+			       size_t tablemin, size_t tablemax,
+			       int argc, char **argv)
+{
+	struct WasmJITHigh high;
+	int ret;
+	void *stack_top;
+	int high_init = 0;
+	const char *msg;
+
+	if (wasmjit_high_init(&high)) {
+		msg = "failed to initialize";
+		goto error;
+	}
+	high_init = 1;
+
+	if (wasmjit_high_instantiate_emscripten_runtime(&high,
+							static_bump,
+							tablemin, tablemax, 0)) {
+		msg = "failed to instantiate emscripten runtime";
+		goto error;
+	}
+
+	if (wasmjit_high_instantiate(&high, filename, "asm", 0)) {
+		msg = "failed to instantiate module";
+		goto error;
+	}
+
+	stack_top = get_stack_top();
+	if (!stack_top) {
+		fprintf(stderr, "warning: running without a stack limit\n");
+	}
+
+	wasmjit_set_stack_top(stack_top);
+
+	ret = wasmjit_high_emscripten_invoke_main(&high, "asm",
+						  argc, argv, 0);
+
+	if (WASMJIT_IS_TRAP_ERROR(ret)) {
+		fprintf(stderr, "TRAP: %s\n",
+			wasmjit_trap_reason_to_string(WASMJIT_DECODE_TRAP_ERROR(ret)));
+	} else if (ret < 0) {
+		msg = "failed to invoke main";
+		goto error;
+	}
+
+	if (0) {
+		char error_buffer[256];
+
+	error:
+		ret = wasmjit_high_error_message(&high,
+						 error_buffer,
+						 sizeof(error_buffer));
+		if (!ret) {
+			fprintf(stderr, "%s: %s\n",
+				msg, error_buffer);
+			ret = -1;
+		}
+	}
+
+	if (high_init)
+		wasmjit_high_close(&high);
+
+	return ret;
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
-	struct ParseState pstate;
-	struct Module module;
 	char *filename;
 	int dump_module, create_relocatable, create_relocatable_helper, opt;
-	size_t tablemin = 0, tablemax = 0, i;
-	uint32_t static_bump;
-	void *buf;
-	size_t size;
+	size_t tablemin = 0, tablemax = 0;
+	uint32_t static_bump = 0;
 
 	dump_module =  0;
 	create_relocatable =  0;
@@ -233,111 +438,33 @@ int main(int argc, char *argv[])
 
 	filename = argv[optind];
 
-	buf = wasmjit_load_file(filename, &size);
-	if (!buf)
-		return -1;
-
-	ret = init_pstate(&pstate, buf, size);
-	if (!ret) {
-		printf("Error loading file\n");
-		return -1;
-	}
-
-	wasmjit_init_module(&module);
-
-	ret = read_module(&pstate, &module, NULL, 0);
-	if (!ret) {
-		printf("Error parsing module\n");
-		return -1;
-	}
-
-	free(buf);
-
-	if (dump_module) {
-		uint32_t i;
-
-		for (i = 0; i < module.code_section.n_codes; ++i) {
-			uint32_t j;
-			struct TypeSectionType *type;
-			struct CodeSectionCode *code =
-			    &module.code_section.codes[i];
-
-			type =
-			    &module.type_section.types[module.function_section.
-						       typeidxs[i]];
-
-			printf("Code #%" PRIu32 "\n", i);
-
-			printf("Locals (%" PRIu32 "):\n", code->n_locals);
-			for (j = 0; j < code->n_locals; ++j) {
-				printf("  %s (%" PRIu32 ")\n",
-				       wasmjit_valtype_repr(code->locals[j].
-							    valtype),
-				       code->locals[j].count);
-			}
-
-			printf("Signature: [");
-			for (j = 0; j < type->n_inputs; ++j) {
-				printf("%s,",
-				       wasmjit_valtype_repr(type->
-							    input_types[j]));
-			}
-			printf("] -> [");
-			for (j = 0; j < FUNC_TYPE_N_OUTPUTS(type); ++j) {
-				printf("%s,",
-				       wasmjit_valtype_repr(FUNC_TYPE_OUTPUT_IDX(type, j)));
-			}
-			printf("]\n");
-
-			printf("Instructions:\n");
-			dump_instructions(module.code_section.codes[i].
-					  instructions,
-					  module.code_section.codes[i].
-					  n_instructions, 1);
-			printf("\n");
-		}
-
-		return 0;
-	}
-
-	/* the most basic validation */
-	if (module.code_section.n_codes != module.function_section.n_typeidxs) {
-		printf("# Functions != # Codes %" PRIu32 " != %" PRIu32 "\n",
-		       module.function_section.n_typeidxs,
-		       module.code_section.n_codes);
-		return -1;
-	}
+	if (dump_module)
+		return dump_wasm_module(filename);
 
 	if (create_relocatable) {
-		void *a_out;
-		size_t size;
+		struct Module module;
 
-		a_out = wasmjit_output_elf_relocatable("asm", &module, &size);
-		write(1, a_out, size);
+		wasmjit_init_module(&module);
 
-		return 0;
+		if (!parse_module(filename, &module)) {
+			void *a_out;
+			size_t size;
+			a_out = wasmjit_output_elf_relocatable("asm", &module, &size);
+			ret = write(1, a_out, size);
+			free(a_out);
+			ret = ret >= 0 ? 0 : -1;
+		} else {
+			ret = -1;
+		}
+
+		wasmjit_free_module(&module);
+
+		return ret;
 	}
 
-	/* find correct tablemin and tablemax */
-	for (i = 0; i < module.import_section.n_imports; ++i) {
-		struct ImportSectionImport *import;
-		import = &module.import_section.imports[i];
-		if (strcmp(import->module, "env") ||
-		    strcmp(import->name, "table") ||
-		    import->desc_type != IMPORT_DESC_TYPE_TABLE)
-			continue;
-
-		tablemin = import->desc.tabletype.limits.min;
-		tablemax = import->desc.tabletype.limits.max;
-		break;
-	}
-
-	/* get static bump */
-	ret = get_static_bump(filename, &static_bump);
-	if (ret) {
-		fprintf(stderr, "Couldn't find static bump in JS runtime file\n");
+	ret = get_emscripten_runtime_parameters(filename, &static_bump, &tablemin, &tablemax);
+	if (ret)
 		return -1;
-	}
 
 	if (create_relocatable_helper) {
 		struct WasmJITEmscriptenMemoryGlobals globals;
@@ -362,69 +489,7 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	{
-		struct WasmJITHigh high;
-		int ret;
-		void *stack_top;
-		int high_init = 0;
-		const char *msg;
-
-		if (wasmjit_high_init(&high)) {
-			msg = "failed to initialize";
-			goto error;
-		}
-		high_init = 1;
-
-		if (wasmjit_high_instantiate_emscripten_runtime(&high,
-								static_bump,
-								tablemin, tablemax, 0)) {
-			msg = "failed to instantiate emscripten runtime";
-			goto error;
-		}
-
-		if (wasmjit_high_instantiate(&high, filename, "asm", 0)) {
-			msg = "failed to instantiate module";
-			goto error;
-		}
-
-		stack_top = get_stack_top();
-		if (!stack_top) {
-			fprintf(stderr, "warning: running without a stack limit\n");
-		}
-
-		wasmjit_set_stack_top(stack_top);
-
-		ret = wasmjit_high_emscripten_invoke_main(&high, "asm",
-							  argc - optind,
-							  &argv[optind], 0);
-
-		if (WASMJIT_IS_TRAP_ERROR(ret)) {
-			fprintf(stderr, "TRAP: %s\n",
-				wasmjit_trap_reason_to_string(WASMJIT_DECODE_TRAP_ERROR(ret)));
-		} else if (ret < 0) {
-			msg = "failed to invoke main";
-			goto error;
-		}
-
-		if (0) {
-			char error_buffer[256];
-
-		error:
-			ret = wasmjit_high_error_message(&high,
-							 error_buffer,
-							 sizeof(error_buffer));
-			if (!ret) {
-				fprintf(stderr, "%s: %s\n",
-					msg, error_buffer);
-				ret = -1;
-			}
-		}
-
-		if (high_init)
-			wasmjit_high_close(&high);
-
-		wasmjit_free_module(&module);
-
-		return ret;
-	}
+	return run_emscripten_file(filename,
+				   static_bump, tablemin, tablemax,
+				   argc - optind, &argv[optind]);
 }
