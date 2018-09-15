@@ -48,6 +48,8 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi)
 {
 	size_t i;
 
+	if (smi->initted) return;
+
 	/* type-check all imports */
 
 	for (i = 0; i < smi->func_types.n_elts; ++i) {
@@ -83,64 +85,57 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi)
 		// smi->global_types.n_elts
 		struct GlobalInst *my_global = smi->module.globals.elts[smi->global_types.n_elts + i];
 		struct GlobalInit *gitr = &smi->global_inits.elts[i];
-		while (gitr->init_type == GLOBAL_GLOBAL_INIT) {
-			gitr = gitr->init.parent;
+
+		if (gitr->init_type == GLOBAL_GLOBAL_INIT) {
+			/* TODO: check types */
+			wasmjit_init_static_module(gitr->init.parent.module);
+			my_global->value = gitr->init.parent.global->value;
+		} else {
+			my_global->value = gitr->init.constant;
 		}
-		my_global->value = gitr->init.constant;
 	}
 
 	for (i = 0; i < smi->elements.n_elts; ++i) {
 		struct ElementInst *element = &smi->elements.elts[i];
 		struct TableInst *table = smi->module.tables.elts[element->tableidx];
 		size_t j;
-		uint32_t offset;
+		struct Value offset;
 
 		if (element->offset_source_type == GLOBAL_CONST_INIT) {
-			if (element->offset.constant.type != VALTYPE_I32)
-				wasmjit_trap(WASMJIT_TRAP_MISMATCHED_TYPE);
-			offset = element->offset.constant.data.i32;
+			offset = element->offset.constant;
 		} else {
-			struct GlobalInit *gitr = element->offset.global;
-			while (gitr->init_type == GLOBAL_GLOBAL_INIT) {
-				gitr = gitr->init.parent;
-			}
-			if (gitr->init.constant.type != VALTYPE_I32)
-				wasmjit_trap(WASMJIT_TRAP_MISMATCHED_TYPE);
-			offset = gitr->init.constant.data.i32;
+			offset = element->offset.global->value;
 		}
 
-		if (element->n_funcidxs + offset > table->length)
+		if (offset.type != VALTYPE_I32)
+			wasmjit_trap(WASMJIT_TRAP_MISMATCHED_TYPE);
+
+		if (element->n_funcidxs + offset.data.i32 > table->length)
 			wasmjit_trap(WASMJIT_TRAP_TABLE_OVERFLOW);
 
 		for (j = 0; j < element->n_funcidxs; ++j) {
-			table->data[offset + j] = smi->module.funcs.elts[element->funcidxs[j]];
+			table->data[offset.data.i32 + j] = smi->module.funcs.elts[element->funcidxs[j]];
 		}
 	}
 
 	for (i = 0; i < smi->datas.n_elts; ++i) {
 		struct DataInst *data = &smi->datas.elts[i];
 		struct MemInst *mem = smi->module.mems.elts[data->memidx];
-
-		uint32_t offset;
+		struct Value offset;
 
 		if (data->offset_source_type == GLOBAL_CONST_INIT) {
-			if (data->offset.constant.type != VALTYPE_I32)
-				wasmjit_trap(WASMJIT_TRAP_MISMATCHED_TYPE);
-			offset = data->offset.constant.data.i32;
+			offset = data->offset.constant;
 		} else {
-			struct GlobalInit *gitr = data->offset.global;
-			while (gitr->init_type == GLOBAL_GLOBAL_INIT) {
-				gitr = gitr->init.parent;
-			}
-			if (gitr->init.constant.type != VALTYPE_I32)
-				wasmjit_trap(WASMJIT_TRAP_MISMATCHED_TYPE);
-			offset = gitr->init.constant.data.i32;
+			offset = data->offset.global->value;
 		}
 
-		if (data->buf_size + offset > mem->size)
+		if (offset.type != VALTYPE_I32)
+			wasmjit_trap(WASMJIT_TRAP_MISMATCHED_TYPE);
+
+		if (data->buf_size + offset.data.i32 > mem->size)
 			wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
 
-		memcpy(mem->data + offset,
+		memcpy(mem->data + offset.data.i32,
 		       data->buf,
 		       data->buf_size);
 	}
@@ -154,4 +149,6 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi)
 		start = smi->start_func->compiled_code;
 		start();
 	}
+
+	smi->initted = 1;
 }

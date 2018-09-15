@@ -35,11 +35,16 @@ enum {
 	GLOBAL_GLOBAL_INIT,
 };
 
+struct StaticModuleInst;
+
 struct GlobalInit {
 	unsigned init_type;
 	union GlobalInitUnion {
 		struct Value constant;
-		struct GlobalInit *parent;
+		struct MGStruct {
+			struct StaticModuleInst *module;
+			struct GlobalInst *global;
+		} parent;
 	} init;
 };
 
@@ -48,7 +53,7 @@ struct ElementInst {
 	unsigned offset_source_type;
 	union ElementInstUnion {
 		struct Value constant;
-		struct GlobalInit *global;
+		struct GlobalInst *global;
 	} offset;
 	size_t n_funcidxs;
 	uint32_t *funcidxs;
@@ -59,7 +64,7 @@ struct DataInst {
 	unsigned offset_source_type;
 	union DataInstUnion {
 		struct Value constant;
-		struct GlobalInit *global;
+		struct GlobalInst *global;
 	} offset;
 	size_t buf_size;
 	char *buf;
@@ -77,6 +82,8 @@ struct StaticModuleInst {
 	DEFINE_ANON_VECTOR(struct DataInst) datas;
 	DEFINE_ANON_VECTOR(struct ElementInst) elements;
 
+	int initted;
+
 	struct FuncInst *start_func;
 };
 
@@ -92,18 +99,6 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi);
 #define WASM_MODULE_SYMBOL(___module) CAT(___module,  _module)
 
 #define _DEFINE_WASM_GLOBAL(_module, _name, _init, _type, _member, _mut)	\
-	struct GlobalInit WASM_SYMBOL(_module, _name, global_init) = {	\
-		.init_type = GLOBAL_CONST_INIT,				\
-		.init = {						\
-			.constant = {					\
-				.type = (_type),			\
-				.data = {				\
-					._member = (_init),		\
-				}					\
-			}						\
-		}							\
-	};								\
-									\
 	struct GlobalInst WASM_SYMBOL(_module, _name, global) = {	\
 		.value = {						\
 			.type = (_type),				\

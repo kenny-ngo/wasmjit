@@ -31,7 +31,7 @@
 #include <wasmjit/emscripten_runtime.h>
 
 #define START_MODULE()				\
-	extern struct ModuleInst WASM_MODULE_SYMBOL(CURRENT_MODULE);
+	static struct ModuleInst WASM_MODULE_SYMBOL(CURRENT_MODULE);
 
 #define END_MODULE()
 #define START_TABLE_DEFS()
@@ -102,7 +102,8 @@ extern struct TableInst WASM_TABLE_SYMBOL(env, table);
 		};
 
 #define END_MODULE()							\
-	struct ModuleInst WASM_MODULE_SYMBOL(CURRENT_MODULE) = {	\
+	__attribute__((unused))						\
+	static struct ModuleInst WASM_MODULE_SYMBOL(CURRENT_MODULE) = {	\
 		.funcs = {						\
 			.n_elts = ARRAY_LEN(CAT(CURRENT_MODULE, _funcs)), \
 			.elts = CAT(CURRENT_MODULE, _funcs),		\

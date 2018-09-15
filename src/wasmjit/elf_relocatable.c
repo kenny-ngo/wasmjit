@@ -698,6 +698,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		smi.module.n_imported_tables = n_imported_tables;
 		smi.module.n_imported_mems = n_imported_mems;
 		smi.module.n_imported_globals = n_imported_globals;
+		smi.initted = 0;
 
 		smi.module.types.n_elts = module->type_section.n_types;
 		ADD_DATA_PTR_RELOCATION_RAW(output->n_elts +
@@ -1039,8 +1040,8 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		module_globals.elts[i].init_symidx = symbols->n_elts;
 
 		string_offset = strtab->n_elts;
-		ret = snprintf(buf, sizeof(buf), "%s__%s__global_init",
-			       import->module, import->name);
+		ret = snprintf(buf, sizeof(buf), "%s_module",
+			       import->module);
 		if (!output_buf(strtab, buf, ret + 1))
 			goto error;
 		if (!add_symbol(symbols, string_offset, 0, STB_GLOBAL,
@@ -1075,11 +1076,23 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 		if (global->instructions[0].opcode != OPCODE_GET_GLOBAL)
 			continue;
 
+		if (global->instructions[0].data.get_global.globalidx >= n_imported_globals)
+			/* can only refer to imported globals */
+			goto error;
+
 		ADD_DATA_PTR_RELOCATION_RAW(data_section_start +
 					    offset +
 					    offsetof(struct GlobalInit, init) +
-					    offsetof(union GlobalInitUnion, parent),
+					    offsetof(union GlobalInitUnion, parent) +
+					    offsetof(struct MGStruct, module),
 					    module_globals.elts[global->instructions[0].data.get_global.globalidx].init_symidx);
+
+		ADD_DATA_PTR_RELOCATION_RAW(data_section_start +
+					    offset +
+					    offsetof(struct GlobalInit, init) +
+					    offsetof(union GlobalInitUnion, parent) +
+					    offsetof(struct MGStruct, global),
+					    module_globals.elts[global->instructions[0].data.get_global.globalidx].symidx);
 	}
 
 
@@ -1095,7 +1108,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 					    offset +
 					    offsetof(struct ElementInst, offset) +
 					    offsetof(union ElementInstUnion, global),
-					    module_globals.elts[elt_sec->instructions[0].data.get_global.globalidx].init_symidx);
+					    module_globals.elts[elt_sec->instructions[0].data.get_global.globalidx].symidx);
 	}
 
 	for (i = 0; i < module->data_section.n_datas; ++i) {
@@ -1109,7 +1122,7 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 					    offset +
 					    offsetof(struct DataInst, offset) +
 					    offsetof(union DataInstUnion, global),
-					    module_globals.elts[data_sec->instructions[0].data.get_global.globalidx].init_symidx);
+					    module_globals.elts[data_sec->instructions[0].data.get_global.globalidx].symidx);
 	}
 
 	/* add startfunc reference */
@@ -1226,26 +1239,28 @@ void *wasmjit_output_elf_relocatable(const char *module_name,
 				symbol->st_value,
 				symbol->st_size))
 			goto error;
+	}
 
-		/* also export global inits */
-		if (export->idx_type == IMPORT_DESC_TYPE_GLOBAL) {
-			string_offset = strtab->n_elts;
-			ret = snprintf(buf, sizeof(buf), "%s__%s__global_init",
-				       module_name, export->name);
-			if (!output_buf(strtab, buf, ret + 1))
-				goto error;
 
-			sidx = module_globals.elts[export->idx].init_symidx;
-			symbol = &symbols->elts[sidx];
-			if (!add_symbol(symbols, string_offset,
-					ELF64_ST_TYPE(symbol->st_info),
-					STB_GLOBAL,
-					symbol->st_other,
-					symbol->st_shndx,
-					symbol->st_value,
-					symbol->st_size))
-				goto error;
-		}
+	{
+		size_t sidx = static_module_symbol;
+		size_t string_offset = strtab->n_elts;
+		Elf64_Sym *symbol = &symbols->elts[sidx];
+		int ret;
+
+		ret = snprintf(buf, sizeof(buf), "%s_module",
+			       module_name);
+		if (!output_buf(strtab, buf, ret + 1))
+			goto error;
+
+		if (!add_symbol(symbols, string_offset,
+				ELF64_ST_TYPE(symbol->st_info),
+				STB_GLOBAL,
+				symbol->st_other,
+				symbol->st_shndx,
+				symbol->st_value,
+				symbol->st_size))
+			goto error;
 	}
 
 	/* align to 8 */
