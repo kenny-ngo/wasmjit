@@ -101,6 +101,8 @@ extern struct TableInst WASM_TABLE_SYMBOL(env, table);
 #define END_FUNCTION_DEFS()			\
 		};
 
+struct EmscriptenContext g_emscripten_ctx;
+
 #define END_MODULE()							\
 	struct StaticModuleInst WASM_MODULE_SYMBOL(CURRENT_MODULE) = {	\
 		.module = {						\
@@ -120,6 +122,7 @@ extern struct TableInst WASM_TABLE_SYMBOL(env, table);
 				.n_elts = ARRAY_LEN(CAT(CURRENT_MODULE, _globals)), \
 				.elts = CAT(CURRENT_MODULE, _globals),	\
 			},						\
+			.private_data = &g_emscripten_ctx,		\
 		},							\
 		.initted = 1,						\
 	};
@@ -129,14 +132,6 @@ extern struct TableInst WASM_TABLE_SYMBOL(env, table);
 extern struct FuncInst WASM_FUNC_SYMBOL(asm, _main);
 extern struct FuncInst WASM_FUNC_SYMBOL(asm, stackAlloc);
 extern struct FuncInst WASM_FUNC_SYMBOL(asm, ___errno_location) __attribute__((weak));
-
-struct EmscriptenContext g_emscripten_ctx;
-
-struct EmscriptenContext *wasmjit_emscripten_get_context(struct ModuleInst *module_inst)
-{
-	(void)module_inst;
-	return &g_emscripten_ctx;
-}
 
 int main(int argc, char *argv[]) {
 	int ret;

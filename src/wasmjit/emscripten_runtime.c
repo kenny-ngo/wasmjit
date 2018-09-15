@@ -504,6 +504,11 @@ void wasmjit_emscripten_cleanup(struct ModuleInst *moduleinst) {
 	/* TODO: implement */
 }
 
+struct EmscriptenContext *wasmjit_emscripten_get_context(struct ModuleInst *module_inst)
+{
+	return module_inst->private_data;
+}
+
 void wasmjit_emscripten_derive_memory_globals(uint32_t static_bump,
 					      struct WasmJITEmscriptenMemoryGlobals *out)
 {

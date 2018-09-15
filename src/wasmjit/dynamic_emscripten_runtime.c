@@ -29,11 +29,6 @@
 
 #include <wasmjit/sys.h>
 
-struct EmscriptenContext *wasmjit_emscripten_get_context(struct ModuleInst *module_inst)
-{
-	return module_inst->private_data;
-}
-
 struct NamedModule *wasmjit_instantiate_emscripten_runtime(uint32_t static_bump,
 							   size_t tablemin,
 							   size_t tablemax,
