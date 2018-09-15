@@ -227,7 +227,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (optind >= argc) {
-		printf("Need an input file\n");
+		fprintf(stderr, "Need an input file\n");
 		return -1;
 	}
 
