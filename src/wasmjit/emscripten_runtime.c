@@ -27,6 +27,70 @@
 #include <wasmjit/emscripten_runtime_sys.h>
 #include <wasmjit/util.h>
 #include <wasmjit/runtime.h>
+#include <wasmjit/sys.h>
+
+enum {
+#define ERRNO(name, value) SYS_ ## name = value,
+#include <wasmjit/emscripten_runtime_sys_errno_def.h>
+#undef ERRNO
+};
+
+/* error codes are the same for these targets */
+#if (defined(__KERNEL__) || defined(__linux__)) && defined(__x86_64__)
+
+static int32_t check_ret(long errno_)
+{
+#if __LONG_WIDTH__ > 32
+	if (errno_ < -2147483648)
+		wasmjit_trap(WASMJIT_TRAP_INTEGER_OVERFLOW);
+#endif
+#if __LONG_WIDTH__ > 32
+	if (errno_ > INT32_MAX)
+		wasmjit_trap(WASMJIT_TRAP_INTEGER_OVERFLOW);
+#endif
+	return errno_;
+}
+
+#else
+
+static int32_t check_ret(long errno_)
+{
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Woverride-init"
+	static int32_t to_sys_errno[] = {
+#define ERRNO(name, value) [name] = -value,
+#include <wasmjit/emscripten_runtime_sys_errno_def.h>
+#undef ERRNO
+	};
+#pragma GCC diagnostic pop
+
+	int32_t toret;
+
+	if (errno_ >= 0) {
+#if __LONG_WIDTH__ > 32
+		if (errno_ > INT32_MAX)
+			wasmjit_trap(WASMJIT_TRAP_INTEGER_OVERFLOW);
+#endif
+		return errno_;
+	}
+
+	if (errno_ == LONG_MIN)
+		wasmjit_trap(WASMJIT_TRAP_INTEGER_OVERFLOW);
+
+	errno_ = -errno_;
+
+	if ((size_t) errno_ >= sizeof(to_sys_errno) / sizeof(to_sys_errno[0])) {
+		toret = -SYS_EINVAL;
+	} else {
+		toret = to_sys_errno[errno_];
+		if (!toret)
+			toret = -SYS_EINVAL;
+	}
+
+	return toret;
+}
+
+#endif
 
 static int wasmjit_emscripten_check_range(struct MemInst *meminst,
 					  uint32_t user_ptr,
@@ -195,16 +259,6 @@ static struct EmscriptenContext *_wasmjit_emscripten_get_context(struct FuncInst
 	return wasmjit_emscripten_get_context(funcinst->module_inst);
 }
 
-static int32_t check_ret(long ret) {
-	/* these are defined by GCC */
-#if __LONG_MAX__ > __INT32_MAX__
-	if (ret > INT32_MAX || ret < INT32_MIN) {
-		wasmjit_trap(WASMJIT_TRAP_INTEGER_OVERFLOW);
-	}
-#endif
-	return ret;
-}
-
 void wasmjit_emscripten_abortStackOverflow(uint32_t allocSize, struct FuncInst *funcinst)
 {
 	(void)funcinst;
@@ -280,14 +334,14 @@ uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs, stru
 
 	if (_wasmjit_emscripten_copy_from_user(funcinst,
 					       &args, varargs, sizeof(args)))
-		return -EFAULT;
+		return -SYS_EFAULT;
 
 	if (!_wasmjit_emscripten_check_range(funcinst, args.result, 4))
-		return -EFAULT;
+		return -SYS_EFAULT;
 
 	// emscripten off_t is 32-bits, offset_high is useless
 	if (args.offset_high)
-		return -EINVAL;
+		return -SYS_EINVAL;
 
 	ret = check_ret(sys_lseek(args.fd, args.offset_low, args.whence));
 
@@ -316,13 +370,13 @@ uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, stru
 	if (_wasmjit_emscripten_copy_from_user(funcinst,
 					       &args, varargs,
 					       sizeof(args)))
-		return -EFAULT;
+		return -SYS_EFAULT;
 
 	/* TODO: do UIO_FASTIOV stack optimization */
 	liov = wasmjit_alloc_vector(args.iovcnt,
 				    sizeof(struct iovec), NULL);
 	if (!liov) {
-		return -ENOMEM;
+		return -SYS_ENOMEM;
 	}
 
 	for (i = 0; i < args.iovcnt; ++i) {
@@ -369,10 +423,10 @@ uint32_t wasmjit_emscripten____syscall4(uint32_t which, uint32_t varargs, struct
 	(void)which;
 
 	if (_wasmjit_emscripten_copy_from_user(funcinst, &args, varargs, sizeof(args)))
-		return -EFAULT;
+		return -SYS_EFAULT;
 
 	if (!_wasmjit_emscripten_check_range(funcinst, args.buf, args.count))
-		return -EFAULT;
+		return -SYS_EFAULT;
 
 	base = wasmjit_emscripten_get_base_address(funcinst);
 
@@ -400,7 +454,7 @@ uint32_t wasmjit_emscripten____syscall6(uint32_t which, uint32_t varargs, struct
 	(void)which;
 
 	if (_wasmjit_emscripten_copy_from_user(funcinst, &args, varargs, sizeof(args)))
-		return -EFAULT;
+		return -SYS_EFAULT;
 
 	return check_ret(sys_close(args.fd));
 }
@@ -491,10 +545,10 @@ uint32_t wasmjit_emscripten____syscall10(uint32_t which, uint32_t varargs,
 
 	if (_wasmjit_emscripten_copy_from_user(funcinst, &args,
 					       varargs, sizeof(args)))
-		return -EFAULT;
+		return -SYS_EFAULT;
 
 	if (!_wasmjit_emscripten_check_string(funcinst, args.pathname, PATH_MAX))
-		return -EFAULT;
+		return -SYS_EFAULT;
 
 	return check_ret(sys_unlink(base + args.pathname));
 }

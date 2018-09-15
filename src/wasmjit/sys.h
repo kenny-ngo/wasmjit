@@ -198,6 +198,7 @@ void longjmp(jmp_buf, int) __attribute__((noreturn));
 #include <inttypes.h>
 #include <math.h>
 #include <setjmp.h>
+#include <limits.h>
 
 #endif
 
