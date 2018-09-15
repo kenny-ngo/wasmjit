@@ -443,6 +443,7 @@ void wasmjit_emscripten____buildEnvironment(uint32_t environ_arg,
 	uint32_t envPtr;
 	uint32_t poolPtr;
 	size_t i = 0;
+	char **env;
 
 	if (_wasmjit_emscripten_copy_from_user(funcinst,
 					       &envPtr,
@@ -455,7 +456,7 @@ void wasmjit_emscripten____buildEnvironment(uint32_t environ_arg,
 					       sizeof(poolPtr)))
 		wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
 
-	for (char **env = environ; *env; ++env, ++i) {
+	for (env = environ; *env; ++env, ++i) {
 		size_t len = strlen(*env);
 		if (!_wasmjit_emscripten_check_range(funcinst, poolPtr, len + 1))
 			wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
