@@ -260,7 +260,7 @@ static int get_static_bump(const char *filename, uint32_t *static_bump)
 	memcpy(filebuf2, filebuf, filesize);
 	filebuf2[filesize] = '\0';
 
-	ret = regcomp(&re, "(^|;) *var +STATIC_BUMP *= *([0-9]+) *(;|$)", REG_EXTENDED);
+	ret = regcomp(&re, "(^|;|\n) *var +STATIC_BUMP *= *([0-9]+) *(;|$|\n)", REG_EXTENDED);
 	if (ret)
 		goto error;
 
