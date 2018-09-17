@@ -577,6 +577,10 @@ uint32_t wasmjit_emscripten____syscall10(uint32_t which, uint32_t varargs,
 	return check_ret(sys_unlink(base + args.pathname));
 }
 
+#if !defined(__INT_WIDTH__) && defined(__LP64__)
+#define __INT_WIDTH__ 32
+#endif
+
 #if __INT_WIDTH__ < 32
 #error This runtime requires at least 32-bit ints
 #endif
