@@ -31,7 +31,13 @@
 #include <stddef.h>
 #endif
 
+#if defined(__linux__)
 #include <linux/ioctl.h>
+#elif defined(__APPLE__)
+#include <sys/ioccom.h>
+#else
+#error System not supported
+#endif
 
 #define KWASMJIT_MAGIC 0xCC
 
