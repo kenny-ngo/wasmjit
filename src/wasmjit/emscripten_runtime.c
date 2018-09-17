@@ -198,9 +198,24 @@ static char *wasmjit_emscripten_get_base_address(struct FuncInst *funcinst) {
 	return wasmjit_emscripten_get_mem_inst(funcinst)->data;
 }
 
-int wasmjit_emscripten_init_for_module(struct EmscriptenContext *ctx,
-				       struct FuncInst *errno_location_inst)
-{
+int wasmjit_emscripten_invoke_main(struct EmscriptenContext *ctx,
+				   struct MemInst *meminst,
+				   struct FuncInst *stack_alloc_inst,
+				   struct FuncInst *errno_location_inst,
+				   struct FuncInst *main_inst,
+				   int argc,
+				   char *argv[],
+				   char *envp[]) {
+	uint32_t (*stack_alloc)(uint32_t);
+	union ValueUnion out;
+	int ret;
+
+	if (!(stack_alloc_inst->type.n_inputs == 1 &&
+	      stack_alloc_inst->type.input_types[0] == VALTYPE_I32 &&
+	      stack_alloc_inst->type.output_type)) {
+		return -1;
+	}
+
 	if (errno_location_inst) {
 		struct FuncType errno_location_type;
 		wasmjit_valtype_t errno_location_return_type = VALTYPE_I32;
@@ -216,24 +231,7 @@ int wasmjit_emscripten_init_for_module(struct EmscriptenContext *ctx,
 	}
 
 	ctx->errno_location_inst = errno_location_inst;
-
-	return 0;
-}
-
-int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
-				   struct FuncInst *stack_alloc_inst,
-				   struct FuncInst *main_inst,
-				   int argc,
-				   char *argv[]) {
-	uint32_t (*stack_alloc)(uint32_t);
-	union ValueUnion out;
-	int ret;
-
-	if (!(stack_alloc_inst->type.n_inputs == 1 &&
-	      stack_alloc_inst->type.input_types[0] == VALTYPE_I32 &&
-	      stack_alloc_inst->type.output_type)) {
-		return -1;
-	}
+	ctx->environ = envp;
 
 	stack_alloc = stack_alloc_inst->compiled_code;
 
@@ -517,7 +515,6 @@ void wasmjit_emscripten_abort(uint32_t what, struct FuncInst *funcinst)
 	wasmjit_emscripten_internal_abort(abort_string);
 }
 
-extern char **environ;
 void wasmjit_emscripten____buildEnvironment(uint32_t environ_arg,
 					    struct FuncInst *funcinst)
 {
@@ -538,7 +535,7 @@ void wasmjit_emscripten____buildEnvironment(uint32_t environ_arg,
 					       sizeof(poolPtr)))
 		wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
 
-	for (env = environ; *env; ++env, ++i) {
+	for (env = _wasmjit_emscripten_get_context(funcinst)->environ; *env; ++env, ++i) {
 		size_t len = strlen(*env);
 		if (!_wasmjit_emscripten_check_range(funcinst, poolPtr, len + 1))
 			wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);

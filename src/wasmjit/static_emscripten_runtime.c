@@ -134,13 +134,10 @@ extern struct FuncInst WASM_FUNC_SYMBOL(asm, stackAlloc);
 extern struct FuncInst WASM_FUNC_SYMBOL(asm, ___errno_location) __attribute__((weak));
 
 int main(int argc, char *argv[]) {
-	int ret;
-	ret = wasmjit_emscripten_init_for_module(&g_emscripten_ctx,
-						 &WASM_FUNC_SYMBOL(asm, ___errno_location));
-	if (ret < 0)
-		return -1;
-	return wasmjit_emscripten_invoke_main(&WASM_MEMORY_SYMBOL(env, memory),
+	return wasmjit_emscripten_invoke_main(&g_emscripten_ctx,
+					      &WASM_MEMORY_SYMBOL(env, memory),
 					      &WASM_FUNC_SYMBOL(asm, stackAlloc),
+					      &WASM_FUNC_SYMBOL(asm, ___errno_location),
 					      &WASM_FUNC_SYMBOL(asm, _main),
 					      argc, argv);
 }

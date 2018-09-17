@@ -60,7 +60,7 @@ int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
 						int flags);
 int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 					const char *module_name,
-					int argc, char **argv,
+					int argc, char **argv, char **envp,
 					int flags);
 void wasmjit_high_close(struct WasmJITHigh *self);
 int wasmjit_high_error_message(struct WasmJITHigh *self, char *buf, size_t buf_size);

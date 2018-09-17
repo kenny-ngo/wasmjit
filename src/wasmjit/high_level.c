@@ -266,7 +266,8 @@ int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
 
 int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 					const char *module_name,
-					int argc, char **argv, int flags)
+					int argc, char **argv, char **envp,
+					int flags)
 {
 	size_t i;
 	struct ModuleInst *env_module_inst;
@@ -284,6 +285,7 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 		arg.module_name = module_name;
 		arg.argc = argc;
 		arg.argv = argv;
+		arg.envp = envp;
 		arg.flags = flags;
 
 		return ioctl(self->fd, KWASMJIT_EMSCRIPTEN_INVOKE_MAIN, &arg);
@@ -331,21 +333,18 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 	errno_location_inst = wasmjit_get_export(module_inst, "___errno_location",
 						 IMPORT_DESC_TYPE_FUNC).func;
 
-	ret = wasmjit_emscripten_init_for_module(wasmjit_emscripten_get_context(env_module_inst),
-						 errno_location_inst);
-	if (ret < 0)
-		return -1;
-
 	if ((ret = setjmp(jmpbuf))) {
 		/* if the code trapped, return error */
 		ret = WASMJIT_ENCODE_TRAP_ERROR(ret - 1);
 	}
 	else {
 		wasmjit_set_jmp_buf(&jmpbuf);
-		ret = wasmjit_emscripten_invoke_main(meminst,
+		ret = wasmjit_emscripten_invoke_main(wasmjit_emscripten_get_context(env_module_inst),
+						     meminst,
 						     stack_alloc_inst,
+						     errno_location_inst,
 						     main_inst,
-						     argc, argv);
+						     argc, argv, envp);
 	}
 
 	wasmjit_emscripten_cleanup(env_module_inst);

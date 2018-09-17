@@ -341,7 +341,7 @@ static int get_emscripten_runtime_parameters(const char *filename,
 static int run_emscripten_file(const char *filename,
 			       uint32_t static_bump,
 			       size_t tablemin, size_t tablemax,
-			       int argc, char **argv)
+			       int argc, char **argv, char **envp)
 {
 	struct WasmJITHigh high;
 	int ret;
@@ -375,7 +375,7 @@ static int run_emscripten_file(const char *filename,
 	wasmjit_set_stack_top(stack_top);
 
 	ret = wasmjit_high_emscripten_invoke_main(&high, "asm",
-						  argc, argv, 0);
+						  argc, argv, envp, 0);
 
 	if (WASMJIT_IS_TRAP_ERROR(ret)) {
 		fprintf(stderr, "TRAP: %s\n",
@@ -405,7 +405,7 @@ static int run_emscripten_file(const char *filename,
 	return ret;
 }
 
-int main(int argc, char *argv[])
+int main(int argc, char *argv[], char *envp[])
 {
 	int ret;
 	char *filename;
@@ -492,5 +492,5 @@ int main(int argc, char *argv[])
 
 	return run_emscripten_file(filename,
 				   static_bump, tablemin, tablemax,
-				   argc - optind, &argv[optind]);
+				   argc - optind, &argv[optind], envp);
 }

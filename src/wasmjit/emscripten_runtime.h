@@ -35,6 +35,7 @@ enum {
 
 struct EmscriptenContext {
 	struct FuncInst *errno_location_inst;
+	char **environ;
 };
 
 void wasmjit_emscripten_abortStackOverflow(uint32_t allocSize, struct FuncInst *funcinst);
@@ -64,14 +65,14 @@ void wasmjit_emscripten_cleanup(struct ModuleInst *);
 void wasmjit_emscripten_internal_abort(const char *msg) __attribute__((noreturn));
 struct MemInst *wasmjit_emscripten_get_mem_inst(struct FuncInst *funcinst);
 
-int wasmjit_emscripten_init_for_module(struct EmscriptenContext *,
-				       struct FuncInst *errno_location_inst);
-
-int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
+int wasmjit_emscripten_invoke_main(struct EmscriptenContext *ctx,
+				   struct MemInst *meminst,
 				   struct FuncInst *stack_alloc_inst,
+				   struct FuncInst *errno_location_inst,
 				   struct FuncInst *main_inst,
 				   int argc,
-				   char *argv[]);
+				   char *argv[],
+				   char *envp[]);
 
 struct WasmJITEmscriptenMemoryGlobals {
 	uint32_t memoryBase;

@@ -202,6 +202,7 @@ struct InvokeMainArgs {
 	const char *module_name;
 	int argc;
 	char **argv;
+	char **envp;
 	int flags;
 };
 
@@ -212,6 +213,7 @@ static int handler(void *ctx)
 						   arg->module_name,
 						   arg->argc,
 						   arg->argv,
+						   arg->envp,
 						   arg->flags);
 }
 
@@ -220,7 +222,7 @@ int invoke_on_stack(void *stack, void *fptr, void *ctx);
 static int invoke_main_on_stack(void *stack,
 				struct WasmJITHigh *high,
 				const char *module_name,
-				int argc, char **argv,
+				int argc, char **argv, char **envp,
 				int flags)
 {
 	struct InvokeMainArgs args = {
@@ -228,6 +230,7 @@ static int invoke_main_on_stack(void *stack,
 		.module_name = module_name,
 		.argc = argc,
 		.argv = argv,
+		.envp = envp,
 		.flags = flags,
 	};
 #if defined(CONFIG_VMAP_STACK) && defined(__x86_64__)
@@ -241,7 +244,7 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 					   struct kwasmjit_emscripten_invoke_main_args *arg)
 {
 	int retval, i;
-	char **argv = NULL, *module_name = NULL;
+	char **argv = NULL, *module_name = NULL, **envp = NULL;
 
 	argv = kvzalloc(arg->argc * sizeof(char *), GFP_KERNEL);
 	if (IS_ERR(argv)) {
@@ -257,6 +260,31 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 		if (IS_ERR(argv[i])) {
 			retval = PTR_ERR(argv[i]);
 			argv[i] = NULL;
+			goto error;
+		}
+	}
+
+	for (i = 0; ; ++i) {
+		char __user *env;
+		get_user(env, arg->envp + i);
+		if (!env) break;
+	}
+
+	envp = kvzalloc((i + 1) * sizeof(char *), GFP_KERNEL);
+	if (IS_ERR(envp)) {
+		retval = PTR_ERR(envp);
+		envp = NULL;
+		goto error;
+	}
+
+	for (i = 0; ; ++i) {
+		char __user *env;
+		get_user(env, arg->envp + i);
+		if (!env) break;
+		envp[i] = kvstrndup_user(env, 1024, GFP_KERNEL);
+		if (IS_ERR(envp[i])) {
+			retval = PTR_ERR(envp[i]);
+			envp[i] = NULL;
 			goto error;
 		}
 	}
@@ -335,11 +363,11 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 			retval = invoke_main_on_stack(stack2,
 						      &self->high,
 						      module_name,
-						      arg->argc, argv, arg->flags);
+						      arg->argc, argv, envp, arg->flags);
 		} else {
 			retval = wasmjit_high_emscripten_invoke_main(&self->high,
 								     module_name,
-								     arg->argc, argv, arg->flags);
+								     arg->argc, argv, envp, arg->flags);
 		}
 
 		/*
@@ -374,6 +402,14 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 		}
 		kvfree(argv);
 	}
+
+	if (envp) {
+		for (i = 0; envp[i]; ++i) {
+			kvfree(envp[i]);
+		}
+		kvfree(envp);
+	}
+
 
 	return retval;
 }

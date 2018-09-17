@@ -60,6 +60,7 @@ struct kwasmjit_emscripten_invoke_main_args {
 	const char *module_name;
 	int argc;
 	char **argv;
+	char **envp;
 	int flags;
 };
 
