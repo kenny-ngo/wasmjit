@@ -696,15 +696,23 @@ static int convert_proto_to_local(int domain, int32_t proto)
 
 #endif
 
-uint32_t wasmjit_emscripten____syscall102(uint32_t call, uint32_t varargs,
+uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 					  struct FuncInst *funcinst)
 {
 	long ret;
-	switch (call) {
+	uint32_t ivargs;
+	LOAD_ARGS(funcinst, varargs, 2,
+		  uint32_t, call,
+		  uint32_t, varargs);
+
+	(void) which;
+	ivargs = args.varargs;
+
+	switch (args.call) {
 	case 1: { // socket
 		int domain, type, protocol;
 
-		LOAD_ARGS(funcinst, varargs, 3,
+		LOAD_ARGS(funcinst, ivargs, 3,
 			  int32_t, domain,
 			  int32_t, type,
 			  int32_t, protocol);
@@ -745,7 +753,7 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t call, uint32_t varargs,
 	default: {
 		char buf[64];
 		snprintf(buf, sizeof(buf),
-			 "unsupported socketcall syscall %d", call);
+			 "unsupported socketcall syscall %d\n", args.call);
 		wasmjit_emscripten_internal_abort(buf);
 		ret = -EINVAL;
 		break;
