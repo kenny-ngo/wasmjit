@@ -289,7 +289,8 @@ static int get_static_bump(const char *filename, uint32_t *static_bump)
 	if (compiled)
 		regfree(&re);
 	free(filebuf2);
-	wasmjit_unload_file(filebuf, filesize);
+	if (filebuf)
+		wasmjit_unload_file(filebuf, filesize);
 	free(js_path);
 
 	return ret;
