@@ -611,15 +611,35 @@ static int convert_socket_type_to_local(int32_t type)
 	case 5: ltype = SOCK_SEQPACKET; break;
 	case 3: ltype = SOCK_RAW; break;
 	case 4: ltype = SOCK_RDM; break;
+#ifdef SOCK_PACKET
 	case 10: ltype = SOCK_PACKET; break;
+#endif
 	default: return -1;
 	}
 
-	if (nonblock_type)
+	if (nonblock_type) {
+#ifdef SOCK_NONBLOCK
 		ltype |= SOCK_NONBLOCK;
+#else
+		/*
+		  user requested SOCK_NONBLOCK but runtime doesn't support it,
+		  return a type of -1, which will invoke a EINVAL on sys_socket()
+		 */
+		return -1;
+#endif
+	}
 
-	if (cloexec_type)
+	if (cloexec_type) {
+#ifdef SOCK_CLOEXEC
 		ltype |= SOCK_CLOEXEC;
+#else
+		/*
+		  user requested SOCK_CLOEXEC but runtime doesn't support it,
+		  return a type of -1, which will invoke a EINVAL on sys_socket()
+		 */
+		return -1;
+#endif
+	}
 
 	return ltype;
 }
@@ -652,12 +672,22 @@ static int convert_socket_domain_to_local(int32_t domain)
 	case SYS_AF_INET: return AF_INET;
 	case SYS_AF_INET6: return AF_INET6;
 	case 4: return AF_IPX;
+#ifdef AF_NETLINK
 	case 16: return AF_NETLINK;
+#endif
+#ifdef AF_X25
 	case 9: return AF_X25;
+#endif
+#ifdef AF_AX25
 	case 3: return AF_AX25;
+#endif
+#ifdef AF_ATMPVC
 	case 8: return AF_ATMPVC;
+#endif
 	case 5: return AF_APPLETALK;
+#ifdef AF_PACKET
 	case 17: return AF_PACKET;
+#endif
 	default: return -1;
 	}
 }
@@ -676,20 +706,30 @@ static int convert_proto_to_local(int domain, int32_t proto)
 		case 17: return IPPROTO_UDP;
 		case 22: return IPPROTO_IDP;
 		case 29: return IPPROTO_TP;
+#ifdef IPPROTO_DCCP
 		case 33: return IPPROTO_DCCP;
+#endif
 		case 41: return IPPROTO_IPV6;
 		case 46: return IPPROTO_RSVP;
 		case 47: return IPPROTO_GRE;
 		case 50: return IPPROTO_ESP;
 		case 51: return IPPROTO_AH;
 		case 92: return IPPROTO_MTP;
+#ifdef IPPROTO_BEETPH
 		case 94: return IPPROTO_BEETPH;
+#endif
 		case 98: return IPPROTO_ENCAP;
 		case 103: return IPPROTO_PIM;
+#ifdef IPPROTO_COMP
 		case 108: return IPPROTO_COMP;
+#endif
 		case 132: return IPPROTO_SCTP;
+#ifdef IPPROTO_UDPLITE
 		case 136: return IPPROTO_UDPLITE;
+#endif
+#if IPPROTO_MPLS
 		case 137: return IPPROTO_MPLS;
+#endif
 		case 255: return IPPROTO_RAW;
 		default: return -1;
 		}
