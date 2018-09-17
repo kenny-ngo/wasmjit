@@ -93,14 +93,11 @@ static int32_t check_ret(long errno_)
 
 static int32_t check_ret(long errno_)
 {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Woverride-init"
 	static int32_t to_sys_errno[] = {
 #define ERRNO(name, value) [name] = -value,
 #include <wasmjit/emscripten_runtime_sys_errno_def.h>
 #undef ERRNO
 	};
-#pragma GCC diagnostic pop
 
 	int32_t toret;
 
