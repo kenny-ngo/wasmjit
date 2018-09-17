@@ -658,7 +658,7 @@ static int convert_socket_domain_to_local(int32_t domain)
 
 static int convert_proto_to_local(int domain, int32_t proto)
 {
-	if (domain == AF_INET) {
+	if (domain == AF_INET || domain == AF_INET6) {
 		switch (proto) {
 		case 0: return IPPROTO_IP;
 		case 1: return IPPROTO_ICMP;
