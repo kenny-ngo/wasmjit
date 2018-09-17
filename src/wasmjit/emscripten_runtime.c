@@ -37,6 +37,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <sys/un.h>
 #endif
 
 #define __MMAP0(m,...)
@@ -624,6 +625,10 @@ static int convert_socket_type_to_local(int32_t type)
 
 #endif
 
+#define SYS_AF_UNIX 1
+#define SYS_AF_INET 2
+#define SYS_AF_INET6 10
+
 #if defined(__linux__) || defined(__KERNEL__)
 
 static int convert_socket_domain_to_local(int32_t domain)
@@ -642,9 +647,9 @@ static int convert_proto_to_local(int domain, int32_t proto)
 static int convert_socket_domain_to_local(int32_t domain)
 {
 	switch (domain) {
-	case 1: return AF_UNIX;
-	case 2: return AF_INET;
-	case 10: return AF_INET6;
+	case SYS_AF_UNIX: return AF_UNIX;
+	case SYS_AF_INET: return AF_INET;
+	case SYS_AF_INET6: return AF_INET6;
 	case 4: return AF_IPX;
 	case 16: return AF_NETLINK;
 	case 9: return AF_X25;
@@ -696,6 +701,95 @@ static int convert_proto_to_local(int domain, int32_t proto)
 
 #endif
 
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ && (defined(__linux__) || defined(__KERNEL__))
+
+static long finish_bind(int fd, void *addr, size_t len)
+{
+	return sys_bind(fd, addr, len);
+}
+
+#else
+
+/* need to byte swap and adapt sockaddr to current platform */
+static long finish_bind(int fd, char *addr, size_t len)
+{
+	uint16_t family;
+	union {
+		struct sockaddr_un un;
+		struct sockaddr_in in;
+		struct sockaddr_in6 in6;
+	} sa;
+	void *ptr;
+	size_t ptr_size;
+
+#define FAS 2
+	assert(sizeof(family) == FAS);
+
+	if (len < FAS)
+		return -SYS_EINVAL;
+
+	memcpy(&family, addr, sizeof(family));
+
+	switch (family) {
+	case SYS_AF_UNIX: {
+		struct em_sockaddr_un {
+			uint16_t sun_family;
+			char buf[108];
+		};
+
+		sa.un.sun_family = AF_UNIX;
+		memcpy(sa.un.sun_path, addr + FAS, len - FAS);
+		ptr = &sa.un;
+		ptr_size = len;
+		break;
+	}
+	case SYS_AF_INET: {
+		if (len < 8)
+			return -SYS_EINVAL;
+		memset(&sa.in, 0, sizeof(struct sockaddr_in));
+		sa.in.sin_family = AF_INET;
+		/* these are in network order so they don't need to be swapped */
+		memcpy(&sa.in.sin_port, addr + 2, 2);
+		memcpy(&sa.in.sin_addr, addr + 4, 4);
+		ptr = &sa.in;
+		ptr_size = sizeof(struct sockaddr_in);
+		break;
+	}
+	case SYS_AF_INET6: {
+		if (len < 28)
+			return -SYS_EINVAL;
+
+		memset(&sa.in6, 0, sizeof(struct sockaddr_in6));
+
+		sa.in6.sin6_family = AF_INET6;
+
+		/* these are in network order so they don't need to be swapped */
+		memcpy(&sa.in6.sin6_port, addr + 2, 2);
+		memcpy(&sa.in6.sin6_addr, addr + 8, 16);
+
+		memcpy(&sa.in6.sin6_flowinfo, addr + 4, 4);
+		sa.in6.sin6_flowinfo = uint32_t_swap_bytes(sa.in6.sin6_flowinfo);
+		memcpy(&sa.in6.sin6_scope_id, addr + 24, 4);
+		sa.in6.sin6_scope_id = uint32_t_swap_bytes(sa.in6.sin6_scope_id);
+
+		ptr = &sa.in6;
+		ptr_size = sizeof(struct sockaddr_in6);
+		break;
+	}
+	default: {
+		/* TODO: add more support */
+		return -SYS_EINVAL;
+		break;
+	}
+	}
+
+#undef FAS
+
+	return sys_bind(fd, ptr, ptr_size);
+}
+
+#endif
+
 uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 					  struct FuncInst *funcinst)
 {
@@ -725,6 +819,23 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 		break;
 	}
 	case 2: { // bind
+		char *base;
+
+		LOAD_ARGS(funcinst, ivargs, 3,
+			  int32_t, fd,
+			  uint32_t, addrp,
+			  uint32_t, addrlen);
+
+		if (!_wasmjit_emscripten_check_range(funcinst,
+						     args.addrp,
+						     args.addrlen))
+			return -SYS_EFAULT;
+
+		base = wasmjit_emscripten_get_base_address(funcinst);
+
+		ret = finish_bind(args.fd,
+				  base + args.addrp, args.addrlen);
+		break;
 	}
 	case 3: { // connect
 	}
