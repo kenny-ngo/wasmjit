@@ -24,7 +24,6 @@
 
 #include <wasmjit/high_level.h>
 
-#include <wasmjit/kwasmjit.h>
 #include <wasmjit/parse.h>
 #include <wasmjit/instantiate.h>
 #include <wasmjit/dynamic_emscripten_runtime.h>
@@ -32,7 +31,9 @@
 #include <wasmjit/sys.h>
 #include <wasmjit/util.h>
 
-#if defined(__linux__) && !defined(__KERNEL__)
+#ifdef WASMJIT_CAN_USE_DEVICE
+#include <wasmjit/kwasmjit.h>
+
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -84,7 +85,7 @@ static int add_named_module(struct WasmJITHigh *self,
 
 int wasmjit_high_init(struct WasmJITHigh *self)
 {
-#if defined(__linux__) && !defined(__KERNEL__)
+#ifdef WASMJIT_CAN_USE_DEVICE
 	{
 		int fd;
 		fd = open("/dev/wasm", O_RDWR | O_CLOEXEC);
@@ -111,7 +112,7 @@ static int wasmjit_high_instantiate_buf(struct WasmJITHigh *self,
 	struct Module module;
 	struct ModuleInst *module_inst = NULL;
 
-#if defined(__linux__) && !defined(__KERNEL__)
+#ifdef WASMJIT_CAN_USE_DEVICE
 	/* should not be using this if we are backending to kernel */
 	assert(self->fd < 0);
 #endif
@@ -163,7 +164,7 @@ int wasmjit_high_instantiate(struct WasmJITHigh *self, const char *filename, con
 	size_t size;
 	char *buf;
 
-#if defined(__linux__) && !defined(__KERNEL__)
+#ifdef WASMJIT_CAN_USE_DEVICE
 	if (self->fd >= 0) {
 		struct kwasmjit_instantiate_args arg;
 		arg.version = 0;
@@ -206,7 +207,7 @@ int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
 	size_t n_modules, i;
 	struct NamedModule *modules = NULL;
 
-#if defined(__linux__) && !defined(__KERNEL__)
+#ifdef WASMJIT_CAN_USE_DEVICE
 	if (self->fd >= 0) {
 		struct kwasmjit_instantiate_emscripten_runtime_args arg;
 
@@ -241,7 +242,7 @@ int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
 		modules[i].module = NULL;
 	}
 
-#if defined(__linux__) && !defined(__KERNEL__)
+#ifdef WASMJIT_CAN_USE_DEVICE
  success:
 #endif
 	ret = 0;
@@ -275,7 +276,7 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 	int ret;
 	jmp_buf jmpbuf;
 
-#if defined(__linux__) && !defined(__KERNEL__)
+#ifdef WASMJIT_CAN_USE_DEVICE
 	if (self->fd >= 0) {
 		struct kwasmjit_emscripten_invoke_main_args arg;
 
@@ -356,7 +357,7 @@ void wasmjit_high_close(struct WasmJITHigh *self)
 {
 	size_t i;
 
-#if defined(__linux__) && !defined(__KERNEL__)
+#ifdef WASMJIT_CAN_USE_DEVICE
 	if (self->fd >= 0) {
 		(void)close(self->fd);
 		return;
@@ -377,7 +378,7 @@ void wasmjit_high_close(struct WasmJITHigh *self)
 int wasmjit_high_error_message(struct WasmJITHigh *self,
 			      char *buf, size_t buf_size)
 {
-#if defined(__linux__) && !defined(__KERNEL__)
+#ifdef WASMJIT_CAN_USE_DEVICE
 	if (self->fd >= 0) {
 		struct kwasmjit_error_message_args arg;
 

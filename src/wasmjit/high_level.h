@@ -30,8 +30,12 @@
 /* this interface mimics the kernel interface and thus lacks power
    since we can't pass in abitrary objects for import, like host functions */
 
+#if (defined(__linux__) || defined(__APPLE__) || defined(__unix__)) && !defined(__KERNEL__)
+#define WASMJIT_CAN_USE_DEVICE
+#endif
+
 struct WasmJITHigh {
-#if defined(__linux__) && !defined(__KERNEL__)
+#ifdef WASMJIT_CAN_USE_DEVICE
 	int fd;
 #endif
 	size_t n_modules;
