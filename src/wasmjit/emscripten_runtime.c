@@ -873,6 +873,28 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 	return check_ret(ret);
 }
 
+/* fcntl64 */
+uint32_t wasmjit_emscripten____syscall221(uint32_t which, uint32_t varargs,
+					  struct FuncInst *funcinst)
+{
+	struct {
+		int32_t fd, cmd;
+	} args;
+
+	(void) which;
+
+	if (_wasmjit_emscripten_copy_from_user(funcinst,
+					       &args,
+					       varargs,
+					       sizeof(args)))
+		return -SYS_EINVAL;
+
+	/* TODO: implement */
+	(void) args;
+
+	return -SYS_EINVAL;
+}
+
 void wasmjit_emscripten_cleanup(struct ModuleInst *moduleinst) {
 	(void)moduleinst;
 	/* TODO: implement */
