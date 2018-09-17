@@ -671,6 +671,7 @@ int read_instruction(struct ParseState *pstate, struct Instr *instr)
 			break;
 		default:
 			assert(0);
+			__builtin_unreachable();
 		}
 
 		ret = read_uleb_uint32_t(pstate, &local->localidx);
@@ -783,6 +784,7 @@ int read_instruction(struct ParseState *pstate, struct Instr *instr)
 			break;
 		default:
 			assert(0);
+			__builtin_unreachable();
 			break;
 		}
 
