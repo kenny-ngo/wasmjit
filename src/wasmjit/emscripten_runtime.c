@@ -39,6 +39,33 @@
 #include <netinet/in.h>
 #endif
 
+#define __MMAP0(m,...)
+#define __MMAP1(m,t,a,...) m(t, a)
+#define __MMAP2(m,t,a,...) m(t, a) __MMAP1(m,__VA_ARGS__)
+#define __MMAP3(m,t,a,...) m(t, a) __MMAP2(m,__VA_ARGS__)
+#define __MMAP4(m,t,a,...) m(t, a) __MMAP3(m,__VA_ARGS__)
+#define __MMAP5(m,t,a,...) m(t, a) __MMAP4(m,__VA_ARGS__)
+#define __MMAP6(m,t,a,...) m(t, a) __MMAP5(m,__VA_ARGS__)
+#define __MMAP(n,...) __MMAP##n(__VA_ARGS__)
+
+#define __DECL(t, a) t a;
+#define __SWAP(t, a) args.a = t ## _swap_bytes(args.a);
+
+static int32_t int32_t_swap_bytes(int32_t a)
+{
+	return uint32_t_swap_bytes(a);
+}
+
+#define LOAD_ARGS(funcinst, varargs, n, ...)				\
+	struct {							\
+		__MMAP(n, __DECL, __VA_ARGS__)				\
+	} args;								\
+	if (_wasmjit_emscripten_copy_from_user(funcinst,		\
+					       &args, varargs,		\
+					       sizeof(args)))		\
+		return -SYS_EFAULT;					\
+	__MMAP(n, __SWAP, __VA_ARGS__)
+
 enum {
 #define ERRNO(name, value) SYS_ ## name = value,
 #include <wasmjit/emscripten_runtime_sys_errno_def.h>
@@ -332,19 +359,18 @@ void wasmjit_emscripten____setErrNo(uint32_t value, struct FuncInst *funcinst)
 uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
 {
 	char *base;
-	struct {
-		uint32_t fd, offset_high, offset_low,
-			result, whence;
-	} args;
 	int32_t ret;
+
+	LOAD_ARGS(funcinst, varargs, 5,
+		  int32_t, fd,
+		  uint32_t, offset_high,
+		  int32_t, offset_low,
+		  uint32_t, result,
+		  int32_t, whence);
 
 	(void)which;
 
 	base = wasmjit_emscripten_get_base_address(funcinst);
-
-	if (_wasmjit_emscripten_copy_from_user(funcinst,
-					       &args, varargs, sizeof(args)))
-		return -SYS_EFAULT;
 
 	if (!_wasmjit_emscripten_check_range(funcinst, args.result, 4))
 		return -SYS_EFAULT;
@@ -368,19 +394,16 @@ uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, stru
 {
 	uint32_t i;
 	char *base;
-	struct {
-		uint32_t fd, iov, iovcnt;
-	} args;
 	long rret;
 	struct iovec *liov;
 
+	LOAD_ARGS(funcinst, varargs, 3,
+		  int32_t, fd,
+		  uint32_t, iov,
+		  uint32_t, iovcnt);
+
 	(void)which;
 	base = wasmjit_emscripten_get_base_address(funcinst);
-
-	if (_wasmjit_emscripten_copy_from_user(funcinst,
-					       &args, varargs,
-					       sizeof(args)))
-		return -SYS_EFAULT;
 
 	/* TODO: do UIO_FASTIOV stack optimization */
 	liov = wasmjit_alloc_vector(args.iovcnt,
@@ -402,6 +425,9 @@ uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, stru
 			rret = -EFAULT;
 			goto error;
 		}
+
+		iov.iov_base = uint32_t_swap_bytes(iov.iov_base);
+		iov.iov_len = uint32_t_swap_bytes(iov.iov_len);
 
 		if (!_wasmjit_emscripten_check_range(funcinst,
 						     iov.iov_base,
@@ -426,14 +452,13 @@ uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, stru
 uint32_t wasmjit_emscripten____syscall4(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
 {
 	char *base;
-	struct {
-		uint32_t fd, buf, count;
-	} args;
+
+	LOAD_ARGS(funcinst, varargs, 3,
+		  int32_t, fd,
+		  uint32_t, buf,
+		  uint32_t, count);
 
 	(void)which;
-
-	if (_wasmjit_emscripten_copy_from_user(funcinst, &args, varargs, sizeof(args)))
-		return -SYS_EFAULT;
 
 	if (!_wasmjit_emscripten_check_range(funcinst, args.buf, args.count))
 		return -SYS_EFAULT;
@@ -457,15 +482,10 @@ uint32_t wasmjit_emscripten____syscall54(uint32_t which, uint32_t varargs, struc
 uint32_t wasmjit_emscripten____syscall6(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
 {
 	/* TODO: need to define non-no filesystem case */
-	struct {
-		uint32_t fd;
-	} args;
+	LOAD_ARGS(funcinst, varargs, 1,
+		  int32_t, fd);
 
 	(void)which;
-
-	if (_wasmjit_emscripten_copy_from_user(funcinst, &args, varargs, sizeof(args)))
-		return -SYS_EFAULT;
-
 	return check_ret(sys_close(args.fd));
 }
 
@@ -545,17 +565,13 @@ uint32_t wasmjit_emscripten____syscall10(uint32_t which, uint32_t varargs,
 					 struct FuncInst *funcinst)
 {
 	char *base;
-	struct {
-		uint32_t pathname;
-	} args;
+
+	LOAD_ARGS(funcinst, varargs, 1,
+		  uint32_t, pathname);
 
 	(void)which;
 
 	base = wasmjit_emscripten_get_base_address(funcinst);
-
-	if (_wasmjit_emscripten_copy_from_user(funcinst, &args,
-					       varargs, sizeof(args)))
-		return -SYS_EFAULT;
 
 	if (!_wasmjit_emscripten_check_string(funcinst, args.pathname, PATH_MAX))
 		return -SYS_EFAULT;
@@ -686,13 +702,12 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t call, uint32_t varargs,
 	long ret;
 	switch (call) {
 	case 1: { // socket
-		struct {
-			int32_t domain, type, protocol;
-		} args;
 		int domain, type, protocol;
-		if (_wasmjit_emscripten_copy_from_user(funcinst, &args,
-						       varargs, sizeof(args)))
-			return -SYS_EFAULT;
+
+		LOAD_ARGS(funcinst, varargs, 3,
+			  int32_t, domain,
+			  int32_t, type,
+			  int32_t, protocol);
 
 		domain = convert_socket_domain_to_local(args.domain);
 		type = convert_socket_type_to_local(args.type);
