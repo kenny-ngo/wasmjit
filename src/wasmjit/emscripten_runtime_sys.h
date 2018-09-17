@@ -31,6 +31,9 @@
 #include <linux/sched.h>
 #include <linux/kallsyms.h>
 #include <linux/limits.h>
+#include <linux/socket.h>
+
+typedef int socklen_t;
 
 #else
 
