@@ -405,7 +405,8 @@ static int run_emscripten_file(const char *filename,
 	return ret;
 }
 
-int main(int argc, char *argv[], char *envp[])
+extern char **environ;
+int main(int argc, char *argv[])
 {
 	int ret;
 	char *filename;
@@ -492,5 +493,5 @@ int main(int argc, char *argv[], char *envp[])
 
 	return run_emscripten_file(filename,
 				   static_bump, tablemin, tablemax,
-				   argc - optind, &argv[optind], envp);
+				   argc - optind, &argv[optind], environ);
 }
