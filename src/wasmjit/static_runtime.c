@@ -152,3 +152,14 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi)
 
 	smi->initted = 1;
 }
+
+int wasmjit_invoke_function(struct FuncInst *funcinst,
+			    union ValueUnion *values,
+			    union ValueUnion *out)
+{
+	union ValueUnion lout;
+	lout = wasmjit_invoke_function_raw(funcinst, values);
+	if (out)
+		*out = lout;
+	return 0;
+}

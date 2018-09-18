@@ -343,8 +343,16 @@ int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
 		return -1;
 	}
 
-	if (ret)
+	if (ret) {
+		if (ret > 0) {
+			/* these are trap return codes, shift it left
+			   8 bits to distinguish from return code from
+			   normal execution of wasm main() */
+			ret = WASMJIT_ENCODE_TRAP_ERROR(ret);
+		}
+
 		return ret;
+	}
 
 	return 0xff & out.i32;
 }

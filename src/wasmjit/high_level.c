@@ -276,7 +276,6 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 	struct MemInst *meminst;
 	struct ModuleInst *module_inst;
 	int ret;
-	jmp_buf jmpbuf;
 
 #ifdef WASMJIT_CAN_USE_DEVICE
 	if (self->fd >= 0) {
@@ -331,59 +330,51 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 	if (!meminst)
 		return -1;
 
-	if ((ret = setjmp(jmpbuf))) {
-		/* if the code trapped, return error */
-		ret = WASMJIT_ENCODE_TRAP_ERROR(ret - 1);
-	}
-	else {
-		wasmjit_set_jmp_buf(&jmpbuf);
+	if (!self->emscripten_asm_module) {
+		struct FuncInst
+			*errno_location_inst,
+			*environ_constructor,
+			*malloc_inst,
+			*free_inst;
 
-		if (!self->emscripten_asm_module) {
-			struct FuncInst
-				*errno_location_inst,
-				*environ_constructor,
-				*malloc_inst,
-				*free_inst;
-
-			errno_location_inst = wasmjit_get_export(module_inst, "___errno_location",
-								 IMPORT_DESC_TYPE_FUNC).func;
-
-			environ_constructor = wasmjit_get_export(module_inst,
-								 "___emscripten_environ_constructor",
-								 IMPORT_DESC_TYPE_FUNC).func;
-
-			malloc_inst = wasmjit_get_export(module_inst,
-							 "_malloc",
+		errno_location_inst = wasmjit_get_export(module_inst, "___errno_location",
 							 IMPORT_DESC_TYPE_FUNC).func;
-			if (!malloc_inst)
-				return -1;
+
+		environ_constructor = wasmjit_get_export(module_inst,
+							 "___emscripten_environ_constructor",
+							 IMPORT_DESC_TYPE_FUNC).func;
+
+		malloc_inst = wasmjit_get_export(module_inst,
+						 "_malloc",
+						 IMPORT_DESC_TYPE_FUNC).func;
+		if (!malloc_inst)
+			return -1;
 
 
-			free_inst = wasmjit_get_export(module_inst,
-						       "_free",
-						       IMPORT_DESC_TYPE_FUNC).func;
-			if (!free_inst)
-				return -1;
+		free_inst = wasmjit_get_export(module_inst,
+					       "_free",
+					       IMPORT_DESC_TYPE_FUNC).func;
+		if (!free_inst)
+			return -1;
 
-			if (wasmjit_emscripten_init(wasmjit_emscripten_get_context(env_module_inst),
-						    errno_location_inst,
-						    environ_constructor,
-						    malloc_inst,
-						    free_inst,
-						    envp))
-				return -1;
+		if (wasmjit_emscripten_init(wasmjit_emscripten_get_context(env_module_inst),
+					    errno_location_inst,
+					    environ_constructor,
+					    malloc_inst,
+					    free_inst,
+					    envp))
+			return -1;
 
-			self->emscripten_asm_module = module_inst;
-		}
+		self->emscripten_asm_module = module_inst;
+	}
 
-		if (self->emscripten_asm_module != module_inst) {
-			ret = -1;
-		} else  {
-			ret = wasmjit_emscripten_invoke_main(meminst,
-							     stack_alloc_inst,
-							     main_inst,
-							     argc, argv);
-		}
+	if (self->emscripten_asm_module != module_inst) {
+		ret = -1;
+	} else  {
+		ret = wasmjit_emscripten_invoke_main(meminst,
+						     stack_alloc_inst,
+						     main_inst,
+						     argc, argv);
 	}
 
 	wasmjit_emscripten_cleanup(env_module_inst);

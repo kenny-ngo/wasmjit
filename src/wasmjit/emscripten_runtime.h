@@ -77,6 +77,11 @@ int wasmjit_emscripten_init(struct EmscriptenContext *ctx,
 			    struct FuncInst *free_inst,
 			    char *envp[]);
 
+#define WASMJIT_TRAP_OFFSET 0x100
+#define WASMJIT_IS_TRAP_ERROR(ret) ((ret) >= WASMJIT_TRAP_OFFSET)
+#define WASMJIT_DECODE_TRAP_ERROR(ret) ((ret) - WASMJIT_TRAP_OFFSET)
+#define WASMJIT_ENCODE_TRAP_ERROR(ret) ((ret) + WASMJIT_TRAP_OFFSET)
+
 int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
 				   struct FuncInst *stack_alloc_inst,
 				   struct FuncInst *main_inst,

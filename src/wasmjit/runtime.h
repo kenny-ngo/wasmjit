@@ -141,7 +141,7 @@ static int wasmjit_typelist_equal(size_t nelts, const wasmjit_valtype_t *elts,
 }
 
 enum {
-	WASMJIT_TRAP_UNREACHABLE,
+	WASMJIT_TRAP_UNREACHABLE = 1,
 	WASMJIT_TRAP_TABLE_OVERFLOW,
 	WASMJIT_TRAP_UNINITIALIZED_TABLE_ENTRY,
 	WASMJIT_TRAP_MISMATCHED_TYPE,
@@ -199,7 +199,11 @@ jmp_buf *wasmjit_get_jmp_buf(void);
 
 union ExportPtr wasmjit_get_export(const struct ModuleInst *, const char *name, wasmjit_desc_t type);
 
-int wasmjit_invoke_function(struct FuncInst *funcinst, union ValueUnion *values,
+union ValueUnion wasmjit_invoke_function_raw(struct FuncInst *funcinst,
+					     union ValueUnion *values);
+
+int wasmjit_invoke_function(struct FuncInst *funcinst,
+			    union ValueUnion *values,
 			    union ValueUnion *out);
 
 #endif

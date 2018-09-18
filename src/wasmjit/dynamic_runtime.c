@@ -153,5 +153,37 @@ int wasmjit_set_stack_top(void *stack_top)
 __attribute__((noreturn))
 void wasmjit_trap(int reason)
 {
-	longjmp(*wasmjit_get_jmp_buf(), reason + 1);
+	assert(reason);
+	longjmp(*wasmjit_get_jmp_buf(), reason);
+}
+
+int wasmjit_invoke_function(struct FuncInst *funcinst,
+			    union ValueUnion *values,
+			    union ValueUnion *out)
+{
+	union ValueUnion lout;
+	int ret, jmp_buf_was_set;
+	jmp_buf jmpbuf;
+
+	jmp_buf_was_set = !!wasmjit_get_jmp_buf();
+
+	if (!jmp_buf_was_set) {
+		ret = setjmp(jmpbuf);
+	} else {
+		ret = 0;
+	}
+
+	if (!ret) {
+		if (!jmp_buf_was_set)
+			wasmjit_set_jmp_buf(&jmpbuf);
+
+		lout = wasmjit_invoke_function_raw(funcinst, values);
+		if (out)
+			*out = lout;
+	}
+
+	if (!jmp_buf_was_set)
+		wasmjit_set_jmp_buf(NULL);
+
+	return ret;
 }

@@ -298,7 +298,6 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 
 	{
 		mm_segment_t old_fs = get_fs();
-		struct KernelThreadLocal *preserve, ktls;
 		size_t real_size;
 		void *stack;
 		struct mm_struct *saved_mm;
@@ -309,7 +308,7 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 			for (i = 0; i < self->high.n_modules; ++i) {
 				if (!strcmp("env", self->high.modules[i].name)) {
 					struct ModuleInst *inst = self->high.modules[i].module;
-					ktls.mem_inst = inst->mems.elts[0];
+					wasmjit_get_ktls()->mem_inst = inst->mems.elts[0];
 					break;
 				}
 			}
@@ -318,10 +317,6 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 				goto error;
 			}
 		}
-
-		preserve = wasmjit_get_ktls();
-
-		wasmjit_set_ktls(&ktls);
 
 		stack = alloc_stack(MMAX(rlimit(RLIMIT_STACK), MAX_STACK), &real_size);
 		if (stack) {
@@ -381,8 +376,6 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 		if (stack) {
 			free_stack(stack, real_size);
 		}
-
-		wasmjit_set_ktls(preserve);
 	}
 
 	if (retval < 0) {
@@ -468,6 +461,12 @@ static long kwasmjit_unlocked_ioctl(struct file *filp,
 	void *parg = (void *) arg;
 	struct kwasmjit_private *self = filp->private_data;
 	int fpu_set = 0;
+	struct KernelThreadLocal *preserve, ktls;
+
+	preserve = wasmjit_get_ktls();
+
+	memset(&ktls, 0, sizeof(ktls));
+	wasmjit_set_ktls(&ktls);
 
 	fpu_preserve = kvmalloc(fpu_kernel_xstate_size, GFP_KERNEL);
 	if (!fpu_preserve) {
@@ -562,6 +561,8 @@ static long kwasmjit_unlocked_ioctl(struct file *filp,
 
 	if (fpu_preserve)
 		kvfree(fpu_preserve);
+
+	wasmjit_set_ktls(preserve);
 
 	return retval;
 }

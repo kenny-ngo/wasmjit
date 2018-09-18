@@ -190,16 +190,11 @@ struct FuncInst *wasmjit_resolve_indirect_call(const struct TableInst *tableinst
 	return funcinst;
 }
 
-int wasmjit_invoke_function(struct FuncInst *funcinst,
-			    union ValueUnion *values,
-			    union ValueUnion *out)
+union ValueUnion wasmjit_invoke_function_raw(struct FuncInst *funcinst,
+					     union ValueUnion *values)
 {
-	union ValueUnion lout;
 #ifndef __x86_64__
 #error Only works on x86_64
 #endif
-	lout = funcinst->invoker(values);
-	if (out)
-		*out = lout;
-	return 0;
+	return funcinst->invoker(values);
 }
