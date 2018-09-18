@@ -84,18 +84,11 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(uint32_t static_bump,
 		module = NULL;						\
 	}
 
-#define START_TABLE_DEFS() \
-	DEFINE_WASM_TABLE(table, ELEMTYPE_ANYFUNC, tablemin, tablemax)
-
+#define START_TABLE_DEFS()
 #define END_TABLE_DEFS()
 #define START_MEMORY_DEFS()
 #define END_MEMORY_DEFS()
-#define START_GLOBAL_DEFS()						\
-	DEFINE_WASM_GLOBAL(memoryBase, globals.memoryBase, VALTYPE_I32, i32, 0)	\
-		DEFINE_WASM_GLOBAL(tempDoublePtr, globals.tempDoublePtr, VALTYPE_I32, i32, 0) \
-		DEFINE_WASM_GLOBAL(DYNAMICTOP_PTR, globals.DYNAMICTOP_PTR, VALTYPE_I32, i32, 0)	\
-		DEFINE_WASM_GLOBAL(STACKTOP, globals.STACKTOP, VALTYPE_I32, i32, 0) \
-		DEFINE_WASM_GLOBAL(STACK_MAX, globals.STACK_MAX, VALTYPE_I32, i32, 0)
+#define START_GLOBAL_DEFS()
 #define END_GLOBAL_DEFS()
 #define START_FUNCTION_DEFS()
 #define END_FUNCTION_DEFS()
@@ -152,6 +145,9 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(uint32_t static_bump,
 		module->exports.elts[module->exports.n_elts - 1].value.func = module->funcs.elts[module->funcs.n_elts - 1]; \
 	}
 
+#define DEFINE_EXTERNAL_WASM_TABLE(name)				\
+	DEFINE_WASM_TABLE(name, ELEMTYPE_ANYFUNC, name ## min, name ## max)
+
 #define DEFINE_WASM_TABLE(_name, _elemtype, _min, _max)		\
 	{								\
 		tmp_table_buf = calloc(_min, sizeof(tmp_table_buf[0]));	\
@@ -194,6 +190,9 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(uint32_t static_bump,
 		module->exports.elts[module->exports.n_elts - 1].type = IMPORT_DESC_TYPE_MEM; \
 		module->exports.elts[module->exports.n_elts - 1].value.mem = module->mems.elts[module->mems.n_elts - 1]; \
 	}
+
+#define DEFINE_EXTERNAL_WASM_GLOBAL(_name)	\
+	DEFINE_WASM_GLOBAL(_name, globals. _name, VALTYPE_I32, i32, 0) \
 
 #define DEFINE_WASM_GLOBAL(_name, _init, _type, _member, _mut)	\
 	{								\

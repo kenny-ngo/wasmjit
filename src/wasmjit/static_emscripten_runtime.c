@@ -42,6 +42,10 @@
 #define END_GLOBAL_DEFS()
 #define START_FUNCTION_DEFS()
 #define END_FUNCTION_DEFS()
+#define DEFINE_EXTERNAL_WASM_TABLE(name)	\
+	extern struct TableInst WASM_TABLE_SYMBOL(CURRENT_MODULE, name);
+#define DEFINE_EXTERNAL_WASM_GLOBAL(name) \
+	extern struct GlobalInst WASM_GLOBAL_SYMBOL(CURRENT_MODULE, name);
 
 #include <wasmjit/emscripten_runtime_def.h>
 
@@ -59,23 +63,16 @@
 #undef END_GLOBAL_DEFS
 #undef START_FUNCTION_DEFS
 #undef END_FUNCTION_DEFS
+#undef DEFINE_EXTERNAL_WASM_TABLE
+#undef DEFINE_EXTERNAL_WASM_GLOBAL
 
 #define START_MODULE()
 
-/* NB: this is here because I don't feel like implementing the macro
-   magic in START_TABLE_DEFS to only add the env table */
-struct TableInst WASM_TABLE_SYMBOL(global, table) = {
-	.data = NULL,
-	.elemtype = ELEMTYPE_ANYFUNC,
-	.length = 0,
-	.max = 0,
-};
-extern struct TableInst WASM_TABLE_SYMBOL(env, table);
-
 #define START_TABLE_DEFS(n)						\
-	static struct TableInst *CAT(CURRENT_MODULE, _tables)[] = {	\
-		&WASM_TABLE_SYMBOL(CURRENT_MODULE, table),
+	static struct TableInst *CAT(CURRENT_MODULE, _tables)[] = {
 #define DEFINE_WASM_TABLE(_name, ...)			\
+	&WASM_TABLE_SYMBOL(CURRENT_MODULE, _name),
+#define DEFINE_EXTERNAL_WASM_TABLE(_name)			\
 	&WASM_TABLE_SYMBOL(CURRENT_MODULE, _name),
 #define END_TABLE_DEFS()			\
 	};
@@ -90,6 +87,8 @@ extern struct TableInst WASM_TABLE_SYMBOL(env, table);
 #define START_GLOBAL_DEFS(n)						\
 	static struct GlobalInst *CAT(CURRENT_MODULE,  _globals)[] = {
 #define DEFINE_WASM_GLOBAL(_name, ...)			\
+	&WASM_GLOBAL_SYMBOL(CURRENT_MODULE, _name),
+#define DEFINE_EXTERNAL_WASM_GLOBAL(_name)			\
 	&WASM_GLOBAL_SYMBOL(CURRENT_MODULE, _name),
 #define END_GLOBAL_DEFS()			\
 	};
