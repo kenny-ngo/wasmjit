@@ -102,7 +102,118 @@
 
 struct EmscriptenContext g_emscripten_ctx;
 
-#define END_MODULE()							\
+#define END_MODULE()
+
+#include <wasmjit/emscripten_runtime_def.h>
+
+#undef START_MODULE
+#undef END_MODULE
+#undef DEFINE_WASM_GLOBAL
+#undef DEFINE_WASM_FUNCTION
+#undef DEFINE_WASM_TABLE
+#undef DEFINE_WASM_MEMORY
+#undef START_TABLE_DEFS
+#undef END_TABLE_DEFS
+#undef START_MEMORY_DEFS
+#undef END_MEMORY_DEFS
+#undef START_GLOBAL_DEFS
+#undef END_GLOBAL_DEFS
+#undef START_FUNCTION_DEFS
+#undef END_FUNCTION_DEFS
+#undef DEFINE_WASM_START_FUNCTION
+#undef DEFINE_EXTERNAL_WASM_TABLE
+#undef DEFINE_EXTERNAL_WASM_GLOBAL
+
+/* create exports */
+
+#define DEFINE_WASM_START_FUNCTION(...)
+#define START_FUNCTION_DEFS(...)
+#define END_FUNCTION_DEFS(...)
+#define START_TABLE_DEFS(...)
+#define END_TABLE_DEFS(...)
+#define START_MEMORY_DEFS(...)
+#define END_MEMORY_DEFS(...)
+#define START_GLOBAL_DEFS(...)
+#define END_GLOBAL_DEFS(...)
+
+#define START_MODULE()						\
+	static struct Export CAT(CURRENT_MODULE, _exports)[] = {
+#define DEFINE_WASM_FUNCTION(_name, ...)				\
+	{							\
+		.name = #_name,					\
+		.type = IMPORT_DESC_TYPE_FUNC,	\
+		.value = {				\
+			.func = &WASM_FUNC_SYMBOL(CURRENT_MODULE, _name), \
+		}							\
+	},
+#define DEFINE_WASM_TABLE(_name, ...)				\
+	{							\
+		.name = #_name,					\
+		.type = IMPORT_DESC_TYPE_TABLE,	\
+		.value = {				\
+			.table = &WASM_TABLE_SYMBOL(CURRENT_MODULE, _name), \
+		}							\
+	},
+#define DEFINE_EXTERNAL_WASM_TABLE(_name) DEFINE_WASM_TABLE(_name)
+#define DEFINE_WASM_MEMORY(_name, ...)				\
+	{							\
+		.name = #_name,					\
+		.type = IMPORT_DESC_TYPE_MEM,	\
+		.value = {				\
+			.mem = &WASM_MEMORY_SYMBOL(CURRENT_MODULE, _name), \
+		}							\
+	},
+#define DEFINE_WASM_GLOBAL(_name, ...)				\
+	{							\
+		.name = #_name,					\
+		.type = IMPORT_DESC_TYPE_GLOBAL,	\
+		.value = {				\
+			.global = &WASM_GLOBAL_SYMBOL(CURRENT_MODULE, _name), \
+		}							\
+	},
+#define DEFINE_EXTERNAL_WASM_GLOBAL(_name) DEFINE_WASM_GLOBAL(_name)
+#define END_MODULE()				\
+	};
+
+#include <wasmjit/emscripten_runtime_def.h>
+
+#undef START_MODULE
+#undef END_MODULE
+#undef DEFINE_WASM_GLOBAL
+#undef DEFINE_WASM_FUNCTION
+#undef DEFINE_WASM_TABLE
+#undef DEFINE_WASM_MEMORY
+#undef START_TABLE_DEFS
+#undef END_TABLE_DEFS
+#undef START_MEMORY_DEFS
+#undef END_MEMORY_DEFS
+#undef START_GLOBAL_DEFS
+#undef END_GLOBAL_DEFS
+#undef START_FUNCTION_DEFS
+#undef END_FUNCTION_DEFS
+#undef DEFINE_WASM_START_FUNCTION
+#undef DEFINE_EXTERNAL_WASM_TABLE
+#undef DEFINE_EXTERNAL_WASM_GLOBAL
+
+/* create module */
+
+#define START_FUNCTION_DEFS()
+#define END_FUNCTION_DEFS()
+#define START_TABLE_DEFS()
+#define END_TABLE_DEFS()
+#define START_MEMORY_DEFS()
+#define END_MEMORY_DEFS()
+#define START_GLOBAL_DEFS()
+#define END_GLOBAL_DEFS()
+#define DEFINE_WASM_GLOBAL(...)
+#define DEFINE_WASM_FUNCTION(...)
+#define DEFINE_WASM_TABLE(...)
+#define DEFINE_WASM_MEMORY(...)
+#define DEFINE_EXTERNAL_WASM_GLOBAL(...)
+#define DEFINE_EXTERNAL_WASM_TABLE(...)
+#define END_MODULE()
+
+#define START_MODULE()						\
 	struct StaticModuleInst WASM_MODULE_SYMBOL(CURRENT_MODULE) = {	\
 		.module = {						\
 			.funcs = {					\
@@ -120,6 +231,10 @@ struct EmscriptenContext g_emscripten_ctx;
 			.globals = {					\
 				.n_elts = ARRAY_LEN(CAT(CURRENT_MODULE, _globals)), \
 				.elts = CAT(CURRENT_MODULE, _globals),	\
+			},						\
+			.exports = {					\
+				.n_elts = ARRAY_LEN(CAT(CURRENT_MODULE, _exports)),\
+				.elts = CAT(CURRENT_MODULE, _exports),	\
 			},						\
 			.private_data = &g_emscripten_ctx,		\
 		},							\
