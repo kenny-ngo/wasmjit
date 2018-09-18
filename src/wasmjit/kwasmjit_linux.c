@@ -46,6 +46,18 @@ MODULE_AUTHOR("Rian Hunter");
 MODULE_DESCRIPTION("Executes WASM files natively.");
 MODULE_VERSION("0.01");
 
+static void set_current_stack(void)
+{
+	void *addr = end_of_stack(current);
+	/* account for STACK_END_MAGIC */
+#ifdef CONFIG_STACK_GROWSUP
+	addr = (unsigned long *)addr - 1;
+#else
+	addr = (unsigned long *)addr + 1;
+#endif
+	wasmjit_set_stack_top(addr);
+}
+
 static void *kvmemdup_user(const void __user *src, size_t len, gfp_t flags)
 {
 	void *p;
@@ -116,6 +128,7 @@ static int kwasmjit_instantiate(struct kwasmjit_private *self,
 		goto error;
 	}
 
+	set_current_stack();
 	if (wasmjit_high_instantiate(&self->high, file_name, module_name, arg->flags)) {
 		retval = -EINVAL;
 		goto error;
@@ -138,6 +151,7 @@ static int kwasmjit_instantiate_emscripten_runtime(struct kwasmjit_private *self
 {
 	int retval;
 
+	set_current_stack();
 	if (wasmjit_high_instantiate_emscripten_runtime(&self->high,
 							args->static_bump,
 							args->tablemin,
@@ -326,14 +340,7 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 			wasmjit_set_stack_top(stack);
 #endif
 		} else {
-			void *addr = end_of_stack(current);
-			/* account for STACK_END_MAGIC */
-#ifdef CONFIG_STACK_GROWSUP
-			addr = (unsigned long *)addr - 1;
-#else
-			addr = (unsigned long *)addr + 1;
-#endif
-			wasmjit_set_stack_top(addr);
+			set_current_stack();
 		}
 
 		/*

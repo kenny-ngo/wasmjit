@@ -349,6 +349,13 @@ static int run_emscripten_file(const char *filename,
 	int high_init = 0;
 	const char *msg;
 
+	stack_top = get_stack_top();
+	if (!stack_top) {
+		fprintf(stderr, "warning: running without a stack limit\n");
+	}
+
+	wasmjit_set_stack_top(stack_top);
+
 	if (wasmjit_high_init(&high)) {
 		msg = "failed to initialize";
 		goto error;
@@ -366,13 +373,6 @@ static int run_emscripten_file(const char *filename,
 		msg = "failed to instantiate module";
 		goto error;
 	}
-
-	stack_top = get_stack_top();
-	if (!stack_top) {
-		fprintf(stderr, "warning: running without a stack limit\n");
-	}
-
-	wasmjit_set_stack_top(stack_top);
 
 	ret = wasmjit_high_emscripten_invoke_main(&high, "asm",
 						  argc, argv, envp, 0);
