@@ -260,11 +260,16 @@ static void init_module(void)
 	wasmjit_init_static_module(&WASM_MODULE_SYMBOL(env));
 }
 
+extern char **environ;
 int main(int argc, char *argv[]) {
-	return wasmjit_emscripten_invoke_main(&g_emscripten_ctx,
-					      &WASM_MEMORY_SYMBOL(env, memory),
+	int ret;
+	ret = wasmjit_emscripten_init(&g_emscripten_ctx,
+				      &WASM_FUNC_SYMBOL(asm, ___errno_location),
+				      environ);
+	if (ret)
+		return -1;
+	return wasmjit_emscripten_invoke_main(&WASM_MEMORY_SYMBOL(env, memory),
 					      &WASM_FUNC_SYMBOL(asm, stackAlloc),
-					      &WASM_FUNC_SYMBOL(asm, ___errno_location),
 					      &WASM_FUNC_SYMBOL(asm, _main),
 					      argc, argv);
 }

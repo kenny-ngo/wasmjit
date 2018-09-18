@@ -41,6 +41,7 @@ struct WasmJITHigh {
 	size_t n_modules;
 	struct NamedModule *modules;
 	char error_buffer[256];
+	struct ModuleInst *emscripten_asm_module;
 };
 
 #define WASMJIT_TRAP_OFFSET 0x101
