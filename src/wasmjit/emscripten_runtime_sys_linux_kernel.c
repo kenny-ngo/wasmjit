@@ -37,6 +37,7 @@
 #define __KSET(to,n,t) vals-> t = (unsigned long) _##n
 
 #define KWSC1(name, ...) KWSCx(1, name, __VA_ARGS__)
+#define KWSC2(name, ...) KWSCx(2, name, __VA_ARGS__)
 #define KWSC3(name, ...) KWSCx(3, name, __VA_ARGS__)
 
 #ifdef __x86_64__

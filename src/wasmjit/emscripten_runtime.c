@@ -1003,6 +1003,12 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 		break;
 	}
 	case 4: { // listen
+		LOAD_ARGS(funcinst, ivargs, 2,
+			  int32_t, fd,
+			  int32_t, backlog);
+
+		ret = sys_listen(args.fd, args.backlog);
+		break;
 	}
 	case 5: { // accept
 	}
