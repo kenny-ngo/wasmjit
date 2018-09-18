@@ -296,13 +296,15 @@ int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
 	if (main_inst->type.n_inputs == 0 &&
 	    main_inst->type.output_type == VALTYPE_I32) {
 		ret = wasmjit_invoke_function(main_inst, NULL, &out);
-	} else if (main_inst->type.n_inputs == 2 &&
+	} else if ((main_inst->type.n_inputs == 2 ||
+		    (main_inst->type.n_inputs == 3 &&
+		     main_inst->type.input_types[2] == VALTYPE_I32)) &&
 		   main_inst->type.input_types[0] == VALTYPE_I32 &&
 		   main_inst->type.input_types[1] == VALTYPE_I32 &&
 		   main_inst->type.output_type == VALTYPE_I32) {
 		uint32_t argv_i, zero = 0;
 		int i;
-		union ValueUnion args[2];
+		union ValueUnion args[3];
 
 		argv_i = stack_alloc((argc + 1) * 4);
 
@@ -330,6 +332,7 @@ int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
 
 		args[0].i32 = argc;
 		args[1].i32 = argv_i;
+		args[2].i32 = 0;
 
 		ret = wasmjit_invoke_function(main_inst, args, &out);
 
