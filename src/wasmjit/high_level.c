@@ -340,13 +340,19 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 
 		if (!self->emscripten_asm_module) {
 			struct FuncInst
-				*errno_location_inst;
+				*errno_location_inst,
+				*environ_constructor;
 
 			errno_location_inst = wasmjit_get_export(module_inst, "___errno_location",
 								 IMPORT_DESC_TYPE_FUNC).func;
 
+			environ_constructor = wasmjit_get_export(module_inst,
+								 "___emscripten_environ_constructor",
+								 IMPORT_DESC_TYPE_FUNC).func;
+
 			if (wasmjit_emscripten_init(wasmjit_emscripten_get_context(env_module_inst),
 						    errno_location_inst,
+						    environ_constructor,
 						    envp))
 				return -1;
 

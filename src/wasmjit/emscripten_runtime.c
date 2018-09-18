@@ -200,8 +200,11 @@ static char *wasmjit_emscripten_get_base_address(struct FuncInst *funcinst) {
 
 int wasmjit_emscripten_init(struct EmscriptenContext *ctx,
 			    struct FuncInst *errno_location_inst,
+			    struct FuncInst *environ_constructor,
 			    char **envp)
 {
+	int ret;
+
 	if (errno_location_inst) {
 		struct FuncType errno_location_type;
 		wasmjit_valtype_t errno_location_return_type = VALTYPE_I32;
@@ -218,6 +221,23 @@ int wasmjit_emscripten_init(struct EmscriptenContext *ctx,
 
 	ctx->errno_location_inst = errno_location_inst;
 	ctx->environ = envp;
+
+	if (environ_constructor) {
+		struct FuncType errno_location_type;
+
+		_wasmjit_create_func_type(&errno_location_type,
+					  0, NULL,
+					  0, NULL);
+
+		if (!wasmjit_typecheck_func(&errno_location_type,
+					    environ_constructor)) {
+			return -1;
+		}
+
+		ret = wasmjit_invoke_function(environ_constructor, NULL, NULL);
+		if (ret)
+			return -1;
+	}
 
 	return 0;
 }

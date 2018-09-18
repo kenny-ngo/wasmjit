@@ -253,6 +253,7 @@ struct EmscriptenContext g_emscripten_ctx;
 extern struct FuncInst WASM_FUNC_SYMBOL(asm, _main);
 extern struct FuncInst WASM_FUNC_SYMBOL(asm, stackAlloc);
 extern struct FuncInst WASM_FUNC_SYMBOL(asm, ___errno_location) __attribute__((weak));
+extern struct FuncInst WASM_FUNC_SYMBOL(asm, ___emscripten_environ_constructor) __attribute__((weak));
 
 __attribute__((constructor))
 static void init_module(void)
@@ -265,6 +266,7 @@ int main(int argc, char *argv[]) {
 	int ret;
 	ret = wasmjit_emscripten_init(&g_emscripten_ctx,
 				      &WASM_FUNC_SYMBOL(asm, ___errno_location),
+				      &WASM_FUNC_SYMBOL(asm, ___emscripten_environ_constructor),
 				      environ);
 	if (ret)
 		return -1;
