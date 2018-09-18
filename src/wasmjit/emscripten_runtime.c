@@ -856,15 +856,17 @@ static int convert_proto_to_local(int domain, int32_t proto)
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ && (defined(__linux__) || defined(__KERNEL__))
 
-static long finish_bind(int fd, void *addr, size_t len)
+static long finish_bindlike(long (*bindlike)(int, const struct sockaddr *, socklen_t),
+			    int fd, void *addr, size_t len)
 {
-	return sys_bind(fd, addr, len);
+	return bindlike(fd, addr, len);
 }
 
 #else
 
 /* need to byte swap and adapt sockaddr to current platform */
-static long finish_bind(int fd, char *addr, size_t len)
+static long finish_bindlike(long (*bindlike)(int, const struct sockaddr *, socklen_t),
+			    int fd, char *addr, size_t len)
 {
 	uint16_t family;
 	union {
@@ -938,7 +940,7 @@ static long finish_bind(int fd, char *addr, size_t len)
 
 #undef FAS
 
-	return sys_bind(fd, ptr, ptr_size);
+	return bindlike(fd, ptr, ptr_size);
 }
 
 #endif
@@ -947,15 +949,16 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 					  struct FuncInst *funcinst)
 {
 	long ret;
-	uint32_t ivargs;
+	uint32_t ivargs, icall;
 	LOAD_ARGS(funcinst, varargs, 2,
 		  uint32_t, call,
 		  uint32_t, varargs);
 
 	(void) which;
 	ivargs = args.varargs;
+	icall = args.call;
 
-	switch (args.call) {
+	switch (icall) {
 	case 1: { // socket
 		int domain, type, protocol;
 
@@ -971,7 +974,8 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 		ret = sys_socket(domain, type, protocol);
 		break;
 	}
-	case 2: { // bind
+	case 2: // bind
+	case 3: { // connect
 		char *base;
 
 		LOAD_ARGS(funcinst, ivargs, 3,
@@ -986,11 +990,17 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 
 		base = wasmjit_emscripten_get_base_address(funcinst);
 
-		ret = finish_bind(args.fd,
-				  base + args.addrp, args.addrlen);
+		if (icall == 2) {
+			ret = finish_bindlike(&sys_bind,
+					      args.fd,
+					      base + args.addrp, args.addrlen);
+		} else {
+			assert(icall == 3);
+			ret = finish_bindlike(&sys_connect,
+					      args.fd,
+					      base + args.addrp, args.addrlen);
+		}
 		break;
-	}
-	case 3: { // connect
 	}
 	case 4: { // listen
 	}
