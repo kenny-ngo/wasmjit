@@ -201,9 +201,40 @@ static char *wasmjit_emscripten_get_base_address(struct FuncInst *funcinst) {
 int wasmjit_emscripten_init(struct EmscriptenContext *ctx,
 			    struct FuncInst *errno_location_inst,
 			    struct FuncInst *environ_constructor,
+			    struct FuncInst *malloc_inst,
+			    struct FuncInst *free_inst,
 			    char **envp)
 {
 	int ret;
+
+	assert(malloc_inst);
+	{
+		struct FuncType malloc_type;
+		wasmjit_valtype_t malloc_input_type = VALTYPE_I32;
+		wasmjit_valtype_t malloc_return_type = VALTYPE_I32;
+
+		_wasmjit_create_func_type(&malloc_type,
+					  1, &malloc_input_type,
+					  1, &malloc_return_type);
+
+		if (!wasmjit_typecheck_func(&malloc_type,
+					    malloc_inst))
+			return -1;
+	}
+
+	assert(free_inst);
+	{
+		struct FuncType free_type;
+		wasmjit_valtype_t free_input_type = VALTYPE_I32;
+
+		_wasmjit_create_func_type(&free_type,
+					  1, &free_input_type,
+					  0, NULL);
+
+		if (!wasmjit_typecheck_func(&free_type,
+					    free_inst))
+			return -1;
+	}
 
 	if (errno_location_inst) {
 		struct FuncType errno_location_type;
@@ -220,7 +251,10 @@ int wasmjit_emscripten_init(struct EmscriptenContext *ctx,
 	}
 
 	ctx->errno_location_inst = errno_location_inst;
+	ctx->malloc_inst = malloc_inst;
+	ctx->free_inst = free_inst;
 	ctx->environ = envp;
+	ctx->buildEnvironmentCalled = 0;
 
 	if (environ_constructor) {
 		struct FuncType errno_location_type;
@@ -539,45 +573,99 @@ void wasmjit_emscripten_abort(uint32_t what, struct FuncInst *funcinst)
 	wasmjit_emscripten_internal_abort(abort_string);
 }
 
+static uint32_t getMemory(struct EmscriptenContext *ctx,
+			  uint32_t amount)
+{
+	union ValueUnion input, output;
+	input.i32 = amount;
+	if (wasmjit_invoke_function(ctx->malloc_inst, &input, &output))
+		wasmjit_emscripten_internal_abort("Failed to invoke allocator");
+	return output.i32;
+}
+
+static void freeMemory(struct EmscriptenContext *ctx,
+		       uint32_t ptr)
+{
+	union ValueUnion input;
+	input.i32 = ptr;
+	if (wasmjit_invoke_function(ctx->free_inst, &input, NULL))
+		wasmjit_emscripten_internal_abort("Failed to invoke deallocator");
+}
+
 void wasmjit_emscripten____buildEnvironment(uint32_t environ_arg,
 					    struct FuncInst *funcinst)
 {
 	char *base = wasmjit_emscripten_get_base_address(funcinst);
 	uint32_t envPtr;
 	uint32_t poolPtr;
-	size_t i = 0;
+	uint32_t total_pool_size;
+	uint32_t n_envs;
+	size_t i;
 	char **env;
+	struct EmscriptenContext *ctx = _wasmjit_emscripten_get_context(funcinst);
 
-	if (_wasmjit_emscripten_copy_from_user(funcinst,
-					       &envPtr,
-					       environ_arg,
-					       sizeof(envPtr)))
-		wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
-	if (_wasmjit_emscripten_copy_from_user(funcinst,
-					       &poolPtr,
-					       envPtr,
-					       sizeof(poolPtr)))
+	if (ctx->buildEnvironmentCalled) {
+		/* free old stuff */
+		if (_wasmjit_emscripten_copy_from_user(funcinst,
+						       &envPtr,
+						       environ_arg,
+						       sizeof(envPtr)))
+			wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
+
+		freeMemory(ctx, envPtr);
+
+		if (_wasmjit_emscripten_copy_from_user(funcinst,
+						       &poolPtr,
+						       envPtr,
+						       sizeof(poolPtr)))
+			wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
+
+		freeMemory(ctx, poolPtr);
+	}
+
+	n_envs = 0;
+	total_pool_size = 0;
+	for (env = ctx->environ; *env; ++env, ++i) {
+		total_pool_size += strlen(*env) + 1;
+		n_envs += 1;
+	}
+
+	poolPtr = getMemory(ctx, total_pool_size);
+	if (!poolPtr)
+		wasmjit_emscripten_internal_abort("Failed to allocate memory in critical region");
+
+	/* double check user space isn't malicious */
+	if (!_wasmjit_emscripten_check_range(funcinst, poolPtr, total_pool_size))
 		wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
 
-	for (env = _wasmjit_emscripten_get_context(funcinst)->environ; *env; ++env, ++i) {
+	envPtr = getMemory(ctx, (n_envs + 1) * 4);
+	if (!envPtr)
+		wasmjit_emscripten_internal_abort("Failed to allocate memory in critical region");
+
+	/* double check user space isn't malicious */
+	if (!_wasmjit_emscripten_check_range(funcinst, envPtr, (n_envs + 1) * 4))
+		wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
+
+	if (_wasmjit_emscripten_copy_to_user(funcinst,
+					     environ_arg,
+					     &envPtr,
+					     sizeof(envPtr)))
+		wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
+
+	for (env = ctx->environ, i = 0; *env; ++env, ++i) {
 		size_t len = strlen(*env);
-		if (!_wasmjit_emscripten_check_range(funcinst, poolPtr, len + 1))
-			wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
+		/* NB: these memcpys are checked above */
 		memcpy(base + poolPtr, *env, len + 1);
-		if (_wasmjit_emscripten_copy_to_user(funcinst,
-						     envPtr + i * sizeof(uint32_t),
-						     &poolPtr,
-						     sizeof(poolPtr)))
-			wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
+		memcpy(base + envPtr + i * sizeof(uint32_t),
+		       &poolPtr, sizeof(poolPtr));
 		poolPtr += len + 1;
 	}
 
 	poolPtr = 0;
-	if (_wasmjit_emscripten_copy_to_user(funcinst,
-					     envPtr + i * sizeof(uint32_t),
-					     &poolPtr,
-					     sizeof(poolPtr)))
-		wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
+	memset(base + envPtr + i * sizeof(uint32_t),
+	       0, sizeof(poolPtr));
+
+	ctx->buildEnvironmentCalled = 1;
 }
 
 uint32_t wasmjit_emscripten____syscall10(uint32_t which, uint32_t varargs,

@@ -341,7 +341,9 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 		if (!self->emscripten_asm_module) {
 			struct FuncInst
 				*errno_location_inst,
-				*environ_constructor;
+				*environ_constructor,
+				*malloc_inst,
+				*free_inst;
 
 			errno_location_inst = wasmjit_get_export(module_inst, "___errno_location",
 								 IMPORT_DESC_TYPE_FUNC).func;
@@ -350,9 +352,24 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 								 "___emscripten_environ_constructor",
 								 IMPORT_DESC_TYPE_FUNC).func;
 
+			malloc_inst = wasmjit_get_export(module_inst,
+							 "_malloc",
+							 IMPORT_DESC_TYPE_FUNC).func;
+			if (!malloc_inst)
+				return -1;
+
+
+			free_inst = wasmjit_get_export(module_inst,
+						       "_free",
+						       IMPORT_DESC_TYPE_FUNC).func;
+			if (!free_inst)
+				return -1;
+
 			if (wasmjit_emscripten_init(wasmjit_emscripten_get_context(env_module_inst),
 						    errno_location_inst,
 						    environ_constructor,
+						    malloc_inst,
+						    free_inst,
 						    envp))
 				return -1;
 

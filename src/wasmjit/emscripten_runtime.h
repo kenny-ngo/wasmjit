@@ -36,6 +36,9 @@ enum {
 struct EmscriptenContext {
 	struct FuncInst *errno_location_inst;
 	char **environ;
+	int buildEnvironmentCalled;
+	struct FuncInst *malloc_inst;
+	struct FuncInst *free_inst;
 };
 
 void wasmjit_emscripten_abortStackOverflow(uint32_t allocSize, struct FuncInst *funcinst);
@@ -69,6 +72,9 @@ struct MemInst *wasmjit_emscripten_get_mem_inst(struct FuncInst *funcinst);
 
 int wasmjit_emscripten_init(struct EmscriptenContext *ctx,
 			    struct FuncInst *errno_location_inst,
+			    struct FuncInst *environ_constructor,
+			    struct FuncInst *malloc_inst,
+			    struct FuncInst *free_inst,
 			    char *envp[]);
 
 int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
