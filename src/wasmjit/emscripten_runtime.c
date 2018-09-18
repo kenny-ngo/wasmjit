@@ -318,6 +318,8 @@ int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
 							    len))
 				return -1;
 
+			ret = uint32_t_swap_bytes(ret);
+
 			if (wasmjit_emscripten_copy_to_user(meminst,
 							    argv_i + i * 4,
 							    &ret,
@@ -406,9 +408,11 @@ void wasmjit_emscripten____setErrNo(uint32_t value, struct FuncInst *funcinst)
 		_wasmjit_emscripten_get_context(funcinst);
 
 	if (ctx->errno_location_inst &&
-	    !wasmjit_invoke_function(ctx->errno_location_inst, NULL, &out) &&
-	    !_wasmjit_emscripten_copy_to_user(funcinst, out.i32, &value, sizeof(value)))
+	    !wasmjit_invoke_function(ctx->errno_location_inst, NULL, &out)) {
+		value = uint32_t_swap_bytes(value);
+		if (!_wasmjit_emscripten_copy_to_user(funcinst, out.i32, &value, sizeof(value)))
 			return;
+	}
 	wasmjit_emscripten_internal_abort("failed to set errno from JS");
 }
 
@@ -615,6 +619,8 @@ void wasmjit_emscripten____buildEnvironment(uint32_t environ_arg,
 						       sizeof(envPtr)))
 			wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
 
+		envPtr = uint32_t_swap_bytes(envPtr);
+
 		freeMemory(ctx, envPtr);
 
 		if (_wasmjit_emscripten_copy_from_user(funcinst,
@@ -622,6 +628,8 @@ void wasmjit_emscripten____buildEnvironment(uint32_t environ_arg,
 						       envPtr,
 						       sizeof(poolPtr)))
 			wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
+
+		poolPtr = uint32_t_swap_bytes(poolPtr);
 
 		freeMemory(ctx, poolPtr);
 	}
@@ -649,18 +657,24 @@ void wasmjit_emscripten____buildEnvironment(uint32_t environ_arg,
 	if (!_wasmjit_emscripten_check_range(funcinst, envPtr, (n_envs + 1) * 4))
 		wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
 
-	if (_wasmjit_emscripten_copy_to_user(funcinst,
-					     environ_arg,
-					     &envPtr,
-					     sizeof(envPtr)))
-		wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
+	{
+		uint32_t ep;
+		ep = uint32_t_swap_bytes(envPtr);
+		if (_wasmjit_emscripten_copy_to_user(funcinst,
+						     environ_arg,
+						     &ep,
+						     sizeof(envPtr)))
+			wasmjit_trap(WASMJIT_TRAP_MEMORY_OVERFLOW);
+	}
 
 	for (env = ctx->environ, i = 0; *env; ++env, ++i) {
 		size_t len = strlen(*env);
+		uint32_t pp;
 		/* NB: these memcpys are checked above */
 		memcpy(base + poolPtr, *env, len + 1);
+		pp = uint32_t_swap_bytes(poolPtr);
 		memcpy(base + envPtr + i * sizeof(uint32_t),
-		       &poolPtr, sizeof(poolPtr));
+		       &pp, sizeof(poolPtr));
 		poolPtr += len + 1;
 	}
 
@@ -1046,17 +1060,11 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 uint32_t wasmjit_emscripten____syscall221(uint32_t which, uint32_t varargs,
 					  struct FuncInst *funcinst)
 {
-	struct {
-		int32_t fd, cmd;
-	} args;
+	LOAD_ARGS(funcinst, varargs, 2,
+		  int32_t, fd,
+		  int32_t, cmd);
 
 	(void) which;
-
-	if (_wasmjit_emscripten_copy_from_user(funcinst,
-					       &args,
-					       varargs,
-					       sizeof(args)))
-		return -SYS_EINVAL;
 
 	/* TODO: implement */
 	(void) args;
@@ -1104,6 +1112,7 @@ void wasmjit_emscripten_start_func(struct FuncInst *funcinst)
 
 	DYNAMIC_BASE = alignMemory(STACK_MAX->value.data.i32,  16);
 
+	DYNAMIC_BASE = uint32_t_swap_bytes(DYNAMIC_BASE);
 	copy_user_res = wasmjit_emscripten_copy_to_user(meminst,
 							DYNAMICTOP_PTR->value.data.i32,
 							&DYNAMIC_BASE,
