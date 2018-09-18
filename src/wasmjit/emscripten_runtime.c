@@ -943,15 +943,49 @@ struct EmscriptenContext *wasmjit_emscripten_get_context(struct ModuleInst *modu
 	return module_inst->private_data;
 }
 
+#define alignMemory(size, factor) \
+	(((size) % (factor)) ? ((size) - ((size) % (factor)) + (factor)) : (size))
+
+void wasmjit_emscripten_start_func(struct FuncInst *funcinst)
+{
+	struct MemInst *meminst;
+	struct GlobalInst *DYNAMICTOP_PTR, *STACK_MAX;
+	uint32_t DYNAMIC_BASE;
+	uint32_t copy_user_res;
+
+	/* fill DYNAMIC_BASE */
+
+	if (funcinst->module_inst->mems.n_elts < 1)
+		wasmjit_emscripten_internal_abort("no memory");
+
+	meminst = funcinst->module_inst->mems.elts[0];
+	assert(meminst);
+
+	DYNAMICTOP_PTR =
+		wasmjit_get_export(funcinst->module_inst, "DYNAMICTOP_PTR",
+				   IMPORT_DESC_TYPE_GLOBAL).global;
+	assert(DYNAMICTOP_PTR && DYNAMICTOP_PTR->value.type == VALTYPE_I32);
+
+	STACK_MAX =
+		wasmjit_get_export(funcinst->module_inst, "STACK_MAX",
+				   IMPORT_DESC_TYPE_GLOBAL).global;
+	assert(STACK_MAX && STACK_MAX->value.type == VALTYPE_I32);
+
+	DYNAMIC_BASE = alignMemory(STACK_MAX->value.data.i32,  16);
+
+	copy_user_res = wasmjit_emscripten_copy_to_user(meminst,
+							DYNAMICTOP_PTR->value.data.i32,
+							&DYNAMIC_BASE,
+							sizeof(DYNAMIC_BASE));
+	assert(!copy_user_res);
+}
+
 void wasmjit_emscripten_derive_memory_globals(uint32_t static_bump,
 					      struct WasmJITEmscriptenMemoryGlobals *out)
 {
 
 #define staticAlloc(_top , s)                           \
 	(((_top) + (s) + 15) & ((uint32_t) -16))
-
-#define alignMemory(size, factor) \
-	(((size) % (factor)) ? ((size) - ((size) % (factor)) + (factor)) : (size))
 
 #define TOTAL_STACK 5242880
 #define STACK_ALIGN_V 16

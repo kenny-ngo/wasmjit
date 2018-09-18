@@ -164,8 +164,8 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi);
 #define _DEFINE_INVOKER(_module, _name, _fptr, _output, _n, ...) \
 	_DEFINE_INVOKER_ ## _output(_module, _name, _fptr, _output, _n, ##__VA_ARGS__)
 
-#define _DEFINE_WASM_FUNCTION(_module, _name, _fptr, _output, _n, ...)	\
-	extern struct FuncInst WASM_FUNC_SYMBOL(_module, _name);	\
+#define _DEFINE_WASM_FUNCTION(qualifier, _module, _name, _fptr, _output, _n, ...) \
+	qualifier struct FuncInst WASM_FUNC_SYMBOL(_module, _name);		\
 									\
 	_DEFINE_INVOKER(_module, _name, _fptr, _output, _n, ##__VA_ARGS__) \
 									\
@@ -174,7 +174,7 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi);
 		return (*_fptr)(EXPAND_ARGS(_n, ##__VA_ARGS__) COMMA_IF_NOT_EMPTY(_n) &WASM_FUNC_SYMBOL(_module, _name)); \
 	}								\
 									\
-	struct FuncInst WASM_FUNC_SYMBOL(_module, _name) = {		\
+	qualifier struct FuncInst WASM_FUNC_SYMBOL(_module, _name) = {		\
 		.module_inst = &WASM_MODULE_SYMBOL(_module).module,	\
 		.compiled_code = CAT(CAT(CAT(_module,  __), _name),  __emscripten__hostfunc__),	\
 		.invoker = CAT(CAT(CAT(_module,  __), _name),  __emscripten__hostfunc__invoker), \
@@ -185,7 +185,8 @@ void wasmjit_init_static_module(struct StaticModuleInst *smi);
 		}							\
 	};
 
-#define DEFINE_WASM_FUNCTION(...) _DEFINE_WASM_FUNCTION(CURRENT_MODULE, __VA_ARGS__)
+#define DEFINE_WASM_FUNCTION_ADVANCED(qualifier, ...) _DEFINE_WASM_FUNCTION(qualifier, CURRENT_MODULE, __VA_ARGS__)
+#define DEFINE_WASM_FUNCTION(...) _DEFINE_WASM_FUNCTION(, CURRENT_MODULE, __VA_ARGS__)
 
 #define _DEFINE_WASM_TABLE(_module, _name, _elemtype, _length_, _max)	\
 	struct FuncInst *WASM_SYMBOL(_module, _name, buffer) [(_max)];	\

@@ -29,6 +29,62 @@
 
 #include <wasmjit/sys.h>
 
+static struct FuncInst *alloc_func(struct ModuleInst *module, void *_fptr,
+				   wasmjit_valtype_t _output, size_t n_inputs,
+				   wasmjit_valtype_t *inputs)
+{
+	void *tmp_unmapped = NULL;
+	struct FuncInst *tmp_func = NULL;
+
+	tmp_func = calloc(1, sizeof(struct FuncInst));
+	if (!tmp_func)
+		goto error;
+	tmp_func->module_inst = module;
+	tmp_func->type.n_inputs = n_inputs;
+	memcpy(tmp_func->type.input_types, inputs, n_inputs);
+	tmp_func->type.output_type = _output;
+	tmp_unmapped =
+		wasmjit_compile_hostfunc(&tmp_func->type, _fptr,
+					 tmp_func,
+					 &tmp_func->compiled_code_size);
+	if (!tmp_unmapped)
+		goto error;
+	tmp_func->compiled_code =
+		wasmjit_map_code_segment(tmp_func->compiled_code_size);
+	if (!tmp_func->compiled_code)
+		goto error;
+	memcpy(tmp_func->compiled_code, tmp_unmapped,
+	       tmp_func->compiled_code_size);
+	if (!wasmjit_mark_code_segment_executable(tmp_func->compiled_code,
+						  tmp_func->compiled_code_size))
+		goto error;
+	tmp_unmapped =
+		wasmjit_compile_invoker(&tmp_func->type,
+					tmp_func->compiled_code,
+					&tmp_func->invoker_size);
+	if (!tmp_unmapped)
+		goto error;
+	tmp_func->invoker =
+		wasmjit_map_code_segment(tmp_func->invoker_size);
+	memcpy(tmp_func->invoker, tmp_unmapped,
+	       tmp_func->invoker_size);
+	if (!wasmjit_mark_code_segment_executable(tmp_func->invoker,
+						  tmp_func->invoker_size))
+		goto error;
+
+	if (0) {
+	error:
+		if (tmp_func)
+			wasmjit_free_func_inst(tmp_func);
+		tmp_func = NULL;
+	}
+
+	if (tmp_unmapped)
+		free(tmp_unmapped);
+
+	return tmp_func;
+}
+
 struct NamedModule *wasmjit_instantiate_emscripten_runtime(uint32_t static_bump,
 							   size_t tablemin,
 							   size_t tablemax,
@@ -39,6 +95,7 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(uint32_t static_bump,
 		struct NamedModule *elts;
 	} modules = {0, NULL};
 	struct FuncInst *tmp_func = NULL;
+	struct FuncInst *start_func = NULL;
 	struct FuncInst **tmp_table_buf = NULL;
 	struct TableInst *tmp_table = NULL;
 	char *tmp_mem_buf = NULL;
@@ -46,7 +103,6 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(uint32_t static_bump,
 	struct GlobalInst *tmp_global = NULL;
 	struct ModuleInst *module = NULL;
 	struct NamedModule *ret;
-	void *tmp_unmapped = NULL;
 	struct WasmJITEmscriptenMemoryGlobals globals;
 
 	wasmjit_emscripten_derive_memory_globals(static_bump, &globals);
@@ -62,6 +118,10 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(uint32_t static_bump,
 
 #define START_MODULE()						\
 	{							\
+		if (start_func)	{					\
+			wasmjit_free_func_inst(start_func);		\
+			start_func = NULL;				\
+		}							\
 		module = calloc(1, sizeof(struct ModuleInst));	\
 		if (!module)					\
 			goto error;				\
@@ -77,6 +137,9 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(uint32_t static_bump,
 			if (!module->private_data)			\
 				goto error;				\
 			module->free_private_data = &free;		\
+		}							\
+		if (start_func) {					\
+			wasmjit_invoke_function(start_func, NULL, NULL); \
 		}							\
 		LVECTOR_GROW(&modules, 1);				\
 		modules.elts[modules.n_elts - 1].name = strdup(XSTR(CURRENT_MODULE)); \
@@ -96,44 +159,8 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(uint32_t static_bump,
 #define DEFINE_WASM_FUNCTION(_name, _fptr, _output, n, ...)	  \
 	{							  \
 		wasmjit_valtype_t inputs[] = { __VA_ARGS__ };		\
-		tmp_func = calloc(1, sizeof(struct FuncInst));		\
+		tmp_func = alloc_func(module, _fptr, _output, n, inputs); \
 		if (!tmp_func)						\
-			goto error;					\
-		tmp_func->module_inst = module;				\
-		tmp_func->type.n_inputs = ARRAY_LEN(inputs);		\
-		memcpy(tmp_func->type.input_types, inputs, ARRAY_LEN(inputs)); \
-		tmp_func->type.output_type = _output;			\
-		if (tmp_unmapped)					\
-			free(tmp_unmapped);				\
-		tmp_unmapped =						\
-			wasmjit_compile_hostfunc(&tmp_func->type, _fptr, \
-						 tmp_func,		\
-						 &tmp_func->compiled_code_size); \
-		if (!tmp_unmapped)					\
-			goto error;					\
-		tmp_func->compiled_code =				\
-			wasmjit_map_code_segment(tmp_func->compiled_code_size);	\
-		if (!tmp_func->compiled_code)				\
-			goto error;					\
-		memcpy(tmp_func->compiled_code, tmp_unmapped,		\
-		       tmp_func->compiled_code_size);			\
-		if (!wasmjit_mark_code_segment_executable(tmp_func->compiled_code,\
-							  tmp_func->compiled_code_size)) \
-			goto error;					\
-		if (tmp_unmapped)					\
-			free(tmp_unmapped);				\
-		tmp_unmapped =						\
-			wasmjit_compile_invoker(&tmp_func->type,	\
-						tmp_func->compiled_code, \
-						&tmp_func->invoker_size); \
-		if (!tmp_unmapped)					\
-			goto error;					\
-		tmp_func->invoker =					\
-			wasmjit_map_code_segment(tmp_func->invoker_size); \
-		memcpy(tmp_func->invoker, tmp_unmapped,			\
-		       tmp_func->invoker_size);				\
-		if (!wasmjit_mark_code_segment_executable(tmp_func->invoker, \
-							  tmp_func->invoker_size)) \
 			goto error;					\
 		LVECTOR_GROW(&module->funcs, 1);			\
 		module->funcs.elts[module->funcs.n_elts - 1] = tmp_func; \
@@ -144,6 +171,13 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(uint32_t static_bump,
 		module->exports.elts[module->exports.n_elts - 1].type = IMPORT_DESC_TYPE_FUNC; \
 		module->exports.elts[module->exports.n_elts - 1].value.func = module->funcs.elts[module->funcs.n_elts - 1]; \
 	}
+
+#define DEFINE_WASM_START_FUNCTION(fptr)				\
+	do {								\
+		start_func = alloc_func(module, fptr, VALTYPE_NULL, 0, NULL); \
+		if (!start_func)					\
+			goto error;					\
+	} while (0);
 
 #define DEFINE_EXTERNAL_WASM_TABLE(name)				\
 	DEFINE_WASM_TABLE(name, ELEMTYPE_ANYFUNC, name ## min, name ## max)
@@ -235,13 +269,14 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(uint32_t static_bump,
 		}
 	}
 
-	if (tmp_unmapped)
-		free(tmp_unmapped);
 	if (module) {
 		wasmjit_free_module_inst(module);
 	}
 	if (tmp_func) {
 		wasmjit_free_func_inst(tmp_func);
+	}
+	if (start_func) {
+		wasmjit_free_func_inst(start_func);
 	}
 	if (tmp_table_buf)
 		free(tmp_table_buf);

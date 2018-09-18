@@ -33,6 +33,9 @@
 #define START_MODULE()				\
 	struct StaticModuleInst WASM_MODULE_SYMBOL(CURRENT_MODULE);
 
+#define DEFINE_WASM_START_FUNCTION(fptr)	\
+	DEFINE_WASM_FUNCTION_ADVANCED(static, __start_func__, wasmjit_emscripten_start_func, VALTYPE_NULL, 0)
+
 #define END_MODULE()
 #define START_TABLE_DEFS()
 #define END_TABLE_DEFS()
@@ -63,9 +66,11 @@
 #undef END_GLOBAL_DEFS
 #undef START_FUNCTION_DEFS
 #undef END_FUNCTION_DEFS
+#undef DEFINE_WASM_START_FUNCTION
 #undef DEFINE_EXTERNAL_WASM_TABLE
 #undef DEFINE_EXTERNAL_WASM_GLOBAL
 
+#define DEFINE_WASM_START_FUNCTION(...)
 #define START_MODULE()
 
 #define START_TABLE_DEFS(n)						\
@@ -211,7 +216,6 @@ struct EmscriptenContext g_emscripten_ctx;
 #define DEFINE_WASM_MEMORY(...)
 #define DEFINE_EXTERNAL_WASM_GLOBAL(...)
 #define DEFINE_EXTERNAL_WASM_TABLE(...)
-#define END_MODULE()
 
 #define START_MODULE()						\
 	struct StaticModuleInst WASM_MODULE_SYMBOL(CURRENT_MODULE) = {	\
@@ -237,15 +241,24 @@ struct EmscriptenContext g_emscripten_ctx;
 				.elts = CAT(CURRENT_MODULE, _exports),	\
 			},						\
 			.private_data = &g_emscripten_ctx,		\
-		},							\
-		.initted = 1,						\
-	};
+		},
+
+#define DEFINE_WASM_START_FUNCTION(...)					\
+	.start_func = &WASM_FUNC_SYMBOL(CURRENT_MODULE, __start_func__), \
+
+#define END_MODULE() };
 
 #include <wasmjit/emscripten_runtime_def.h>
 
 extern struct FuncInst WASM_FUNC_SYMBOL(asm, _main);
 extern struct FuncInst WASM_FUNC_SYMBOL(asm, stackAlloc);
 extern struct FuncInst WASM_FUNC_SYMBOL(asm, ___errno_location) __attribute__((weak));
+
+__attribute__((constructor))
+static void init_module(void)
+{
+	wasmjit_init_static_module(&WASM_MODULE_SYMBOL(env));
+}
 
 int main(int argc, char *argv[]) {
 	return wasmjit_emscripten_invoke_main(&g_emscripten_ctx,
