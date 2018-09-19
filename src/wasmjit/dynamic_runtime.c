@@ -162,28 +162,24 @@ int wasmjit_invoke_function(struct FuncInst *funcinst,
 			    union ValueUnion *out)
 {
 	union ValueUnion lout;
-	int ret, jmp_buf_was_set;
+	int ret;
 	jmp_buf jmpbuf;
 
-	jmp_buf_was_set = !!wasmjit_get_jmp_buf();
-
-	if (!jmp_buf_was_set) {
-		ret = setjmp(jmpbuf);
-	} else {
-		ret = 0;
-	}
-
-	if (!ret) {
-		if (!jmp_buf_was_set)
-			wasmjit_set_jmp_buf(&jmpbuf);
-
+	if (wasmjit_get_jmp_buf()) {
 		lout = wasmjit_invoke_function_raw(funcinst, values);
 		if (out)
 			*out = lout;
-	}
-
-	if (!jmp_buf_was_set)
+		ret = 0;
+	} else {
+		wasmjit_set_jmp_buf(&jmpbuf);
+		if (!(ret = setjmp(jmpbuf))) {
+			lout = wasmjit_invoke_function_raw(funcinst, values);
+			if (out)
+				*out = lout;
+			ret = 0;
+		}
 		wasmjit_set_jmp_buf(NULL);
+	}
 
 	return ret;
 }
