@@ -1074,6 +1074,79 @@ static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen
 
 #endif
 
+#ifdef SAME_SOCKADDR
+
+static long finish_sendto(int32_t fd,
+			  const void *buf, uint32_t len,
+			  int32_t flags,
+			  const void *dest_addr, uint32_t addrlen)
+{
+	return sys_sendto(fd, buf, len, flags, dest_addr, addrlen);
+}
+
+#else
+
+#define SYS_MSG_CONFIRM 2048
+#define SYS_MSG_DONTROUTE 4
+#define SYS_MSG_DONTWAIT 64
+#define SYS_MSG_EOR 128
+#define SYS_MSG_MORE 32768
+#define SYS_MSG_NOSIGNAL 16384
+#define SYS_MSG_OOB 1
+
+static int convert_sendto_flags(int32_t flags)
+{
+	int oflags = 0;
+
+#define SETF(n)					\
+	if (flags & SYS_MSG_ ## n) {		\
+		oflags |= MSG_ ## n;		\
+	}
+
+	SETF(CONFIRM);
+	SETF(DONTROUTE);
+	SETF(DONTWAIT);
+	SETF(EOR);
+	SETF(MORE);
+	SETF(NOSIGNAL);
+	SETF(OOB);
+
+#undef SETF
+
+	return oflags;
+}
+
+static long finish_sendto(int32_t fd,
+			  const void *buf, uint32_t len,
+			  int32_t flags,
+			  const void *dest_addr, uint32_t addrlen)
+{
+
+	struct sockaddr_storage ss;
+	size_t ptr_size;
+	int flags2;
+
+	/* convert dest_addr to form understood by sys_sendto */
+	if (read_sockaddr(&ss, &ptr_size, dest_addr, addrlen))
+		return -SYS_EINVAL;
+
+	/* if there are flags we don't understand, then return invalid flag */
+	if (flags & ~(int32_t) (SYS_MSG_CONFIRM |
+				SYS_MSG_DONTROUTE |
+				SYS_MSG_DONTWAIT |
+				SYS_MSG_EOR |
+				SYS_MSG_MORE |
+				SYS_MSG_NOSIGNAL |
+				SYS_MSG_OOB))
+		return -SYS_EINVAL;
+
+	flags2 = convert_sendto_flags(flags);
+
+	return sys_sendto(fd, buf, len, flags2, (void *) &ss, ptr_size);
+}
+
+#endif
+
 uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 					  struct FuncInst *funcinst)
 {
@@ -1190,6 +1263,35 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 		break;
 	}
 	case 11: { // sendto
+		char *base;
+
+		LOAD_ARGS(funcinst, ivargs, 6,
+			  int32_t, fd,
+			  uint32_t, message,
+			  uint32_t, length,
+			  int32_t, flags,
+			  uint32_t, addrp,
+			  uint32_t, addrlen);
+
+		if (!_wasmjit_emscripten_check_range(funcinst,
+						     args.message,
+						     args.length))
+			return -SYS_EFAULT;
+
+		if (!_wasmjit_emscripten_check_range(funcinst,
+						     args.addrp,
+						     args.addrlen))
+			return -SYS_EFAULT;
+
+		base = wasmjit_emscripten_get_base_address(funcinst);
+
+		ret = finish_sendto(args.fd,
+				    base + args.message,
+				    args.length,
+				    args.flags,
+				    base + args.addrp,
+				    args.addrlen);
+		break;
 	}
 	case 12: { // recvfrom
 	}

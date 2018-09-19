@@ -62,12 +62,14 @@ typedef int socklen_t;
 #define KWSC1(name, ...) KWSCx(1, name, __VA_ARGS__)
 #define KWSC2(name, ...) KWSCx(2, name, __VA_ARGS__)
 #define KWSC3(name, ...) KWSCx(3, name, __VA_ARGS__)
+#define KWSC6(name, ...) KWSCx(6, name, __VA_ARGS__)
 
 #include <wasmjit/emscripten_runtime_sys_def.h>
 
 #undef KWSC1
 #undef KWSC2
 #undef KWSC3
+#undef KWSC6
 #undef KWSCx
 #undef __KDECL
 
