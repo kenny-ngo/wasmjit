@@ -971,6 +971,94 @@ static long finish_bindlike(long (*bindlike)(int, const struct sockaddr *, sockl
 
 #endif
 
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ && (defined(__linux__) || defined(__KERNEL__))
+
+static long finish_accept(int fd, void *addr, uint32_t *len)
+{
+	/* socklen_t == uint32_t */
+	return sys_accept(fd, addr, len);
+}
+
+#else
+
+/* need to byte swap and adapt sockaddr to current platform */
+static long finish_accept(int fd, char *addr, uint32_t *len)
+{
+	long rret;
+	struct sockaddr_storage ss;
+	socklen_t ssize = sizeof(ss);
+
+#define FAS 2
+
+	rret = sys_accept(fd, (void *) &ss, &ssize);
+	if (rret < 0)
+		return rret;
+
+	switch (ss.ss_family) {
+	case AF_UNIX: {
+		struct sockaddr_un sun;
+		uint16_t f = uint16_t_swap_bytes(SYS_AF_UNIX);
+
+		assert(ssize <= sizeof(sun));
+		memcpy(&sun, &ss, ssize);
+
+		memcpy(addr, &f, FAS);
+		memcpy(addr + FAS, sun.sun_path, ssize - FAS);
+		break;
+	}
+	case AF_INET: {
+		struct sockaddr_in sin;
+		uint16_t f = uint16_t_swap_bytes(SYS_AF_INET);
+
+		assert(ssize <= sizeof(sin));
+		memcpy(&sin, &ss, ssize);
+
+		memcpy(&sin.sin_family, &f, FAS);
+		/* these are in network order so they don't need to be swapped */
+		memcpy(addr + FAS, &sin.sin_port, 2);
+		memcpy(addr + FAS + 2, &sin.sin_addr, 4);
+		break;
+	}
+	case AF_INET6: {
+		struct sockaddr_in6 sin6;
+		uint16_t f = uint16_t_swap_bytes(SYS_AF_INET6);
+
+		assert(ssize <= sizeof(sin6));
+		memcpy(&sin6, &ss, ssize);
+
+		memcpy(&sin6.sin6_family, &f, FAS);
+
+		/* this is stored in network order */
+		memcpy(addr + FAS, &sin6.sin6_port, 2);
+
+		sin6.sin6_flowinfo = uint32_t_swap_bytes(sin6.sin6_flowinfo);
+		memcpy(addr + FAS + 2, &sin6.sin6_flowinfo, 4);
+
+		/* this is stored in network order */
+		memcpy(addr + FAS + 2 + 4, &sin6.sin6_addr, 16);
+
+		sin6.sin6_scope_id = uint32_t_swap_bytes(sin6.sin6_scope_id);
+		memcpy(addr + FAS + 2 + 4 + 16, &sin6.sin6_scope_id, 4);
+		break;
+	}
+	default: {
+		/* NB: we have to abort here because we can't undo the sys_accept() */
+		/* TODO: add more support */
+		wasmjit_emscripten_internal_abort("Unsupported socket family");
+		break;
+	}
+	}
+
+#undef FAS
+
+	assert(ssize <= UINT32_MAX);
+	*len = ssize;
+
+	return rret;
+}
+
+#endif
+
 uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 					  struct FuncInst *funcinst)
 {
@@ -1037,6 +1125,36 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 		break;
 	}
 	case 5: { // accept
+		char *base;
+		uint32_t addrlen;
+
+		LOAD_ARGS(funcinst, ivargs, 3,
+			  int32_t, fd,
+			  uint32_t, addrp,
+			  uint32_t, addrlenp);
+
+		if (_wasmjit_emscripten_copy_from_user(funcinst,
+						       &addrlen,
+						       args.addrlenp,
+						       sizeof(addrlen)))
+			return -SYS_EFAULT;
+
+		addrlen = uint32_t_swap_bytes(addrlen);
+
+		if (!_wasmjit_emscripten_check_range(funcinst,
+						     args.addrp,
+						     addrlen))
+			return -SYS_EFAULT;
+
+		base = wasmjit_emscripten_get_base_address(funcinst);
+
+		ret = finish_accept(args.fd, base + args.addrp, &addrlen);
+
+		/* range of addrlenp was checked above */
+		addrlen = uint32_t_swap_bytes(addrlen);
+		memcpy(base + args.addrlenp, &addrlen, sizeof(addrlen));
+
+		break;
 	}
 	case 6: { // getsockname
 	}
