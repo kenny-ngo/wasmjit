@@ -1128,6 +1128,7 @@ void wasmjit_emscripten_start_func(struct FuncInst *funcinst)
 							DYNAMICTOP_PTR->value.data.i32,
 							&DYNAMIC_BASE,
 							sizeof(DYNAMIC_BASE));
+	(void)copy_user_res;
 	assert(!copy_user_res);
 }
 
