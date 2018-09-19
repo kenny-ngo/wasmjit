@@ -973,16 +973,18 @@ static long finish_bindlike(long (*bindlike)(int, const struct sockaddr *, sockl
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ && (defined(__linux__) || defined(__KERNEL__))
 
-static long finish_accept(int fd, void *addr, uint32_t *len)
+static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen_t *),
+			      int fd, void *addr, uint32_t *len)
 {
 	/* socklen_t == uint32_t */
-	return sys_accept(fd, addr, len);
+	return acceptlike(fd, addr, len);
 }
 
 #else
 
 /* need to byte swap and adapt sockaddr to current platform */
-static long finish_accept(int fd, char *addr, uint32_t *len)
+static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen_t *),
+			      int fd, char *addr, uint32_t *len)
 {
 	long rret;
 	struct sockaddr_storage ss;
@@ -990,7 +992,7 @@ static long finish_accept(int fd, char *addr, uint32_t *len)
 
 #define FAS 2
 
-	rret = sys_accept(fd, (void *) &ss, &ssize);
+	rret = acceptlike(fd, (void *) &ss, &ssize);
 	if (rret < 0)
 		return rret;
 
@@ -1124,7 +1126,8 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 		ret = sys_listen(args.fd, args.backlog);
 		break;
 	}
-	case 5: { // accept
+	case 5: // accept
+	case 6: { // getsockname
 		char *base;
 		uint32_t addrlen;
 
@@ -1148,15 +1151,20 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 
 		base = wasmjit_emscripten_get_base_address(funcinst);
 
-		ret = finish_accept(args.fd, base + args.addrp, &addrlen);
+		if (icall == 5) {
+			ret = finish_acceptlike(&sys_accept,
+						args.fd, base + args.addrp, &addrlen);
+		} else {
+			assert(icall == 6);
+			ret = finish_acceptlike(&sys_getsockname,
+						args.fd, base + args.addrp, &addrlen);
+		}
 
 		/* range of addrlenp was checked above */
 		addrlen = uint32_t_swap_bytes(addrlen);
 		memcpy(base + args.addrlenp, &addrlen, sizeof(addrlen));
 
 		break;
-	}
-	case 6: { // getsockname
 	}
 	case 7: { // getpeername
 	}
