@@ -1127,7 +1127,8 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 		break;
 	}
 	case 5: // accept
-	case 6: { // getsockname
+	case 6: // getsockname
+	case 7: { // getpeername
 		char *base;
 		uint32_t addrlen;
 
@@ -1151,13 +1152,22 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 
 		base = wasmjit_emscripten_get_base_address(funcinst);
 
-		if (icall == 5) {
+		switch (icall) {
+		case 5:
 			ret = finish_acceptlike(&sys_accept,
 						args.fd, base + args.addrp, &addrlen);
-		} else {
-			assert(icall == 6);
+			break;
+		case 6:
 			ret = finish_acceptlike(&sys_getsockname,
 						args.fd, base + args.addrp, &addrlen);
+			break;
+		case 7:
+			ret = finish_acceptlike(&sys_getpeername,
+						args.fd, base + args.addrp, &addrlen);
+			break;
+		default:
+			assert(0);
+			__builtin_unreachable();
 		}
 
 		/* range of addrlenp was checked above */
@@ -1165,8 +1175,6 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 		memcpy(base + args.addrlenp, &addrlen, sizeof(addrlen));
 
 		break;
-	}
-	case 7: { // getpeername
 	}
 	case 11: { // sendto
 	}
