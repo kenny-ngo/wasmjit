@@ -879,8 +879,88 @@ static int convert_proto_to_local(int domain, int32_t proto)
 
 #endif
 
+
+#define FAS 2
+
 #if (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ && (defined(__linux__) || defined(__KERNEL__)))
 #define SAME_SOCKADDR
+#endif
+
+#ifndef SAME_SOCKADDR
+
+static long read_sockaddr(struct sockaddr_storage *ss, size_t *size,
+			  const char *addr, uint32_t len)
+{
+	uint16_t family;
+	assert(sizeof(family) == FAS);
+
+	if (len < FAS)
+		return -1;
+
+	memcpy(&family, addr, FAS);
+	family = uint16_t_swap_bytes(family);
+
+	switch (family) {
+	case SYS_AF_UNIX: {
+		struct sockaddr_un sun;
+		memset(&sun, 0, sizeof(sun));
+		sun.sun_family = AF_UNIX;
+		memcpy(&sun.sun_path, addr + FAS, len - FAS);
+		*size = len;
+		memcpy(ss, &sun, *size);
+		break;
+	}
+	case SYS_AF_INET: {
+		struct sockaddr_in sin;
+		if (len < 8)
+			return -1;
+		memset(&sin, 0, sizeof(struct sockaddr_in));
+		sin.sin_family = AF_INET;
+		/* these are in network order so they don't need to be swapped */
+		assert(sizeof(sin.sin_port) == 2);
+		memcpy(&sin.sin_port, addr + FAS, 2);
+		assert(sizeof(sin.sin_addr) == 4);
+		memcpy(&sin.sin_addr, addr + FAS + 2, 4);
+		*size = sizeof(struct sockaddr_in);
+		memcpy(ss, &sin, *size);
+		break;
+	}
+	case SYS_AF_INET6: {
+		struct sockaddr_in6 sin6;
+
+		if (len < 28)
+			return -1;
+
+		memset(&sin6, 0, sizeof(struct sockaddr_in6));
+		sin6.sin6_family = AF_INET6;
+
+		/* this is in network order so it doesn't need to be swapped */
+		assert(sizeof(sin6.sin6_port) == 2);
+		memcpy(&sin6.sin6_port, addr + FAS, 2);
+
+		memcpy(&sin6.sin6_flowinfo, addr + FAS + 2, 4);
+		sin6.sin6_flowinfo = uint32_t_swap_bytes(sin6.sin6_flowinfo);
+
+		/* this is in network order so it doesn't need to be swapped */
+		memcpy(&sin6.sin6_addr, addr + FAS + 2 + 4, 16);
+
+		memcpy(&sin6.sin6_scope_id, addr + FAS + 2 + 4 + 16, 4);
+		sin6.sin6_scope_id = uint32_t_swap_bytes(sin6.sin6_scope_id);
+
+		*size = sizeof(struct sockaddr_in6);
+		memcpy(ss, &sin6, *size);
+		break;
+	}
+	default: {
+		/* TODO: add more support */
+		return -1;
+		break;
+	}
+	}
+
+	return 0;
+}
+
 #endif
 
 #ifdef SAME_SOCKADDR
@@ -897,80 +977,13 @@ static long finish_bindlike(long (*bindlike)(int, const struct sockaddr *, sockl
 static long finish_bindlike(long (*bindlike)(int, const struct sockaddr *, socklen_t),
 			    int fd, char *addr, size_t len)
 {
-	uint16_t family;
-	union {
-		struct sockaddr_un un;
-		struct sockaddr_in in;
-		struct sockaddr_in6 in6;
-	} sa;
-	void *ptr;
+	struct sockaddr_storage ss;
 	size_t ptr_size;
 
-#define FAS 2
-	assert(sizeof(family) == FAS);
-
-	if (len < FAS)
+	if (read_sockaddr(&ss, &ptr_size, addr, len))
 		return -SYS_EINVAL;
 
-	memcpy(&family, addr, sizeof(family));
-	family = uint16_t_swap_bytes(family);
-
-	switch (family) {
-	case SYS_AF_UNIX: {
-		struct em_sockaddr_un {
-			uint16_t sun_family;
-			char buf[108];
-		};
-
-		sa.un.sun_family = AF_UNIX;
-		memcpy(sa.un.sun_path, addr + FAS, len - FAS);
-		ptr = &sa.un;
-		ptr_size = len;
-		break;
-	}
-	case SYS_AF_INET: {
-		if (len < 8)
-			return -SYS_EINVAL;
-		memset(&sa.in, 0, sizeof(struct sockaddr_in));
-		sa.in.sin_family = AF_INET;
-		/* these are in network order so they don't need to be swapped */
-		memcpy(&sa.in.sin_port, addr + 2, 2);
-		memcpy(&sa.in.sin_addr, addr + 4, 4);
-		ptr = &sa.in;
-		ptr_size = sizeof(struct sockaddr_in);
-		break;
-	}
-	case SYS_AF_INET6: {
-		if (len < 28)
-			return -SYS_EINVAL;
-
-		memset(&sa.in6, 0, sizeof(struct sockaddr_in6));
-
-		sa.in6.sin6_family = AF_INET6;
-
-		/* these are in network order so they don't need to be swapped */
-		memcpy(&sa.in6.sin6_port, addr + 2, 2);
-		memcpy(&sa.in6.sin6_addr, addr + 8, 16);
-
-		memcpy(&sa.in6.sin6_flowinfo, addr + 4, 4);
-		sa.in6.sin6_flowinfo = uint32_t_swap_bytes(sa.in6.sin6_flowinfo);
-		memcpy(&sa.in6.sin6_scope_id, addr + 24, 4);
-		sa.in6.sin6_scope_id = uint32_t_swap_bytes(sa.in6.sin6_scope_id);
-
-		ptr = &sa.in6;
-		ptr_size = sizeof(struct sockaddr_in6);
-		break;
-	}
-	default: {
-		/* TODO: add more support */
-		return -SYS_EINVAL;
-		break;
-	}
-	}
-
-#undef FAS
-
-	return bindlike(fd, ptr, ptr_size);
+	return bindlike(fd, (void *) &ss, ptr_size);
 }
 
 #endif
@@ -993,8 +1006,6 @@ static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen
 	long rret;
 	struct sockaddr_storage ss;
 	socklen_t ssize = sizeof(ss);
-
-#define FAS 2
 
 	rret = acceptlike(fd, (void *) &ss, &ssize);
 	if (rret < 0)
@@ -1054,8 +1065,6 @@ static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen
 		break;
 	}
 	}
-
-#undef FAS
 
 	assert(ssize <= UINT32_MAX);
 	*len = ssize;
