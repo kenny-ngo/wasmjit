@@ -200,13 +200,10 @@ static char *wasmjit_emscripten_get_base_address(struct FuncInst *funcinst) {
 
 int wasmjit_emscripten_init(struct EmscriptenContext *ctx,
 			    struct FuncInst *errno_location_inst,
-			    struct FuncInst *environ_constructor,
 			    struct FuncInst *malloc_inst,
 			    struct FuncInst *free_inst,
-			    char **envp)
+			    char *envp[])
 {
-	int ret;
-
 	assert(malloc_inst);
 	{
 		struct FuncType malloc_type;
@@ -256,6 +253,12 @@ int wasmjit_emscripten_init(struct EmscriptenContext *ctx,
 	ctx->environ = envp;
 	ctx->buildEnvironmentCalled = 0;
 
+	return 0;
+}
+
+int wasmjit_emscripten_build_environment(struct FuncInst *environ_constructor)
+{
+	int ret;
 	if (environ_constructor) {
 		struct FuncType errno_location_type;
 

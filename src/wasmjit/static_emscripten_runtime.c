@@ -268,10 +268,12 @@ int main(int argc, char *argv[]) {
 	int ret;
 	ret = wasmjit_emscripten_init(&g_emscripten_ctx,
 				      &WASM_FUNC_SYMBOL(asm, ___errno_location),
-				      &WASM_FUNC_SYMBOL(asm, ___emscripten_environ_constructor),
 				      &WASM_FUNC_SYMBOL(asm, _malloc),
 				      &WASM_FUNC_SYMBOL(asm, _free),
 				      environ);
+	if (ret)
+		return -1;
+	ret = wasmjit_emscripten_build_environment(&WASM_FUNC_SYMBOL(asm, ___emscripten_environ_constructor));
 	if (ret)
 		return -1;
 	return wasmjit_emscripten_invoke_main(&WASM_MEMORY_SYMBOL(env, memory),

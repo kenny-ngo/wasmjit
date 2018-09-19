@@ -72,7 +72,6 @@ struct MemInst *wasmjit_emscripten_get_mem_inst(struct FuncInst *funcinst);
 
 int wasmjit_emscripten_init(struct EmscriptenContext *ctx,
 			    struct FuncInst *errno_location_inst,
-			    struct FuncInst *environ_constructor,
 			    struct FuncInst *malloc_inst,
 			    struct FuncInst *free_inst,
 			    char *envp[]);
@@ -81,6 +80,8 @@ int wasmjit_emscripten_init(struct EmscriptenContext *ctx,
 #define WASMJIT_IS_TRAP_ERROR(ret) ((ret) >= WASMJIT_TRAP_OFFSET)
 #define WASMJIT_DECODE_TRAP_ERROR(ret) ((ret) - WASMJIT_TRAP_OFFSET)
 #define WASMJIT_ENCODE_TRAP_ERROR(ret) ((ret) + WASMJIT_TRAP_OFFSET)
+
+int wasmjit_emscripten_build_environment(struct FuncInst *environ_constructor);
 
 int wasmjit_emscripten_invoke_main(struct MemInst *meminst,
 				   struct FuncInst *stack_alloc_inst,
