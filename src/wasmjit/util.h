@@ -30,16 +30,28 @@
 #include <wasmjit/sys.h>
 
 __attribute__ ((unused))
+static uint16_t uint16_t_swap_bytes(uint16_t data)
+{
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+	return data;
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+	uint16_t bottom = (data >> 0) & 0xFF;
+	uint16_t top = (data >> 8) & 0xFF;
+	return (bottom << 8) | top;
+#else
+#error Unsupported Architecture
+#endif
+}
+
+__attribute__ ((unused))
 static uint32_t uint32_t_swap_bytes(uint32_t data)
 {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 	return data;
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-	uint32_t _4 = data >> 24;
-	uint32_t _3 = (data >> 16) & 0xFF;
-	uint32_t _2 = (data >> 8) & 0xFF;
-	uint32_t _1 = (data >> 0) & 0xFF;
-	return _4 | (_3 << 8) | (_2 << 16) | (_1 << 24);
+	uint32_t bottom = uint16_t_swap_bytes(data & 0xffff);
+	uint32_t top = uint16_t_swap_bytes((data >> 16) & 0xffff);
+	return (bottom << 8) | top;
 #else
 #error Unsupported Architecture
 #endif
