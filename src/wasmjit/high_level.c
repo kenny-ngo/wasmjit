@@ -100,6 +100,7 @@ int wasmjit_high_init(struct WasmJITHigh *self)
 	self->n_modules = 0;
 	self->modules = NULL;
 	self->emscripten_asm_module = NULL;
+	self->emscripten_env_module = NULL;
 	memset(self->error_buffer, 0, sizeof(self->error_buffer));
 	return 0;
 }
@@ -240,6 +241,12 @@ int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
 			goto error;
 		}
 
+		/* TODO: delegate to emscripten_runtime how to find
+		   emscripten cleanup module */
+		if (!strcmp(modules[i].name, "env")) {
+			self->emscripten_env_module = modules[i].module;
+		}
+
 		modules[i].module = NULL;
 	}
 
@@ -377,8 +384,6 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 						     argc, argv);
 	}
 
-	wasmjit_emscripten_cleanup(env_module_inst);
-
 	return ret;
 }
 
@@ -392,6 +397,9 @@ void wasmjit_high_close(struct WasmJITHigh *self)
 		return;
 	}
 #endif
+
+	if (self->emscripten_env_module)
+		wasmjit_emscripten_cleanup(self->emscripten_env_module);
 
 	self->error_buffer[0] = '\0';
 

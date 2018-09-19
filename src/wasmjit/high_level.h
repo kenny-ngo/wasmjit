@@ -42,6 +42,7 @@ struct WasmJITHigh {
 	struct NamedModule *modules;
 	char error_buffer[256];
 	struct ModuleInst *emscripten_asm_module;
+	struct ModuleInst *emscripten_env_module;
 };
 
 int wasmjit_high_init(struct WasmJITHigh *self);
