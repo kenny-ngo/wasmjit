@@ -327,6 +327,10 @@ static int get_emscripten_runtime_parameters(const char *filename,
 		goto error;
 
 	ret = get_static_bump(filename, static_bump);
+	if (ret) {
+		fprintf(stderr, "Couldn't get static bump!\n");
+		goto error;
+	}
 
 	if (0) {
 	error:
