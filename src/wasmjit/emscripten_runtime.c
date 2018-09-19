@@ -879,7 +879,11 @@ static int convert_proto_to_local(int domain, int32_t proto)
 
 #endif
 
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ && (defined(__linux__) || defined(__KERNEL__))
+#if (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ && (defined(__linux__) || defined(__KERNEL__)))
+#define SAME_SOCKADDR
+#endif
+
+#ifdef SAME_SOCKADDR
 
 static long finish_bindlike(long (*bindlike)(int, const struct sockaddr *, socklen_t),
 			    int fd, void *addr, size_t len)
@@ -971,7 +975,7 @@ static long finish_bindlike(long (*bindlike)(int, const struct sockaddr *, sockl
 
 #endif
 
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ && (defined(__linux__) || defined(__KERNEL__))
+#ifdef SAME_SOCKADDR
 
 static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen_t *),
 			      int fd, void *addr, uint32_t *len)
