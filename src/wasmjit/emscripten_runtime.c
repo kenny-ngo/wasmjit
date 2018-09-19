@@ -909,6 +909,7 @@ static long finish_bindlike(long (*bindlike)(int, const struct sockaddr *, sockl
 		return -SYS_EINVAL;
 
 	memcpy(&family, addr, sizeof(family));
+	family = uint16_t_swap_bytes(family);
 
 	switch (family) {
 	case SYS_AF_UNIX: {
