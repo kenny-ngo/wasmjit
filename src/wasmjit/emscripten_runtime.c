@@ -1319,6 +1319,161 @@ static long finish_recvfrom(int32_t fd,
 
 #endif
 
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ && (defined(__linux__) || defined(__KERNEL__)) && !(defined(__hppa__) || defined(__powerpc__) || defined(__alpha__) || defined(__mips__) || defined(__sparc__))
+
+static long finish_setsockopt(int32_t fd,
+			      int32_t level,
+			      int32_t optname,
+			      void *optval,
+			      uint32_t optlen)
+{
+	return sys_setsockopt(fd, level, optname, optval, optlen);
+}
+
+#else
+
+COMPILE_TIME_ASSERT(sizeof(struct timeval) == sizeof(long) * 2);
+COMPILE_TIME_ASSERT(sizeof(socklen_t) == sizeof(unsigned));
+
+#define SYS_SOL_SOCKET 1
+
+enum {
+	OPT_TYPE_INT,
+	OPT_TYPE_LINGER,
+	OPT_TYPE_UCRED,
+	OPT_TYPE_TIMEVAL,
+	OPT_TYPE_STRING,
+};
+
+static long finish_setsockopt(int32_t fd,
+			      int32_t level,
+			      int32_t optname,
+			      char *optval,
+			      uint32_t optlen)
+{
+	int level2, optname2, opttype;
+	union {
+		int int_;
+		struct linger linger;
+		/* NB: this is a linux-only struct and it's defined using
+		   constant bit-widths */
+		struct {
+			uint32_t pid;
+			uint32_t uid;
+			uint32_t gid;
+		} ucred;
+		struct timeval timeval;
+	} real_optval;
+	void *real_optval_p;
+	socklen_t real_optlen;
+
+	switch (level) {
+	case SYS_SOL_SOCKET: {
+		switch (optname) {
+#define SO(name, value, opt_type) case value: optname2 = SO_ ## name; opttype = OPT_TYPE_ ## opt_type; break;
+#include <wasmjit/emscripten_runtime_sys_so_def.h>
+#undef SO
+		default: return -SYS_EINVAL;
+		}
+		level2 = SOL_SOCKET;
+		break;
+	}
+	default: return -SYS_EINVAL;
+	}
+
+	switch (opttype) {
+	case OPT_TYPE_INT: {
+		int32_t wasm_int_optval;
+		if (optlen != sizeof(wasm_int_optval))
+			return -SYS_EINVAL;
+		memcpy(&wasm_int_optval, optval, sizeof(wasm_int_optval));
+		wasm_int_optval = int32_t_swap_bytes(wasm_int_optval);
+#if 32 > __INT_WIDTH__
+		if (wasm_int_optval > INT_MAX ||
+		    wasm_int_optval < INT_MIN)
+			return -SYS_EINVAL;
+#endif
+		real_optval.int_ = wasm_int_optval;
+		real_optval_p = &real_optval.int_;
+		real_optlen = sizeof(real_optval.int_);
+		break;
+	}
+	case OPT_TYPE_LINGER: {
+		struct em_linger {
+			int32_t l_onoff, l_linger;
+		} wasm_linger_optval;
+		if (optlen != sizeof(struct em_linger))
+			return -SYS_EINVAL;
+		memcpy(&wasm_linger_optval, optval, sizeof(struct em_linger));
+		wasm_linger_optval.l_onoff =
+			int32_t_swap_bytes(wasm_linger_optval.l_onoff);
+		wasm_linger_optval.l_linger =
+			int32_t_swap_bytes(wasm_linger_optval.l_linger);
+#if 32 > __INT_WIDTH__
+		if (wasm_linger_optval.l_onoff > INT_MAX ||
+		    wasm_linger_optval.l_onoff < INT_MIN ||
+		    wasm_linger_optval.l_linger > INT_MAX ||
+		    wasm_linger_optval.l_linger < INT_MIN)
+			return -SYS_EINVAL;
+#endif
+		real_optval.linger.l_onoff = wasm_linger_optval.l_onoff;
+		real_optval.linger.l_linger = wasm_linger_optval.l_linger;
+		real_optval_p = &real_optval.linger;
+		real_optlen = sizeof(real_optval.linger);
+		break;
+	}
+	case OPT_TYPE_UCRED: {
+		struct em_ucred {
+			uint32_t pid, uid, gid;
+		} wasm_ucred_optval;
+		if (optlen != sizeof(struct em_ucred))
+			return -SYS_EINVAL;
+		memcpy(&wasm_ucred_optval, optval, sizeof(struct em_ucred));
+		real_optval.ucred.pid = uint32_t_swap_bytes(wasm_ucred_optval.pid);
+		real_optval.ucred.uid = uint32_t_swap_bytes(wasm_ucred_optval.uid);
+		real_optval.ucred.gid = uint32_t_swap_bytes(wasm_ucred_optval.gid);
+		real_optval_p = &real_optval.ucred;
+		real_optlen = sizeof(real_optval.ucred);
+		break;
+	}
+	case OPT_TYPE_TIMEVAL: {
+		struct em_timeval {
+			uint32_t tv_sec, tv_usec;
+		} wasm_timeval_optval;
+		if (optlen != sizeof(struct em_timeval))
+			return -SYS_EINVAL;
+		memcpy(&wasm_timeval_optval, optval, sizeof(struct em_timeval));
+		wasm_timeval_optval.tv_sec =
+			uint32_t_swap_bytes(wasm_timeval_optval.tv_sec);
+		wasm_timeval_optval.tv_usec =
+			uint32_t_swap_bytes(wasm_timeval_optval.tv_usec);
+#if 32 > __LONG_WIDTH__
+		if (wasm_timeval_optval.tv_sec > LONG_MAX ||
+		    wasm_timeval_optval.tv_sec < LONG_MIN ||
+		    wasm_timeval_optval.tv_usec > LONG_MAX ||
+		    wasm_timeval_optval.tv_usec < LONG_MIN)
+			return -SYS_EINVAL;
+#endif
+		real_optval.timeval.tv_sec = wasm_timeval_optval.tv_sec;
+		real_optval.timeval.tv_usec = wasm_timeval_optval.tv_usec;
+		real_optval_p = &real_optval.timeval;
+		real_optlen = sizeof(real_optval.timeval);
+		break;
+	}
+	case OPT_TYPE_STRING: {
+		real_optval_p = optval;
+		assert(sizeof(real_optlen) >= sizeof(optlen));
+		real_optlen = optlen;
+		break;
+	}
+	default: assert(0); __builtin_unreachable();
+	}
+
+	return sys_setsockopt(fd, level2, optname2, real_optval_p, real_optlen);
+}
+
+#endif
+
 uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 					  struct FuncInst *funcinst)
 {
@@ -1509,6 +1664,28 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 		break;
 	}
 	case 14: { // setsockopt
+		char *base;
+
+		LOAD_ARGS(funcinst, ivargs, 5,
+			  int32_t, fd,
+			  int32_t, level,
+			  int32_t, optname,
+			  uint32_t, optval,
+			  uint32_t, optlen);
+
+		if (!_wasmjit_emscripten_check_range(funcinst,
+						     args.optval,
+						     args.optlen))
+			return -SYS_EFAULT;
+
+		base = wasmjit_emscripten_get_base_address(funcinst);
+
+		ret = finish_setsockopt(args.fd,
+					args.level,
+					args.optname,
+					base + args.optval,
+					args.optlen);
+		break;
 	}
 	case 15: { // getsockopt
 	}
