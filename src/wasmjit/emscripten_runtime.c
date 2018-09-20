@@ -29,16 +29,6 @@
 #include <wasmjit/runtime.h>
 #include <wasmjit/sys.h>
 
-#ifdef __KERNEL__
-#include <linux/socket.h>
-#include <linux/net.h>
-#include <uapi/linux/in.h>
-#else
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <sys/un.h>
-#endif
 
 #define __MMAP0(m,...)
 #define __MMAP1(m,t,a,...) m(t, a)

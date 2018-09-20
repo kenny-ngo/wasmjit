@@ -44,6 +44,7 @@ typedef int socklen_t;
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/un.h>
+#include <net/if.h>
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096
