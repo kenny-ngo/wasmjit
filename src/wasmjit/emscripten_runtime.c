@@ -1183,6 +1183,89 @@ static long finish_sendto(int32_t fd,
 
 #endif
 
+#ifdef SAME_SOCKADDR
+
+static long finish_recvfrom(int32_t fd,
+			    void *buf, uint32_t len,
+			    int32_t flags,
+			    void *dest_addr,
+			    uint32_t addrlen,
+			    void *addrlenp)
+{
+	(void)addrlen;
+	return sys_recvfrom(fd, buf, len, flags, dest_addr, addrlenp);
+}
+
+#else
+
+#define SYS_MSG_CMSG_CLOEXEC 1073741824
+#define SYS_MSG_DONTWAIT 64
+#define SYS_MSG_ERRQUEUE 8192
+#define SYS_MSG_OOB 1
+#define SYS_MSG_PEEK 2
+#define SYS_MSG_TRUNC 32
+#define SYS_MSG_WAITALL 256
+
+static int convert_recvfrom_flags(int32_t flags)
+{
+	int oflags = 0;
+
+#define SETF(n)					\
+	if (flags & SYS_MSG_ ## n) {		\
+		oflags |= MSG_ ## n;		\
+	}
+
+	SETF(CMSG_CLOEXEC);
+	SETF(DONTWAIT);
+	SETF(ERRQUEUE);
+	SETF(OOB);
+	SETF(PEEK);
+	SETF(TRUNC);
+	SETF(WAITALL);
+
+#undef SETF
+
+	return oflags;
+}
+
+static long finish_recvfrom(int32_t fd,
+			    void *buf, uint32_t len,
+			    int32_t flags,
+			    void *dest_addr,
+			    uint32_t addrlen,
+			    void *addrlenp)
+{
+	struct sockaddr_storage ss;
+	socklen_t ssize = sizeof(ss);
+	long rret;
+	int flags2;
+
+	/* if there are flags we don't understand, then return invalid flag */
+	if (flags & ~(int32_t) (SYS_MSG_CMSG_CLOEXEC |
+				SYS_MSG_DONTWAIT |
+				SYS_MSG_ERRQUEUE |
+				SYS_MSG_OOB |
+				SYS_MSG_PEEK |
+				SYS_MSG_TRUNC |
+				SYS_MSG_WAITALL))
+		return -SYS_EINVAL;
+
+	flags2 = convert_recvfrom_flags(flags);
+
+	rret = sys_recvfrom(fd, buf, len, flags2, (void *) &ss, &ssize);
+	if (rret < 0)
+		return rret;
+
+	if (write_sockaddr(&ss, ssize, dest_addr, addrlen, addrlenp)) {
+		/* NB: we have to abort here because we can't undo the sys_accept() */
+		wasmjit_emscripten_internal_abort("Failed to convert sockaddr");
+	}
+
+	return rret;
+}
+
+#endif
+
 uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 					  struct FuncInst *funcinst)
 {
@@ -1332,6 +1415,45 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 		break;
 	}
 	case 12: { // recvfrom
+		char *base;
+		uint32_t addrlen;
+
+		LOAD_ARGS(funcinst, ivargs, 6,
+			  int32_t, fd,
+			  uint32_t, buf,
+			  uint32_t, len,
+			  uint32_t, flags,
+			  uint32_t, addrp,
+			  uint32_t, addrlenp);
+
+		if (_wasmjit_emscripten_copy_from_user(funcinst,
+						       &addrlen,
+						       args.addrlenp,
+						       sizeof(uint32_t)))
+			return -SYS_EFAULT;
+
+		addrlen = uint32_t_swap_bytes(addrlen);
+
+		if (!_wasmjit_emscripten_check_range(funcinst,
+						     args.addrp,
+						     addrlen))
+			return -SYS_EFAULT;
+
+		if (!_wasmjit_emscripten_check_range(funcinst,
+						     args.buf,
+						     args.len))
+			return -SYS_EFAULT;
+
+		base = wasmjit_emscripten_get_base_address(funcinst);
+
+		ret = finish_recvfrom(args.fd,
+				      base + args.buf,
+				      args.len,
+				      args.flags,
+				      base + args.addrp,
+				      addrlen,
+				      base + args.addrlenp);
+		break;
 	}
 	case 14: { // setsockopt
 	}
