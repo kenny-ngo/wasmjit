@@ -991,9 +991,10 @@ static long finish_bindlike(long (*bindlike)(int, const struct sockaddr *, sockl
 #ifdef SAME_SOCKADDR
 
 static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen_t *),
-			      int fd, void *addr, uint32_t *len)
+			      int fd, void *addr, uint32_t addrlen, void *len)
 {
 	/* socklen_t == uint32_t */
+	(void) addrlen;
 	return acceptlike(fd, addr, len);
 }
 
@@ -1001,11 +1002,12 @@ static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen
 
 /* need to byte swap and adapt sockaddr to current platform */
 static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen_t *),
-			      int fd, char *addr, uint32_t *len)
+			      int fd, char *addr, uint32_t addrlen, void *len)
 {
 	long rret;
 	struct sockaddr_storage ss;
 	socklen_t ssize = sizeof(ss);
+	uint32_t newlen;
 
 	rret = acceptlike(fd, (void *) &ss, &ssize);
 	if (rret < 0)
@@ -1015,6 +1017,14 @@ static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen
 	case AF_UNIX: {
 		struct sockaddr_un sun;
 		uint16_t f = uint16_t_swap_bytes(SYS_AF_UNIX);
+
+		newlen = ssize;
+
+		if (addrlen < newlen) {
+			/* NB: we have to abort here because we can't
+			   undo the sys_accept() */
+			wasmjit_emscripten_internal_abort("sockaddr buffer too small");
+		}
 
 		assert(ssize <= sizeof(sun));
 		memcpy(&sun, &ss, ssize);
@@ -1026,6 +1036,14 @@ static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen
 	case AF_INET: {
 		struct sockaddr_in sin;
 		uint16_t f = uint16_t_swap_bytes(SYS_AF_INET);
+
+		newlen = FAS + 2 + 4;
+
+		if (addrlen < newlen) {
+			/* NB: we have to abort here because we can't
+			   undo the sys_accept() */
+			wasmjit_emscripten_internal_abort("sockaddr buffer too small");
+		}
 
 		assert(ssize <= sizeof(sin));
 		memcpy(&sin, &ss, ssize);
@@ -1039,6 +1057,14 @@ static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen
 	case AF_INET6: {
 		struct sockaddr_in6 sin6;
 		uint16_t f = uint16_t_swap_bytes(SYS_AF_INET6);
+
+		newlen = FAS + 2 + 4 + 16 + 4;
+
+		if (addrlen < newlen) {
+			/* NB: we have to abort here because we can't
+			   undo the sys_accept() */
+			wasmjit_emscripten_internal_abort("sockaddr buffer too small");
+		}
 
 		assert(ssize <= sizeof(sin6));
 		memcpy(&sin6, &ss, ssize);
@@ -1066,8 +1092,8 @@ static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen
 	}
 	}
 
-	assert(ssize <= UINT32_MAX);
-	*len = ssize;
+	newlen = uint32_t_swap_bytes(newlen);
+	memcpy(len, &newlen, sizeof(newlen));
 
 	return rret;
 }
@@ -1241,24 +1267,26 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 		switch (icall) {
 		case 5:
 			ret = finish_acceptlike(&sys_accept,
-						args.fd, base + args.addrp, &addrlen);
+						args.fd, base + args.addrp,
+						addrlen,
+						base + args.addrlenp);
 			break;
 		case 6:
 			ret = finish_acceptlike(&sys_getsockname,
-						args.fd, base + args.addrp, &addrlen);
+						args.fd, base + args.addrp,
+						addrlen,
+						base + args.addrlenp);
 			break;
 		case 7:
 			ret = finish_acceptlike(&sys_getpeername,
-						args.fd, base + args.addrp, &addrlen);
+						args.fd, base + args.addrp,
+						addrlen,
+						base + args.addrlenp);
 			break;
 		default:
 			assert(0);
 			__builtin_unreachable();
 		}
-
-		/* range of addrlenp was checked above */
-		addrlen = uint32_t_swap_bytes(addrlen);
-		memcpy(base + args.addrlenp, &addrlen, sizeof(addrlen));
 
 		break;
 	}
