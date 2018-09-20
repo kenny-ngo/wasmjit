@@ -940,12 +940,15 @@ static long read_sockaddr(struct sockaddr_storage *ss, size_t *size,
 		assert(sizeof(sin6.sin6_port) == 2);
 		memcpy(&sin6.sin6_port, addr + FAS, 2);
 
+		assert(4 == sizeof(sin6.sin6_flowinfo));
 		memcpy(&sin6.sin6_flowinfo, addr + FAS + 2, 4);
 		sin6.sin6_flowinfo = uint32_t_swap_bytes(sin6.sin6_flowinfo);
 
 		/* this is in network order so it doesn't need to be swapped */
+		assert(16 == sizeof(sin6.sin6_addr));
 		memcpy(&sin6.sin6_addr, addr + FAS + 2 + 4, 16);
 
+		assert(4 == sizeof(sin6.sin6_scope_id));
 		memcpy(&sin6.sin6_scope_id, addr + FAS + 2 + 4 + 16, 4);
 		sin6.sin6_scope_id = uint32_t_swap_bytes(sin6.sin6_scope_id);
 
