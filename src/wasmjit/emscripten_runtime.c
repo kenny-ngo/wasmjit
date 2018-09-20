@@ -1165,12 +1165,18 @@ static int convert_sendto_flags(int32_t flags)
 		oflags |= MSG_ ## n;		\
 	}
 
+#ifdef MSG_CONFIGM
 	SETF(CONFIRM);
+#endif
 	SETF(DONTROUTE);
 	SETF(DONTWAIT);
 	SETF(EOR);
+#ifdef MSG_MORE
 	SETF(MORE);
+#endif
+#ifdef MSG_NOSIGNAL
 	SETF(NOSIGNAL);
+#endif
 	SETF(OOB);
 
 #undef SETF
@@ -1261,9 +1267,13 @@ static int convert_recvfrom_flags(int32_t flags)
 		oflags |= MSG_ ## n;		\
 	}
 
+#ifdef MSG_CMSG_CLOEXEC
 	SETF(CMSG_CLOEXEC);
+#endif
 	SETF(DONTWAIT);
+#ifdef MSG_ERRQUEUE
 	SETF(ERRQUEUE);
+#endif
 	SETF(OOB);
 	SETF(PEEK);
 	SETF(TRUNC);
