@@ -903,6 +903,8 @@ static long read_sockaddr(struct sockaddr_storage *ss, size_t *size,
 	switch (family) {
 	case SYS_AF_UNIX: {
 		struct sockaddr_un sun;
+		if (len - FAS > sizeof(sun.sun_path))
+			return -1;
 		memset(&sun, 0, sizeof(sun));
 		sun.sun_family = AF_UNIX;
 		memcpy(&sun.sun_path, addr + FAS, len - FAS);
