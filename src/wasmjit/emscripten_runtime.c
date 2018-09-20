@@ -1130,6 +1130,32 @@ static long finish_sendto(int32_t fd,
 #define SYS_MSG_NOSIGNAL 16384
 #define SYS_MSG_OOB 1
 
+enum {
+	ALLOWED_SENDTO_FLAGS =
+#ifdef MSG_CONFIM
+	SYS_MSG_CONFIRM |
+#endif
+#ifdef MSG_DONTROUTE
+	SYS_MSG_DONTROUTE |
+#endif
+#ifdef MSG_DONTWAIT
+	SYS_MSG_DONTWAIT |
+#endif
+#ifdef MSG_EOR
+	SYS_MSG_EOR |
+#endif
+#ifdef MSG_MORE
+	SYS_MSG_MORE |
+#endif
+#ifdef MSG_NOSIGNAL
+	SYS_MSG_NOSIGNAL |
+#endif
+#ifdef MSG_OOB
+	SYS_MSG_OOB |
+#endif
+	0,
+};
+
 static int convert_sendto_flags(int32_t flags)
 {
 	int oflags = 0;
@@ -1167,13 +1193,7 @@ static long finish_sendto(int32_t fd,
 		return -SYS_EINVAL;
 
 	/* if there are flags we don't understand, then return invalid flag */
-	if (flags & ~(int32_t) (SYS_MSG_CONFIRM |
-				SYS_MSG_DONTROUTE |
-				SYS_MSG_DONTWAIT |
-				SYS_MSG_EOR |
-				SYS_MSG_MORE |
-				SYS_MSG_NOSIGNAL |
-				SYS_MSG_OOB))
+	if (flags & ~(int32_t) ALLOWED_SENDTO_FLAGS)
 		return -SYS_EINVAL;
 
 	flags2 = convert_sendto_flags(flags);
@@ -1205,6 +1225,32 @@ static long finish_recvfrom(int32_t fd,
 #define SYS_MSG_PEEK 2
 #define SYS_MSG_TRUNC 32
 #define SYS_MSG_WAITALL 256
+
+enum {
+	ALLOWED_RECVFROM_FLAGS =
+#ifdef MSG_CMSG_CLOEXEC
+	SYS_MSG_CMSG_CLOEXEC |
+#endif
+#ifdef MSG_DONTWAIT
+	SYS_MSG_DONTWAIT |
+#endif
+#ifdef MSG_ERRQUEUE
+	SYS_MSG_ERRQUEUE |
+#endif
+#ifdef MSG_OOB
+	SYS_MSG_OOB |
+#endif
+#ifdef MSG_PEEK
+	SYS_MSG_PEEK |
+#endif
+#ifdef MSG_TRUNC
+	SYS_MSG_TRUNC |
+#endif
+#ifdef MSG_WAITALL
+	SYS_MSG_WAITALL |
+#endif
+	0,
+};
 
 static int convert_recvfrom_flags(int32_t flags)
 {
@@ -1241,13 +1287,7 @@ static long finish_recvfrom(int32_t fd,
 	int flags2;
 
 	/* if there are flags we don't understand, then return invalid flag */
-	if (flags & ~(int32_t) (SYS_MSG_CMSG_CLOEXEC |
-				SYS_MSG_DONTWAIT |
-				SYS_MSG_ERRQUEUE |
-				SYS_MSG_OOB |
-				SYS_MSG_PEEK |
-				SYS_MSG_TRUNC |
-				SYS_MSG_WAITALL))
+	if (flags & ~(int32_t) ALLOWED_RECVFROM_FLAGS)
 		return -SYS_EINVAL;
 
 	flags2 = convert_recvfrom_flags(flags);
