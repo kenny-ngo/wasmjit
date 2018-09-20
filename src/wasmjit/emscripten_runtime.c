@@ -908,7 +908,7 @@ static long read_sockaddr(struct sockaddr_storage *ss, size_t *size,
 		memset(&sun, 0, sizeof(sun));
 		sun.sun_family = AF_UNIX;
 		memcpy(&sun.sun_path, addr + FAS, len - FAS);
-		*size = len;
+		*size = offsetof(struct sockaddr_un, sun_path) + (len - FAS);
 		memcpy(ss, &sun, *size);
 		break;
 	}
@@ -977,7 +977,7 @@ static long write_sockaddr(struct sockaddr_storage *ss, socklen_t ssize,
 		struct sockaddr_un sun;
 		uint16_t f = uint16_t_swap_bytes(SYS_AF_UNIX);
 
-		newlen = ssize;
+		newlen = FAS + (ssize - offsetof(struct sockaddr_un, sun_path));
 
 		if (addrlen < newlen)
 			return -1;
@@ -988,7 +988,7 @@ static long write_sockaddr(struct sockaddr_storage *ss, socklen_t ssize,
 		memcpy(&sun, ss, ssize);
 
 		memcpy(addr, &f, FAS);
-		memcpy(addr + FAS, sun.sun_path, ssize - FAS);
+		memcpy(addr + FAS, sun.sun_path, ssize - offsetof(struct sockaddr_un, sun_path));
 		break;
 	}
 	case AF_INET: {
