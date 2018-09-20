@@ -29,6 +29,14 @@
 #include <wasmjit/runtime.h>
 #include <wasmjit/sys.h>
 
+#define STATIC_ASSERT(COND,MSG) typedef char static_assertion_##MSG[(COND)?1:-1]
+#define COMPILE_TIME_ASSERT3(X,L) STATIC_ASSERT(X,static_assertion_at_line_##L)
+#define COMPILE_TIME_ASSERT2(X,L) COMPILE_TIME_ASSERT3(X,L)
+#define COMPILE_TIME_ASSERT(X)    COMPILE_TIME_ASSERT2(X,__LINE__)
+
+/* We directly memcpy int32_t from wasm memory */
+/* TODO: fix this */
+COMPILE_TIME_ASSERT(-1 == ~0);
 
 #define __MMAP0(m,...)
 #define __MMAP1(m,t,a,...) m(t, a)
