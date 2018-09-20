@@ -647,7 +647,7 @@ void wasmjit_emscripten____buildEnvironment(uint32_t environ_arg,
 
 	n_envs = 0;
 	total_pool_size = 0;
-	for (env = ctx->environ; *env; ++env, ++i) {
+	for (env = ctx->environ; *env; ++env) {
 		total_pool_size += strlen(*env) + 1;
 		n_envs += 1;
 	}
