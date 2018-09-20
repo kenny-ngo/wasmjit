@@ -1005,7 +1005,7 @@ static long write_sockaddr(struct sockaddr_storage *ss, socklen_t ssize,
 
 		memcpy(&sin, ss, sizeof(sin));
 
-		memcpy(&sin.sin_family, &f, FAS);
+		memcpy(addr, &f, FAS);
 		/* these are in network order so they don't need to be swapped */
 		memcpy(addr + FAS, &sin.sin_port, 2);
 		memcpy(addr + FAS + 2, &sin.sin_addr, 4);
@@ -1025,7 +1025,7 @@ static long write_sockaddr(struct sockaddr_storage *ss, socklen_t ssize,
 
 		memcpy(&sin6, ss, ssize);
 
-		memcpy(&sin6.sin6_family, &f, FAS);
+		memcpy(addr, &f, FAS);
 
 		/* this is stored in network order */
 		memcpy(addr + FAS, &sin6.sin6_port, 2);
