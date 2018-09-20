@@ -961,6 +961,94 @@ static long read_sockaddr(struct sockaddr_storage *ss, size_t *size,
 	return 0;
 }
 
+/* need to byte swap and adapt sockaddr to current platform */
+static long write_sockaddr(struct sockaddr_storage *ss, socklen_t ssize,
+			   char *addr, uint32_t addrlen, void *len)
+{
+	uint32_t newlen;
+
+	switch (ss->ss_family) {
+	case AF_UNIX: {
+		struct sockaddr_un sun;
+		uint16_t f = uint16_t_swap_bytes(SYS_AF_UNIX);
+
+		newlen = ssize;
+
+		if (addrlen < newlen)
+			return -1;
+
+		if (ssize > sizeof(sun))
+			return -1;
+
+		memcpy(&sun, ss, ssize);
+
+		memcpy(addr, &f, FAS);
+		memcpy(addr + FAS, sun.sun_path, ssize - FAS);
+		break;
+	}
+	case AF_INET: {
+		struct sockaddr_in sin;
+		uint16_t f = uint16_t_swap_bytes(SYS_AF_INET);
+
+		newlen = FAS + 2 + 4;
+
+		if (addrlen < newlen)
+			return -1;
+
+		if (ssize != sizeof(sin))
+			return -1;
+
+		memcpy(&sin, ss, sizeof(sin));
+
+		memcpy(&sin.sin_family, &f, FAS);
+		/* these are in network order so they don't need to be swapped */
+		memcpy(addr + FAS, &sin.sin_port, 2);
+		memcpy(addr + FAS + 2, &sin.sin_addr, 4);
+		break;
+	}
+	case AF_INET6: {
+		struct sockaddr_in6 sin6;
+		uint16_t f = uint16_t_swap_bytes(SYS_AF_INET6);
+
+		newlen = FAS + 2 + 4 + 16 + 4;
+
+		if (addrlen < newlen)
+			return -1;
+
+		if (ssize != sizeof(sin6))
+			return -1;
+
+		memcpy(&sin6, ss, ssize);
+
+		memcpy(&sin6.sin6_family, &f, FAS);
+
+		/* this is stored in network order */
+		memcpy(addr + FAS, &sin6.sin6_port, 2);
+
+		sin6.sin6_flowinfo = uint32_t_swap_bytes(sin6.sin6_flowinfo);
+		memcpy(addr + FAS + 2, &sin6.sin6_flowinfo, 4);
+
+		/* this is stored in network order */
+		memcpy(addr + FAS + 2 + 4, &sin6.sin6_addr, 16);
+
+		sin6.sin6_scope_id = uint32_t_swap_bytes(sin6.sin6_scope_id);
+		memcpy(addr + FAS + 2 + 4 + 16, &sin6.sin6_scope_id, 4);
+
+		break;
+	}
+	default: {
+		/* TODO: add more support */
+		return -1;
+		break;
+	}
+	}
+
+	newlen = uint32_t_swap_bytes(newlen);
+	memcpy(len, &newlen, sizeof(newlen));
+
+	return 0;
+}
+
 #endif
 
 #ifdef SAME_SOCKADDR
@@ -1007,102 +1095,15 @@ static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen
 	long rret;
 	struct sockaddr_storage ss;
 	socklen_t ssize = sizeof(ss);
-	uint32_t newlen;
 
 	rret = acceptlike(fd, (void *) &ss, &ssize);
 	if (rret < 0)
 		return rret;
 
-	switch (ss.ss_family) {
-	case AF_UNIX: {
-		struct sockaddr_un sun;
-		uint16_t f = uint16_t_swap_bytes(SYS_AF_UNIX);
-
-		newlen = ssize;
-
-		if (addrlen < newlen) {
-			/* NB: we have to abort here because we can't
-			   undo the sys_accept() */
-			wasmjit_emscripten_internal_abort("sockaddr buffer too small");
-		}
-
-		if (ssize > sizeof(sun)) {
-			wasmjit_emscripten_internal_abort("kernel sockaddr size does not match sockaddr family");
-		}
-
-		memcpy(&sun, &ss, ssize);
-
-		memcpy(addr, &f, FAS);
-		memcpy(addr + FAS, sun.sun_path, ssize - FAS);
-		break;
-	}
-	case AF_INET: {
-		struct sockaddr_in sin;
-		uint16_t f = uint16_t_swap_bytes(SYS_AF_INET);
-
-		newlen = FAS + 2 + 4;
-
-		if (addrlen < newlen) {
-			/* NB: we have to abort here because we can't
-			   undo the sys_accept() */
-			wasmjit_emscripten_internal_abort("sockaddr buffer too small");
-		}
-
-		if (ssize != sizeof(sin)) {
-			wasmjit_emscripten_internal_abort("kernel sockaddr size does not match sockaddr family");
-		}
-
-		memcpy(&sin, &ss, ssize);
-
-		memcpy(&sin.sin_family, &f, FAS);
-		/* these are in network order so they don't need to be swapped */
-		memcpy(addr + FAS, &sin.sin_port, 2);
-		memcpy(addr + FAS + 2, &sin.sin_addr, 4);
-		break;
-	}
-	case AF_INET6: {
-		struct sockaddr_in6 sin6;
-		uint16_t f = uint16_t_swap_bytes(SYS_AF_INET6);
-
-		newlen = FAS + 2 + 4 + 16 + 4;
-
-		if (addrlen < newlen) {
-			/* NB: we have to abort here because we can't
-			   undo the sys_accept() */
-			wasmjit_emscripten_internal_abort("sockaddr buffer too small");
-		}
-
-		if (ssize != sizeof(sin6)) {
-			wasmjit_emscripten_internal_abort("kernel sockaddr size does not match sockaddr family");
-		}
-
-		memcpy(&sin6, &ss, ssize);
-
-		memcpy(&sin6.sin6_family, &f, FAS);
-
-		/* this is stored in network order */
-		memcpy(addr + FAS, &sin6.sin6_port, 2);
-
-		sin6.sin6_flowinfo = uint32_t_swap_bytes(sin6.sin6_flowinfo);
-		memcpy(addr + FAS + 2, &sin6.sin6_flowinfo, 4);
-
-		/* this is stored in network order */
-		memcpy(addr + FAS + 2 + 4, &sin6.sin6_addr, 16);
-
-		sin6.sin6_scope_id = uint32_t_swap_bytes(sin6.sin6_scope_id);
-		memcpy(addr + FAS + 2 + 4 + 16, &sin6.sin6_scope_id, 4);
-		break;
-	}
-	default: {
+	if (write_sockaddr(&ss, ssize, addr, addrlen, len)) {
 		/* NB: we have to abort here because we can't undo the sys_accept() */
-		/* TODO: add more support */
-		wasmjit_emscripten_internal_abort("Unsupported socket family");
-		break;
+		wasmjit_emscripten_internal_abort("Failed to convert sockaddr");
 	}
-	}
-
-	newlen = uint32_t_swap_bytes(newlen);
-	memcpy(len, &newlen, sizeof(newlen));
 
 	return rret;
 }
