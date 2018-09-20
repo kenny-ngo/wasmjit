@@ -1026,7 +1026,10 @@ static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen
 			wasmjit_emscripten_internal_abort("sockaddr buffer too small");
 		}
 
-		assert(ssize <= sizeof(sun));
+		if (ssize > sizeof(sun)) {
+			wasmjit_emscripten_internal_abort("kernel sockaddr size does not match sockaddr family");
+		}
+
 		memcpy(&sun, &ss, ssize);
 
 		memcpy(addr, &f, FAS);
@@ -1045,7 +1048,10 @@ static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen
 			wasmjit_emscripten_internal_abort("sockaddr buffer too small");
 		}
 
-		assert(ssize <= sizeof(sin));
+		if (ssize != sizeof(sin)) {
+			wasmjit_emscripten_internal_abort("kernel sockaddr size does not match sockaddr family");
+		}
+
 		memcpy(&sin, &ss, ssize);
 
 		memcpy(&sin.sin_family, &f, FAS);
@@ -1066,7 +1072,10 @@ static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen
 			wasmjit_emscripten_internal_abort("sockaddr buffer too small");
 		}
 
-		assert(ssize <= sizeof(sin6));
+		if (ssize != sizeof(sin6)) {
+			wasmjit_emscripten_internal_abort("kernel sockaddr size does not match sockaddr family");
+		}
+
 		memcpy(&sin6, &ss, ssize);
 
 		memcpy(&sin6.sin6_family, &f, FAS);
