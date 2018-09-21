@@ -1402,8 +1402,6 @@ struct linux_ucred {
 	uint32_t gid;
 };
 
-#define LINUX_SCM_CREDENTIALS 2
-
 COMPILE_TIME_ASSERT(sizeof(struct timeval) == sizeof(long) * 2);
 COMPILE_TIME_ASSERT(sizeof(socklen_t) == sizeof(unsigned));
 
@@ -1763,12 +1761,17 @@ static long copy_cmsg(struct FuncInst *funcinst,
 				cur_len = (buf_len / sizeof(int32_t)) * sizeof(int);
 				break;
 			case SYS_SCM_CREDENTIALS:
+#ifdef SCM_CREDENTIALS
 				/* passes a struct ucred which is the same across
 				   all archs */
 				if (buf_len != sizeof(struct linux_ucred))
 					return -SYS_EINVAL;
 				cur_len = buf_len;
 				break;
+#else
+				/* TODO: convert to host's version of SCM_CREDENTIALS */
+				return -SYS_EFAULT;
+#endif
 			default:
 				return -SYS_EFAULT;
 			}
@@ -1842,6 +1845,7 @@ static long copy_cmsg(struct FuncInst *funcinst,
 				new_type = SCM_RIGHTS;
 				break;
 				}
+#ifdef SCM_CREDENTIALS
 			case SYS_SCM_CREDENTIALS: {
 				/* struct ucred is same across all archs,
 				   just flip bytes if necessary
@@ -1855,9 +1859,10 @@ static long copy_cmsg(struct FuncInst *funcinst,
 				}
 
 				new_len = buf_len;
-				new_type = LINUX_SCM_CREDENTIALS;
+				new_type = SCM_CREDENTIALS;
 				break;
 			}
+#endif
 			default:
 				assert(0);
 				__builtin_unreachable();
