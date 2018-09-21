@@ -45,32 +45,36 @@ COMPILE_TIME_ASSERT(sizeof(size_t) >= sizeof(uint32_t));
    we need to be able to represent wasm values in ints */
 COMPILE_TIME_ASSERT(sizeof(int) >= sizeof(uint32_t));
 
-#define __MMAP0(m,...)
-#define __MMAP1(m,t,a,...) m(t, a)
-#define __MMAP2(m,t,a,...) m(t, a) __MMAP1(m,__VA_ARGS__)
-#define __MMAP3(m,t,a,...) m(t, a) __MMAP2(m,__VA_ARGS__)
-#define __MMAP4(m,t,a,...) m(t, a) __MMAP3(m,__VA_ARGS__)
-#define __MMAP5(m,t,a,...) m(t, a) __MMAP4(m,__VA_ARGS__)
-#define __MMAP6(m,t,a,...) m(t, a) __MMAP5(m,__VA_ARGS__)
-#define __MMAP(n,...) __MMAP##n(__VA_ARGS__)
+#define __MMAP0(args,m,...)
+#define __MMAP1(args,m,t,a,...) m(args, t, a)
+#define __MMAP2(args,m,t,a,...) m(args, t, a) __MMAP1(args,m,__VA_ARGS__)
+#define __MMAP3(args,m,t,a,...) m(args, t, a) __MMAP2(args,m,__VA_ARGS__)
+#define __MMAP4(args,m,t,a,...) m(args, t, a) __MMAP3(args,m,__VA_ARGS__)
+#define __MMAP5(args,m,t,a,...) m(args, t, a) __MMAP4(args,m,__VA_ARGS__)
+#define __MMAP6(args,m,t,a,...) m(args, t, a) __MMAP5(args,m,__VA_ARGS__)
+#define __MMAP7(args,m,t,a,...) m(args, t, a) __MMAP6(args,m,__VA_ARGS__)
+#define __MMAP(args,n,...) __MMAP##n(args, __VA_ARGS__)
 
-#define __DECL(t, a) t a;
-#define __SWAP(t, a) args.a = t ## _swap_bytes(args.a);
+#define __DECL(args, t, a) t a;
+#define __SWAP(args, t, a) args.a = t ## _swap_bytes(args.a);
 
 static int32_t int32_t_swap_bytes(int32_t a)
 {
 	return uint32_t_swap_bytes(a);
 }
 
-#define LOAD_ARGS(funcinst, varargs, n, ...)				\
+#define LOAD_ARGS_CUSTOM(args, funcinst, varargs, n, ...)		\
 	struct {							\
-		__MMAP(n, __DECL, __VA_ARGS__)				\
+		__MMAP(args, n, __DECL, __VA_ARGS__)			\
 	} args;								\
 	if (_wasmjit_emscripten_copy_from_user(funcinst,		\
 					       &args, varargs,		\
 					       sizeof(args)))		\
 		return -SYS_EFAULT;					\
-	__MMAP(n, __SWAP, __VA_ARGS__)
+	__MMAP(args, n, __SWAP, __VA_ARGS__)
+
+#define LOAD_ARGS(...)				\
+	LOAD_ARGS_CUSTOM(args, __VA_ARGS__)
 
 enum {
 #define ERRNO(name, value) SYS_ ## name = value,
