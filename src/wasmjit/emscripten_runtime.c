@@ -38,6 +38,13 @@
 /* TODO: fix this */
 COMPILE_TIME_ASSERT(-1 == ~0);
 
+/* we need to at least be able to compute wasm addresses */
+COMPILE_TIME_ASSERT(sizeof(size_t) >= sizeof(uint32_t));
+
+/* the sys_ interface uses ints extensively,
+   we need to be able to represent wasm values in ints */
+COMPILE_TIME_ASSERT(sizeof(int) >= sizeof(uint32_t));
+
 #define __MMAP0(m,...)
 #define __MMAP1(m,t,a,...) m(t, a)
 #define __MMAP2(m,t,a,...) m(t, a) __MMAP1(m,__VA_ARGS__)
@@ -728,10 +735,6 @@ uint32_t wasmjit_emscripten____syscall10(uint32_t which, uint32_t varargs,
 #endif
 #endif
 
-#if __INT_WIDTH__ < 32
-#error This runtime requires at least 32-bit ints
-#endif
-
 #if (defined(__linux__) || defined(__KERNEL__)) && !defined(__mips__)
 
 static int convert_socket_type_to_local(int32_t type)
@@ -1412,11 +1415,6 @@ static long finish_setsockopt(int32_t fd,
 			return -SYS_EINVAL;
 		memcpy(&wasm_int_optval, optval, sizeof(wasm_int_optval));
 		wasm_int_optval = int32_t_swap_bytes(wasm_int_optval);
-#if 32 > __INT_WIDTH__
-		if (wasm_int_optval > INT_MAX ||
-		    wasm_int_optval < INT_MIN)
-			return -SYS_EINVAL;
-#endif
 		real_optval.int_ = wasm_int_optval;
 		real_optval_p = &real_optval.int_;
 		real_optlen = sizeof(real_optval.int_);
@@ -1431,13 +1429,6 @@ static long finish_setsockopt(int32_t fd,
 			int32_t_swap_bytes(wasm_linger_optval.l_onoff);
 		wasm_linger_optval.l_linger =
 			int32_t_swap_bytes(wasm_linger_optval.l_linger);
-#if 32 > __INT_WIDTH__
-		if (wasm_linger_optval.l_onoff > INT_MAX ||
-		    wasm_linger_optval.l_onoff < INT_MIN ||
-		    wasm_linger_optval.l_linger > INT_MAX ||
-		    wasm_linger_optval.l_linger < INT_MIN)
-			return -SYS_EINVAL;
-#endif
 		real_optval.linger.l_onoff = wasm_linger_optval.l_onoff;
 		real_optval.linger.l_linger = wasm_linger_optval.l_linger;
 		real_optval_p = &real_optval.linger;
@@ -1545,10 +1536,6 @@ static long finish_getsockopt(int32_t fd,
 	}
 	case OPT_TYPE_STRING: {
 		real_optval_p = optval;
-#if __INT_WIDTH__ < 32
-		if (optlen > UINT_MAX)
-			return -SYS_EINVAL;
-#endif
 		real_optlen = optlen;
 		break;
 	}
