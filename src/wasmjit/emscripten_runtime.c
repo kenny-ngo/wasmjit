@@ -2228,10 +2228,18 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 			}
 			msg.msg_iovlen = emmsg.iovlen;
 
-			ret = copy_cmsg(funcinst, emmsg.control, emmsg.controllen,
-					&msg.msg_control, &msg.msg_controllen);
-			if (ret) {
-				goto error;
+			if (emmsg.control) {
+				ret = copy_cmsg(funcinst, emmsg.control, emmsg.controllen,
+						&msg.msg_control, &msg.msg_controllen);
+				if (ret)
+					goto error;
+			} else {
+				if (emmsg.controllen) {
+					ret = -SYS_EINVAL;
+					goto error;
+				}
+				msg.msg_control = NULL;
+				msg.msg_controllen = 0;
 			}
 
 			/* unused in sendmsg */
