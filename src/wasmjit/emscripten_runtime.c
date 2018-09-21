@@ -501,7 +501,7 @@ static long copy_iov(struct FuncInst *funcinst,
 	liov = wasmjit_alloc_vector(iov_len,
 				    sizeof(struct iovec), NULL);
 	if (!liov) {
-		ret = -SYS_ENOMEM;
+		ret = -ENOMEM;
 		goto error;
 	}
 
@@ -513,7 +513,7 @@ static long copy_iov(struct FuncInst *funcinst,
 						       iov_user +
 						       sizeof(struct em_iovec) * i,
 						       sizeof(struct em_iovec))) {
-			ret = -SYS_EFAULT;
+			ret = -EFAULT;
 			goto error;
 		}
 
@@ -523,7 +523,7 @@ static long copy_iov(struct FuncInst *funcinst,
 		if (!_wasmjit_emscripten_check_range(funcinst,
 						     iov.iov_base,
 						     iov.iov_len)) {
-			ret = -SYS_EFAULT;
+			ret = -EFAULT;
 			goto error;
 		}
 
@@ -557,12 +557,13 @@ uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, stru
 
 	rret = copy_iov(funcinst, args.iov, args.iovcnt, &liov);
 	if (rret)
-		return rret;
+		goto error;
 
 	rret = sys_writev(args.fd, liov, args.iovcnt);
 
 	free(liov);
 
+ error:
 	return check_ret(rret);
 }
 
@@ -1120,7 +1121,7 @@ static long finish_bindlike(long (*bindlike)(int, const struct sockaddr *, sockl
 	size_t ptr_size;
 
 	if (read_sockaddr(&ss, &ptr_size, addr, len))
-		return -SYS_EINVAL;
+		return -EINVAL;
 
 	return bindlike(fd, (void *) &ss, ptr_size);
 }
@@ -1270,7 +1271,7 @@ static long finish_sendto(int32_t fd,
 
 	/* convert dest_addr to form understood by sys_sendto */
 	if (read_sockaddr(&ss, &ptr_size, dest_addr, addrlen))
-		return -SYS_EINVAL;
+		return -EINVAL;
 
 	return sys_sendto(fd, buf, len, flags2, (void *) &ss, ptr_size);
 }
@@ -1366,7 +1367,7 @@ static long finish_recvfrom(int32_t fd,
 
 	/* if there are flags we don't understand, then return invalid flag */
 	if (flags & ~(int32_t) ALLOWED_RECVFROM_FLAGS)
-		return -SYS_EINVAL;
+		return -EINVAL;
 
 	flags2 = convert_recvfrom_flags(flags);
 
@@ -1458,13 +1459,13 @@ static long finish_setsockopt(int32_t fd,
 	socklen_t real_optlen;
 
 	if (convert_sockopt(level, optname, &level2, &optname2, &opttype))
-		return -SYS_EINVAL;
+		return -EINVAL;
 
 	switch (opttype) {
 	case OPT_TYPE_INT: {
 		int32_t wasm_int_optval;
 		if (optlen != sizeof(wasm_int_optval))
-			return -SYS_EINVAL;
+			return -EINVAL;
 		memcpy(&wasm_int_optval, optval, sizeof(wasm_int_optval));
 		wasm_int_optval = int32_t_swap_bytes(wasm_int_optval);
 		real_optval.int_ = wasm_int_optval;
@@ -1475,7 +1476,7 @@ static long finish_setsockopt(int32_t fd,
 	case OPT_TYPE_LINGER: {
 		struct em_linger wasm_linger_optval;
 		if (optlen != sizeof(struct em_linger))
-			return -SYS_EINVAL;
+			return -EINVAL;
 		memcpy(&wasm_linger_optval, optval, sizeof(struct em_linger));
 		wasm_linger_optval.l_onoff =
 			int32_t_swap_bytes(wasm_linger_optval.l_onoff);
@@ -1490,7 +1491,7 @@ static long finish_setsockopt(int32_t fd,
 	case OPT_TYPE_UCRED: {
 		struct em_ucred wasm_ucred_optval;
 		if (optlen != sizeof(struct em_ucred))
-			return -SYS_EINVAL;
+			return -EINVAL;
 		memcpy(&wasm_ucred_optval, optval, sizeof(struct em_ucred));
 		real_optval.ucred.pid = uint32_t_swap_bytes(wasm_ucred_optval.pid);
 		real_optval.ucred.uid = uint32_t_swap_bytes(wasm_ucred_optval.uid);
@@ -1502,7 +1503,7 @@ static long finish_setsockopt(int32_t fd,
 	case OPT_TYPE_TIMEVAL: {
 		struct em_timeval wasm_timeval_optval;
 		if (optlen != sizeof(struct em_timeval))
-			return -SYS_EINVAL;
+			return -EINVAL;
 		memcpy(&wasm_timeval_optval, optval, sizeof(struct em_timeval));
 		wasm_timeval_optval.tv_sec =
 			uint32_t_swap_bytes(wasm_timeval_optval.tv_sec);
@@ -1513,7 +1514,7 @@ static long finish_setsockopt(int32_t fd,
 		    wasm_timeval_optval.tv_sec < LONG_MIN ||
 		    wasm_timeval_optval.tv_usec > LONG_MAX ||
 		    wasm_timeval_optval.tv_usec < LONG_MIN)
-			return -SYS_EINVAL;
+			return -EINVAL;
 #endif
 		real_optval.timeval.tv_sec = wasm_timeval_optval.tv_sec;
 		real_optval.timeval.tv_usec = wasm_timeval_optval.tv_usec;
@@ -1555,33 +1556,33 @@ static long finish_getsockopt(int32_t fd,
 	uint32_t newlen;
 
 	if (convert_sockopt(level, optname, &level2, &optname2, &opttype))
-		return -SYS_EINVAL;
+		return -EINVAL;
 
 	switch (opttype) {
 	case OPT_TYPE_INT: {
 		if (optlen < sizeof(int32_t))
-			return -SYS_EINVAL;
+			return -EINVAL;
 		real_optval_p = &real_optval.int_;
 		real_optlen = sizeof(real_optval.int_);
 		break;
 	}
 	case OPT_TYPE_LINGER: {
 		if (optlen < sizeof(struct em_linger))
-			return -SYS_EINVAL;
+			return -EINVAL;
 		real_optval_p = &real_optval.linger;
 		real_optlen = sizeof(real_optval.linger);
 		break;
 	}
 	case OPT_TYPE_UCRED: {
 		if (optlen < sizeof(struct em_ucred))
-			return -SYS_EINVAL;
+			return -EINVAL;
 		real_optval_p = &real_optval.ucred;
 		real_optlen = sizeof(real_optval.ucred);
 		break;
 	}
 	case OPT_TYPE_TIMEVAL: {
 		if (optlen < sizeof(struct em_timeval))
-			return -SYS_EINVAL;
+			return -EINVAL;
 		real_optval_p = &real_optval.timeval;
 		real_optlen = sizeof(real_optval.timeval);
 		break;
@@ -1705,10 +1706,10 @@ static long copy_cmsg(struct FuncInst *funcinst,
 	/* control and controllen are user-controlled,
 	   check for overflow */
 	if (__builtin_add_overflow(control, controllen, &controlmax))
-		return -SYS_EFAULT;
+		return -EFAULT;
 
 	if (controlmax < SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr)))
-		return -SYS_EINVAL;
+		return -EINVAL;
 
 	/* count up required space */
 	buf_offset = 0;
@@ -1721,7 +1722,7 @@ static long copy_cmsg(struct FuncInst *funcinst,
 						       &user_cmsghdr,
 						       controlptr,
 						       sizeof(user_cmsghdr)))
-			return -SYS_EFAULT;
+			return -EFAULT;
 
 		user_cmsghdr.cmsg_len = uint32_t_swap_bytes(user_cmsghdr.cmsg_len);
 		user_cmsghdr.cmsg_level = uint32_t_swap_bytes(user_cmsghdr.cmsg_level);
@@ -1735,7 +1736,7 @@ static long copy_cmsg(struct FuncInst *funcinst,
 			if (__builtin_add_overflow(SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len),
 						   controlptr,
 						   &sum))
-				return -SYS_EFAULT;
+				return -EFAULT;
 
 			if (sum > controlmax)
 				break;
@@ -1745,10 +1746,10 @@ static long copy_cmsg(struct FuncInst *funcinst,
 		if (!_wasmjit_emscripten_check_range(funcinst,
 						     controlptr,
 						     SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len)))
-			return -SYS_EFAULT;
+			return -EFAULT;
 
 		if (user_cmsghdr.cmsg_len < SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr)))
-			return -SYS_EFAULT;
+			return -EFAULT;
 		buf_len = user_cmsghdr.cmsg_len - SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr));
 
 		switch (user_cmsghdr.cmsg_level) {
@@ -1757,7 +1758,7 @@ static long copy_cmsg(struct FuncInst *funcinst,
 			case SYS_SCM_RIGHTS:
 				/* convert int size from wasm to host */
 				if (buf_len % sizeof(int32_t))
-					return -SYS_EINVAL;
+					return -EINVAL;
 				cur_len = (buf_len / sizeof(int32_t)) * sizeof(int);
 				break;
 			case SYS_SCM_CREDENTIALS:
@@ -1765,20 +1766,20 @@ static long copy_cmsg(struct FuncInst *funcinst,
 				/* passes a struct ucred which is the same across
 				   all archs */
 				if (buf_len != sizeof(struct linux_ucred))
-					return -SYS_EINVAL;
+					return -EINVAL;
 				cur_len = buf_len;
 				break;
 #else
 				/* TODO: convert to host's version of SCM_CREDENTIALS */
-				return -SYS_EFAULT;
+				return -EFAULT;
 #endif
 			default:
-				return -SYS_EFAULT;
+				return -EFAULT;
 			}
 			break;
 		}
 		default:
-			return -SYS_EFAULT;
+			return -EFAULT;
 		}
 
 		/* it's not exactly clear that this can't overflow at
@@ -1788,14 +1789,14 @@ static long copy_cmsg(struct FuncInst *funcinst,
 		 */
 		if (__builtin_add_overflow(buf_offset, CMSG_SPACE(cur_len),
 					   &buf_offset))
-			return -SYS_EFAULT;
+			return -EFAULT;
 		/* the safety of this was checked above */
 		controlptr += SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len);
 	}
 
 	buf = malloc(buf_offset);
 	if (!buf)
-		return -SYS_ENOMEM;
+		return -ENOMEM;
 
 	/* now convert each control message */
 	buf_offset = 0;
@@ -1918,7 +1919,7 @@ static long finish_sendmsg(int fd, struct msghdr *msg, int flags)
 	/* convert msg_name to form understood by sys_sendmsg */
 	if (msg->msg_name) {
 		if (read_sockaddr(&ss, &ptr_size, msg->msg_name, msg->msg_namelen))
-			return -SYS_EINVAL;
+			return -EINVAL;
 		msg->msg_name = (void *)&ss;
 		msg->msg_namelen = ptr_size;
 	}
@@ -2212,7 +2213,7 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 				if (!_wasmjit_emscripten_check_range(funcinst,
 								     emmsg.name,
 								     emmsg.namelen)) {
-					ret = -SYS_EFAULT;
+					ret = -EFAULT;
 					goto error;
 				}
 
@@ -2220,7 +2221,7 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 				msg.msg_namelen = emmsg.namelen;
 			} else {
 				if (emmsg.namelen) {
-					ret = -SYS_EINVAL;
+					ret = -EINVAL;
 					goto error;
 				}
 				msg.msg_name = NULL;
@@ -2240,7 +2241,7 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 					goto error;
 			} else {
 				if (emmsg.controllen) {
-					ret = -SYS_EINVAL;
+					ret = -EINVAL;
 					goto error;
 				}
 				msg.msg_control = NULL;
