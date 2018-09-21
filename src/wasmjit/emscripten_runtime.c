@@ -481,40 +481,39 @@ uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs, stru
 	}
 }
 
-/* writev */
-uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
+struct em_iovec {
+	uint32_t iov_base;
+	uint32_t iov_len;
+};
+
+static long copy_iov(struct FuncInst *funcinst,
+		     uint32_t iov_user,
+		     uint32_t iov_len, struct iovec **out)
 {
-	uint32_t i;
+	struct iovec *liov = NULL;
 	char *base;
-	long rret;
-	struct iovec *liov;
+	long ret;
+	uint32_t i;
 
-	LOAD_ARGS(funcinst, varargs, 3,
-		  int32_t, fd,
-		  uint32_t, iov,
-		  uint32_t, iovcnt);
-
-	(void)which;
 	base = wasmjit_emscripten_get_base_address(funcinst);
 
 	/* TODO: do UIO_FASTIOV stack optimization */
-	liov = wasmjit_alloc_vector(args.iovcnt,
+	liov = wasmjit_alloc_vector(iov_len,
 				    sizeof(struct iovec), NULL);
 	if (!liov) {
-		return -SYS_ENOMEM;
+		ret = -SYS_ENOMEM;
+		goto error;
 	}
 
-	for (i = 0; i < args.iovcnt; ++i) {
-		struct em_iovec {
-			uint32_t iov_base;
-			uint32_t iov_len;
-		} iov;
+	for (i = 0; i < iov_len; ++i) {
+		struct em_iovec iov;
+
 		if (_wasmjit_emscripten_copy_from_user(funcinst,
 						       &iov,
-						       args.iov +
+						       iov_user +
 						       sizeof(struct em_iovec) * i,
 						       sizeof(struct em_iovec))) {
-			rret = -EFAULT;
+			ret = -SYS_EFAULT;
 			goto error;
 		}
 
@@ -524,7 +523,7 @@ uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, stru
 		if (!_wasmjit_emscripten_check_range(funcinst,
 						     iov.iov_base,
 						     iov.iov_len)) {
-			rret = -EFAULT;
+			ret = -SYS_EFAULT;
 			goto error;
 		}
 
@@ -532,9 +531,36 @@ uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, stru
 		liov[i].iov_len = iov.iov_len;
 	}
 
+	*out = liov;
+	ret = 0;
+
+	if (0) {
+	error:
+		free(liov);
+	}
+
+	return ret;
+}
+
+/* writev */
+uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
+{
+	long rret;
+	struct iovec *liov;
+
+	LOAD_ARGS(funcinst, varargs, 3,
+		  int32_t, fd,
+		  uint32_t, iov,
+		  uint32_t, iovcnt);
+
+	(void)which;
+
+	rret = copy_iov(funcinst, args.iov, args.iovcnt, &liov);
+	if (rret)
+		return rret;
+
 	rret = sys_writev(args.fd, liov, args.iovcnt);
 
- error:
 	free(liov);
 
 	return check_ret(rret);
