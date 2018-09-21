@@ -1823,7 +1823,7 @@ static long copy_cmsg(struct FuncInst *funcinst,
 		   is the aligned offset from the beginning,
 		   i.e. what (struct cmsghdr *)a + 1 means */
 		src_buf_base = base + controlptr + cur_len;
-		dest_buf_base = &buf[buf_offset + CMSG_ALIGN(sizeof(struct cmsghdr))];
+		dest_buf_base = &buf[buf_offset + CMSG_LEN(0)];
 
 		switch (user_cmsghdr.cmsg_level) {
 		case SYS_SOL_SOCKET: {
