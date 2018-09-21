@@ -919,7 +919,7 @@ static int convert_proto_to_local(int domain, int32_t proto)
 		}
 	} else {
 		if (proto)
-			return -SYS_EINVAL;
+			return -1;
 		return 0;
 	}
 }
