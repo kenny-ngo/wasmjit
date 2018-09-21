@@ -1161,14 +1161,18 @@ static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen
 
 #endif
 
-#ifdef SAME_SOCKADDR
 
-static long finish_sendto(int32_t fd,
-			  const void *buf, uint32_t len,
-			  int32_t flags,
-			  const void *dest_addr, uint32_t addrlen)
+#if defined(__linux__) || defined(__KERNEL__)
+
+static int convert_sendto_flags(int32_t flags)
 {
-	return sys_sendto(fd, buf, len, flags, dest_addr, addrlen);
+	return flags;
+}
+
+static int has_bad_sendto_flag(int32_t flags)
+{
+	(void) flags;
+	return 0;
 }
 
 #else
@@ -1235,25 +1239,38 @@ static int convert_sendto_flags(int32_t flags)
 	return oflags;
 }
 
+static int has_bad_sendto_flag(int32_t flags)
+{
+	return flags & ~(int32_t) ALLOWED_SENDTO_FLAGS;
+}
+
+
+#endif
+
+#ifdef SAME_SOCKADDR
+
 static long finish_sendto(int32_t fd,
 			  const void *buf, uint32_t len,
-			  int32_t flags,
+			  int flags,
+			  const void *dest_addr, uint32_t addrlen)
+{
+	return sys_sendto(fd, buf, len, flags, dest_addr, addrlen);
+}
+
+#else
+
+static long finish_sendto(int32_t fd,
+			  const void *buf, uint32_t len,
+			  int flags2,
 			  const void *dest_addr, uint32_t addrlen)
 {
 
 	struct sockaddr_storage ss;
 	size_t ptr_size;
-	int flags2;
 
 	/* convert dest_addr to form understood by sys_sendto */
 	if (read_sockaddr(&ss, &ptr_size, dest_addr, addrlen))
 		return -SYS_EINVAL;
-
-	/* if there are flags we don't understand, then return invalid flag */
-	if (flags & ~(int32_t) ALLOWED_SENDTO_FLAGS)
-		return -SYS_EINVAL;
-
-	flags2 = convert_sendto_flags(flags);
 
 	return sys_sendto(fd, buf, len, flags2, (void *) &ss, ptr_size);
 }
@@ -1767,6 +1784,7 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 	}
 	case 11: { // sendto
 		char *base;
+		int flags2;
 
 		LOAD_ARGS(funcinst, ivargs, 6,
 			  int32_t, fd,
@@ -1788,10 +1806,16 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 
 		base = wasmjit_emscripten_get_base_address(funcinst);
 
+		/* if there are flags we don't understand, then return invalid flag */
+		if (has_bad_sendto_flag(args.flags))
+			return -SYS_EINVAL;
+
+		flags2 = convert_sendto_flags(args.flags);
+
 		ret = finish_sendto(args.fd,
 				    base + args.message,
 				    args.length,
-				    args.flags,
+				    flags2,
 				    base + args.addrp,
 				    args.addrlen);
 		break;
