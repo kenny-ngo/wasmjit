@@ -1688,16 +1688,19 @@ struct em_msghdr {
 #define SYS_CMSG_ALIGN(len) (((len) + sizeof (uint32_t) - 1)		\
 			     & (uint32_t) ~(sizeof (uint32_t) - 1))
 
+/* NB: cmsg_len can be size_t or socklen_t depending on host kernel */
+typedef typeof(((struct cmsghdr *)0)->cmsg_len) cmsg_len_t;
+
 static long copy_cmsg(struct FuncInst *funcinst,
 		      uint32_t control,
 		      uint32_t controllen,
-		      void **out, size_t *outcontrollen)
+		      void **out, cmsg_len_t *outcontrollen)
 {
 	char *base;
 	uint32_t controlptr;
 	uint32_t controlmax;
 	char *buf;
-	size_t buf_offset;
+	cmsg_len_t buf_offset;
 
 	base = wasmjit_emscripten_get_base_address(funcinst);
 
@@ -1775,11 +1778,14 @@ static long copy_cmsg(struct FuncInst *funcinst,
 			return -SYS_EFAULT;
 		}
 
-		/* controlptr > buf_offset, and we already check if that overflows
-		   when adding an aligned cmsg_len, which is the same as
-		   CMSG_SPACE(cur_len)
+		/* it's not exactly clear that this can't overflow at
+		   this point given the varying conditions in which we
+		   operate (e.g. sizeof(cmsg_len_t) depends on
+		   architecture and host kernel)
 		 */
-		buf_offset += CMSG_SPACE(cur_len);
+		if (__builtin_add_overflow(buf_offset, CMSG_SPACE(cur_len),
+					   &buf_offset))
+			return -SYS_EFAULT;
 		/* the safety of this was checked above */
 		controlptr += SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len);
 	}
@@ -1868,7 +1874,7 @@ static long copy_cmsg(struct FuncInst *funcinst,
 		}
 
 		{
-			size_t a = CMSG_LEN(new_len);
+			cmsg_len_t a = CMSG_LEN(new_len);
 			memcpy(&buf[buf_offset + offsetof(struct cmsghdr, cmsg_len)],
 			       &a,
 			       sizeof(a));
