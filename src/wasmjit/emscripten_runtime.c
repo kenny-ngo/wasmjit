@@ -1331,12 +1331,6 @@ static long finish_recvfrom(int32_t fd,
 
 #endif
 
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ && (defined(__linux__) || defined(__KERNEL__)) && !(defined(__hppa__) || defined(__powerpc__) || defined(__alpha__) || defined(__mips__) || defined(__sparc__))
-#define SAME_SOCKOPT
-#endif
-
-#ifndef SAME_SOCKOPT
-
 struct em_linger {
 	int32_t l_onoff, l_linger;
 };
@@ -1368,20 +1362,27 @@ enum {
 	OPT_TYPE_STRING,
 };
 
-#endif
-
-#ifdef SAME_SOCKOPT
-
-static long finish_setsockopt(int32_t fd,
-			      int32_t level,
-			      int32_t optname,
-			      void *optval,
-			      uint32_t optlen)
+static int convert_sockopt(int32_t level,
+			   int32_t optname,
+			   int *level2,
+			   int *optname2,
+			   int *opttype)
 {
-	return sys_setsockopt(fd, level, optname, optval, optlen);
+	switch (level) {
+	case SYS_SOL_SOCKET: {
+		switch (optname) {
+#define SO(name, value, opt_type) case value: *optname2 = SO_ ## name; *opttype = OPT_TYPE_ ## opt_type; break;
+#include <wasmjit/emscripten_runtime_sys_so_def.h>
+#undef SO
+		default: return -1;
+		}
+		*level2 = SOL_SOCKET;
+		break;
+	}
+	default: return -1;
+	}
+	return 0;
 }
-
-#else
 
 static long finish_setsockopt(int32_t fd,
 			      int32_t level,
@@ -1401,19 +1402,8 @@ static long finish_setsockopt(int32_t fd,
 	void *real_optval_p;
 	socklen_t real_optlen;
 
-	switch (level) {
-	case SYS_SOL_SOCKET: {
-		switch (optname) {
-#define SO(name, value, opt_type) case value: optname2 = SO_ ## name; opttype = OPT_TYPE_ ## opt_type; break;
-#include <wasmjit/emscripten_runtime_sys_so_def.h>
-#undef SO
-		default: return -SYS_EINVAL;
-		}
-		level2 = SOL_SOCKET;
-		break;
-	}
-	default: return -SYS_EINVAL;
-	}
+	if (convert_sockopt(level, optname, &level2, &optname2, &opttype))
+		return -SYS_EINVAL;
 
 	switch (opttype) {
 	case OPT_TYPE_INT: {
@@ -1500,24 +1490,6 @@ static long finish_setsockopt(int32_t fd,
 	return sys_setsockopt(fd, level2, optname2, real_optval_p, real_optlen);
 }
 
-#endif
-
-#ifdef SAME_SOCKOPT
-
-static long finish_getsockopt(int32_t fd,
-			      int32_t level,
-			      int32_t optname,
-			      char *optval,
-			      uint32_t optlen,
-			      char *optlenp)
-{
-	(void) optlen;
-	/* Leave it to kernel to handle alignment for optlenp pointer */
-	return sys_getsockopt(fd, level, optname, optval, (void *)optlenp);
-}
-
-#else
-
 static long finish_getsockopt(int32_t fd,
 			      int32_t level,
 			      int32_t optname,
@@ -1539,19 +1511,8 @@ static long finish_getsockopt(int32_t fd,
 	long ret;
 	uint32_t newlen;
 
-	switch (level) {
-	case SYS_SOL_SOCKET: {
-		switch (optname) {
-#define SO(name, value, opt_type) case value: optname2 = SO_ ## name; opttype = OPT_TYPE_ ## opt_type; break;
-#include <wasmjit/emscripten_runtime_sys_so_def.h>
-#undef SO
-		default: return -SYS_EINVAL;
-		}
-		level2 = SOL_SOCKET;
-		break;
-	}
-	default: return -SYS_EINVAL;
-	}
+	if (convert_sockopt(level, optname, &level2, &optname2, &opttype))
+		return -SYS_EINVAL;
 
 	switch (opttype) {
 	case OPT_TYPE_INT: {
@@ -1666,8 +1627,6 @@ static long finish_getsockopt(int32_t fd,
 
 	return 0;
 }
-
-#endif
 
 uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 					  struct FuncInst *funcinst)
