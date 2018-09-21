@@ -1402,10 +1402,14 @@ struct linux_ucred {
 	uint32_t gid;
 };
 
+#define LINUX_SCM_CREDENTIALS 2
+
 COMPILE_TIME_ASSERT(sizeof(struct timeval) == sizeof(long) * 2);
 COMPILE_TIME_ASSERT(sizeof(socklen_t) == sizeof(unsigned));
 
 #define SYS_SOL_SOCKET 1
+#define SYS_SCM_RIGHTS 1
+#define SYS_SCM_CREDENTIALS 2
 
 enum {
 	OPT_TYPE_INT,
@@ -1665,6 +1669,254 @@ static long finish_getsockopt(int32_t fd,
 	return 0;
 }
 
+struct em_cmsghdr {
+	uint32_t cmsg_len;
+	uint32_t cmsg_level;
+	uint32_t cmsg_type;
+};
+
+struct em_msghdr {
+	uint32_t msg_name;
+	uint32_t msg_namelen;
+	uint32_t msg_iov;
+	uint32_t msg_iovlen;
+	uint32_t msg_control;
+	uint32_t msg_controllen;
+	uint32_t msg_flags;
+};
+
+#define SYS_CMSG_ALIGN(len) (((len) + sizeof (uint32_t) - 1)		\
+			     & (uint32_t) ~(sizeof (uint32_t) - 1))
+
+static long copy_cmsg(struct FuncInst *funcinst,
+		      uint32_t control,
+		      uint32_t controllen,
+		      void **out, size_t *outcontrollen)
+{
+	char *base;
+	uint32_t controlptr;
+	uint32_t controlmax;
+	char *buf;
+	size_t buf_offset;
+
+	base = wasmjit_emscripten_get_base_address(funcinst);
+
+	/* control and controllen are user-controlled,
+	   check for overflow */
+	if (__builtin_add_overflow(control, controllen, &controlmax))
+		return -SYS_EFAULT;
+
+	if (controlmax < SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr)))
+		return -SYS_EINVAL;
+
+	/* count up required space */
+	buf_offset = 0;
+	controlptr = control;
+	while (!(controlptr > controlmax - SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr)))) {
+		struct em_cmsghdr user_cmsghdr;
+		size_t cur_len, buf_len;
+
+		if (_wasmjit_emscripten_copy_from_user(funcinst,
+						       &user_cmsghdr,
+						       controlptr,
+						       sizeof(user_cmsghdr)))
+			return -SYS_EFAULT;
+
+		user_cmsghdr.cmsg_len = uint32_t_swap_bytes(user_cmsghdr.cmsg_len);
+		user_cmsghdr.cmsg_level = uint32_t_swap_bytes(user_cmsghdr.cmsg_level);
+		user_cmsghdr.cmsg_type = uint32_t_swap_bytes(user_cmsghdr.cmsg_type);
+
+		/* kernel says must check this */
+		{
+			uint32_t sum;
+			/* controlptr and cmsg_len are user-controlled,
+			   check for overflow */
+			if (__builtin_add_overflow(SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len),
+						   controlptr,
+						   &sum))
+				return -SYS_EFAULT;
+
+			if (sum > controlmax)
+				break;
+		}
+
+		/* check if control data is in range */
+		if (!_wasmjit_emscripten_check_range(funcinst,
+						     controlptr,
+						     SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len)))
+			return -SYS_EFAULT;
+
+		if (user_cmsghdr.cmsg_len < SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr)))
+			return -SYS_EFAULT;
+		buf_len = user_cmsghdr.cmsg_len - SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr));
+
+		switch (user_cmsghdr.cmsg_level) {
+		case SYS_SOL_SOCKET: {
+			switch (user_cmsghdr.cmsg_type) {
+			case SYS_SCM_RIGHTS:
+				/* convert int size from wasm to host */
+				if (buf_len % sizeof(int32_t))
+					return -SYS_EINVAL;
+				cur_len = (buf_len / sizeof(int32_t)) * sizeof(int);
+				break;
+			case SYS_SCM_CREDENTIALS:
+				/* passes a struct ucred which is the same across
+				   all archs */
+				if (buf_len != sizeof(struct linux_ucred))
+					return -SYS_EINVAL;
+				cur_len = buf_len;
+				break;
+			default:
+				return -SYS_EFAULT;
+			}
+			break;
+		}
+		default:
+			return -SYS_EFAULT;
+		}
+
+		/* controlptr > buf_offset, and we already check if that overflows
+		   when adding an aligned cmsg_len, which is the same as
+		   CMSG_SPACE(cur_len)
+		 */
+		buf_offset += CMSG_SPACE(cur_len);
+		/* the safety of this was checked above */
+		controlptr += SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len);
+	}
+
+	buf = malloc(buf_offset);
+	if (!buf)
+		return -SYS_ENOMEM;
+
+	/* now convert each control message */
+	buf_offset = 0;
+	controlptr = control;
+	while (!(controlptr > controlmax - SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr)))) {
+		int new_level, new_type;
+		struct em_cmsghdr user_cmsghdr;
+		size_t cur_len, buf_len, new_len;
+		char *src_buf_base, *dest_buf_base;
+
+		memcpy(&user_cmsghdr, base + controlptr, sizeof(struct em_cmsghdr));
+		user_cmsghdr.cmsg_len = uint32_t_swap_bytes(user_cmsghdr.cmsg_len);
+		user_cmsghdr.cmsg_level = uint32_t_swap_bytes(user_cmsghdr.cmsg_level);
+		user_cmsghdr.cmsg_type = uint32_t_swap_bytes(user_cmsghdr.cmsg_type);
+
+		/* kernel says must check this */
+		if (SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len) + controlptr > controlmax)
+			break;
+
+		cur_len = SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr));
+		buf_len = user_cmsghdr.cmsg_len - cur_len;
+
+		/* kernel sources differ from libc sources on where
+		   the buffer starts, but in any case the correct code
+		   is the aligned offset from the beginning,
+		   i.e. what (struct cmsghdr *)a + 1 means */
+		src_buf_base = base + controlptr + cur_len;
+		dest_buf_base = &buf[buf_offset + CMSG_ALIGN(sizeof(struct cmsghdr))];
+
+		switch (user_cmsghdr.cmsg_level) {
+		case SYS_SOL_SOCKET: {
+			switch (user_cmsghdr.cmsg_type) {
+			case SYS_SCM_RIGHTS: {
+				size_t i;
+				for (i = 0; i < buf_len / sizeof(int32_t); ++i) {
+					int32_t fd;
+					int destfd;
+					memcpy(&fd, src_buf_base + i * sizeof(int32_t),
+					       sizeof(int32_t));
+					fd = int32_t_swap_bytes(fd);
+					destfd = fd;
+					memcpy(dest_buf_base + i * sizeof(int),
+					       &destfd, sizeof(int));
+				}
+
+				new_len = (buf_len / sizeof(int32_t)) * sizeof(int);
+				new_type = SCM_RIGHTS;
+				break;
+				}
+			case SYS_SCM_CREDENTIALS: {
+				/* struct ucred is same across all archs,
+				   just flip bytes if necessary
+				 */
+				size_t i;
+				for (i = 0; i < 3; ++i) {
+					uint32_t tmp;
+					memcpy(&tmp, src_buf_base + i * 4, sizeof(tmp));
+					tmp = uint32_t_swap_bytes(tmp);
+					memcpy(dest_buf_base + i * 4, &tmp, sizeof(tmp));
+				}
+
+				new_len = buf_len;
+				new_type = LINUX_SCM_CREDENTIALS;
+				break;
+			}
+			default:
+				assert(0);
+				__builtin_unreachable();
+				break;
+
+			}
+			new_level = SOL_SOCKET;
+			break;
+		}
+		default:
+			assert(0);
+			__builtin_unreachable();
+			break;
+		}
+
+		{
+			size_t a = CMSG_LEN(new_len);
+			memcpy(&buf[buf_offset + offsetof(struct cmsghdr, cmsg_len)],
+			       &a,
+			       sizeof(a));
+		}
+		memcpy(&buf[buf_offset + offsetof(struct cmsghdr, cmsg_level)],
+		       &new_level,
+		       sizeof(new_level));
+		memcpy(&buf[buf_offset + offsetof(struct cmsghdr, cmsg_type)],
+		       &new_type,
+		       sizeof(new_type));
+
+		buf_offset += CMSG_SPACE(new_len);
+		controlptr += SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len);
+	}
+
+	*out = buf;
+	*outcontrollen = buf_offset;
+
+	return 0;
+}
+
+#ifdef SAME_SOCKADDR
+
+static long finish_sendmsg(int fd, struct msghdr *msg, int flags)
+{
+	return sys_sendmsg(fd, msg, flags);
+}
+
+#else
+
+static long finish_sendmsg(int fd, struct msghdr *msg, int flags)
+{
+	struct sockaddr_storage ss;
+	size_t ptr_size;
+
+	/* convert msg_name to form understood by sys_sendmsg */
+	if (msg->msg_name) {
+		if (read_sockaddr(&ss, &ptr_size, msg->msg_name, msg->msg_namelen))
+			return -SYS_EINVAL;
+		msg->msg_name = (void *)&ss;
+		msg->msg_namelen = ptr_size;
+	}
+
+	return sys_sendmsg(fd, msg, flags);
+}
+
+#endif
+
 uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 					  struct FuncInst *funcinst)
 {
@@ -1920,6 +2172,69 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 		break;
 	}
 	case 16: { // sendmsg
+		LOAD_ARGS(funcinst, ivargs, 3,
+			  int32_t, fd,
+			  uint32_t, msg,
+			  int32_t, flags);
+
+		if (has_bad_sendto_flag(args.flags))
+			return -SYS_EINVAL;
+
+		{
+			char *base;
+			struct msghdr msg;
+			msg.msg_iov = NULL;
+			msg.msg_control = NULL;
+
+			LOAD_ARGS_CUSTOM(emmsg, funcinst, args.msg, 7,
+					 uint32_t, name,
+					 uint32_t, namelen,
+					 uint32_t, iov,
+					 uint32_t, iovlen,
+					 uint32_t, control,
+					 uint32_t, controllen,
+					 uint32_t, flags);
+
+			base = wasmjit_emscripten_get_base_address(funcinst);
+
+			if (emmsg.name) {
+				if (!_wasmjit_emscripten_check_range(funcinst,
+								     emmsg.name,
+								     emmsg.namelen)) {
+					ret = -SYS_EFAULT;
+					goto error;
+				}
+
+				msg.msg_name = base + emmsg.name;
+				msg.msg_namelen = emmsg.namelen;
+			} else {
+				msg.msg_name = NULL;
+			}
+
+			ret = copy_iov(funcinst, emmsg.iov, emmsg.iovlen, &msg.msg_iov);
+			if (ret) {
+				goto error;
+			}
+			msg.msg_iovlen = emmsg.iovlen;
+
+			ret = copy_cmsg(funcinst, emmsg.control, emmsg.controllen,
+					&msg.msg_control, &msg.msg_controllen);
+			if (ret) {
+				goto error;
+			}
+
+			/* unused in sendmsg */
+			msg.msg_flags = 0;
+
+			ret = finish_sendmsg(args.fd, &msg,
+					     convert_sendto_flags(args.flags));
+
+		error:
+			free(msg.msg_control);
+			free(msg.msg_iov);
+		}
+
+		break;
 	}
 	case 17: { // recvmsg
 	}
