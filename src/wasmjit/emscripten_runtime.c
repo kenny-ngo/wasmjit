@@ -144,7 +144,10 @@ static int wasmjit_emscripten_check_range(struct MemInst *meminst,
 					  uint32_t user_ptr,
 					  size_t extent)
 {
-	return user_ptr + extent <= meminst->size;
+	size_t ret;
+	if (__builtin_add_overflow(user_ptr, extent, &ret))
+		return 0;
+	return ret <= meminst->size;
 }
 
 static size_t wasmjit_emscripten_copy_to_user(struct MemInst *meminst,
@@ -1094,7 +1097,7 @@ static long finish_bindlike(long (*bindlike)(int, const struct sockaddr *, sockl
 
 #endif
 
-#ifdef SAME_SOCKADDR
+#if __INT_WIDTH__ == 32 && defined(SAME_SOCKADDR)
 
 static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen_t *),
 			      int fd, void *addr, uint32_t addrlen, void *len)
