@@ -2241,15 +2241,12 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 				}
 
 				msg.msg_name = base + emmsg.name;
-				msg.msg_namelen = emmsg.namelen;
 			} else {
-				if (emmsg.namelen) {
-					ret = -EINVAL;
-					goto error;
-				}
 				msg.msg_name = NULL;
-				msg.msg_namelen = 0;
 			}
+
+			msg.msg_namelen = emmsg.namelen;
+
 
 			ret = copy_iov(funcinst, emmsg.iov, emmsg.iovlen, &msg.msg_iov);
 			if (ret) {
