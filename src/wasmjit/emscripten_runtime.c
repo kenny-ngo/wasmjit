@@ -1769,6 +1769,9 @@ static long copy_cmsg(struct FuncInst *funcinst,
 			uint32_t sum;
 			/* controlptr and cmsg_len are user-controlled,
 			   check for overflow */
+			if (SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len) < user_cmsghdr.cmsg_len)
+				return -EFAULT;
+
 			if (__builtin_add_overflow(SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len),
 						   controlptr,
 						   &sum))
