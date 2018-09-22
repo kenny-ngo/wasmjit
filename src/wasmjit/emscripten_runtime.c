@@ -1693,13 +1693,13 @@ typedef typeof(((struct cmsghdr *)0)->cmsg_len) cmsg_len_t;
 static long copy_cmsg(struct FuncInst *funcinst,
 		      uint32_t control,
 		      uint32_t controllen,
-		      void **out, cmsg_len_t *outcontrollen)
+		      struct msghdr *msg)
 {
 	char *base;
 	uint32_t controlptr;
 	uint32_t controlmax;
-	char *buf;
 	cmsg_len_t buf_offset;
+	struct cmsghdr *cmsg;
 
 	base = wasmjit_emscripten_get_base_address(funcinst);
 
@@ -1794,18 +1794,23 @@ static long copy_cmsg(struct FuncInst *funcinst,
 		controlptr += SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len);
 	}
 
-	buf = malloc(buf_offset);
-	if (!buf)
+	msg->msg_control = calloc(buf_offset, 1);
+	if (!msg->msg_control)
 		return -ENOMEM;
 
+	msg->msg_controllen = buf_offset;
+
+	cmsg = CMSG_FIRSTHDR(msg);
+
 	/* now convert each control message */
-	buf_offset = 0;
 	controlptr = control;
 	while (!(controlptr > controlmax - SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr)))) {
-		int new_level, new_type;
 		struct em_cmsghdr user_cmsghdr;
 		size_t cur_len, buf_len, new_len;
-		char *src_buf_base, *dest_buf_base;
+		char *src_buf_base;
+		unsigned char *dest_buf_base;
+
+		assert(cmsg);
 
 		memcpy(&user_cmsghdr, base + controlptr, sizeof(struct em_cmsghdr));
 		user_cmsghdr.cmsg_len = uint32_t_swap_bytes(user_cmsghdr.cmsg_len);
@@ -1824,7 +1829,7 @@ static long copy_cmsg(struct FuncInst *funcinst,
 		   is the aligned offset from the beginning,
 		   i.e. what (struct cmsghdr *)a + 1 means */
 		src_buf_base = base + controlptr + cur_len;
-		dest_buf_base = &buf[buf_offset + CMSG_LEN(0)];
+		dest_buf_base = CMSG_DATA(cmsg);
 
 		switch (user_cmsghdr.cmsg_level) {
 		case SYS_SOL_SOCKET: {
@@ -1843,7 +1848,7 @@ static long copy_cmsg(struct FuncInst *funcinst,
 				}
 
 				new_len = (buf_len / sizeof(int32_t)) * sizeof(int);
-				new_type = SCM_RIGHTS;
+				cmsg->cmsg_type = SCM_RIGHTS;
 				break;
 				}
 #ifdef SCM_CREDENTIALS
@@ -1860,7 +1865,7 @@ static long copy_cmsg(struct FuncInst *funcinst,
 				}
 
 				new_len = buf_len;
-				new_type = SCM_CREDENTIALS;
+				cmsg->cmsg_type = SCM_CREDENTIALS;
 				break;
 			}
 #endif
@@ -1870,7 +1875,7 @@ static long copy_cmsg(struct FuncInst *funcinst,
 				break;
 
 			}
-			new_level = SOL_SOCKET;
+			cmsg->cmsg_level = SOL_SOCKET;
 			break;
 		}
 		default:
@@ -1879,25 +1884,11 @@ static long copy_cmsg(struct FuncInst *funcinst,
 			break;
 		}
 
-		{
-			cmsg_len_t a = CMSG_LEN(new_len);
-			memcpy(&buf[buf_offset + offsetof(struct cmsghdr, cmsg_len)],
-			       &a,
-			       sizeof(a));
-		}
-		memcpy(&buf[buf_offset + offsetof(struct cmsghdr, cmsg_level)],
-		       &new_level,
-		       sizeof(new_level));
-		memcpy(&buf[buf_offset + offsetof(struct cmsghdr, cmsg_type)],
-		       &new_type,
-		       sizeof(new_type));
+		cmsg->cmsg_len = CMSG_LEN(new_len);
 
-		buf_offset += CMSG_SPACE(new_len);
+		cmsg = CMSG_NXTHDR(msg, cmsg);
 		controlptr += SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len);
 	}
-
-	*out = buf;
-	*outcontrollen = buf_offset;
 
 	return 0;
 }
@@ -2236,7 +2227,7 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 
 			if (emmsg.control) {
 				ret = copy_cmsg(funcinst, emmsg.control, emmsg.controllen,
-						&msg.msg_control, &msg.msg_controllen);
+						&msg);
 				if (ret)
 					goto error;
 			} else {
