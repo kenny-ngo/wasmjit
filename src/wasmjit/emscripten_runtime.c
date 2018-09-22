@@ -1167,6 +1167,18 @@ static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen
 
 #endif
 
+#define SYS_MSG_OOB 1
+#define SYS_MSG_PEEK 2
+#define SYS_MSG_DONTROUTE 4
+#define SYS_MSG_TRUNC 32
+#define SYS_MSG_DONTWAIT 64
+#define SYS_MSG_EOR 128
+#define SYS_MSG_WAITALL 256
+#define SYS_MSG_CONFIRM 2048
+#define SYS_MSG_ERRQUEUE 8192
+#define SYS_MSG_NOSIGNAL 16384
+#define SYS_MSG_MORE 32768
+#define SYS_MSG_CMSG_CLOEXEC 1073741824
 
 #if defined(__linux__) || defined(__KERNEL__)
 
@@ -1193,14 +1205,6 @@ static int has_bad_recvfrom_flag(int32_t flags)
 }
 
 #else
-
-#define SYS_MSG_CONFIRM 2048
-#define SYS_MSG_DONTROUTE 4
-#define SYS_MSG_DONTWAIT 64
-#define SYS_MSG_EOR 128
-#define SYS_MSG_MORE 32768
-#define SYS_MSG_NOSIGNAL 16384
-#define SYS_MSG_OOB 1
 
 enum {
 	ALLOWED_SENDTO_FLAGS =
@@ -1260,14 +1264,6 @@ static int has_bad_sendto_flag(int32_t flags)
 {
 	return flags & ~(int32_t) ALLOWED_SENDTO_FLAGS;
 }
-
-#define SYS_MSG_CMSG_CLOEXEC 1073741824
-#define SYS_MSG_DONTWAIT 64
-#define SYS_MSG_ERRQUEUE 8192
-#define SYS_MSG_OOB 1
-#define SYS_MSG_PEEK 2
-#define SYS_MSG_TRUNC 32
-#define SYS_MSG_WAITALL 256
 
 enum {
 	ALLOWED_RECVFROM_FLAGS =
