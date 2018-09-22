@@ -2643,6 +2643,25 @@ uint32_t wasmjit_emscripten____syscall221(uint32_t which, uint32_t varargs,
 	return -SYS_EINVAL;
 }
 
+/* chdir */
+uint32_t wasmjit_emscripten____syscall12(uint32_t which, uint32_t varargs,
+					 struct FuncInst *funcinst)
+{
+	char *base;
+
+	LOAD_ARGS(funcinst, varargs, 1,
+		  uint32_t, pathname);
+
+	(void) which;
+
+	base = wasmjit_emscripten_get_base_address(funcinst);
+
+	if (!_wasmjit_emscripten_check_string(funcinst, args.pathname, PATH_MAX))
+		return -SYS_EFAULT;
+
+	return check_ret(sys_chdir(base + args.pathname));
+}
+
 void wasmjit_emscripten_cleanup(struct ModuleInst *moduleinst) {
 	(void)moduleinst;
 	/* TODO: implement */
