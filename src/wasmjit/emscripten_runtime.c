@@ -2612,7 +2612,7 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 	default: {
 		char buf[64];
 		snprintf(buf, sizeof(buf),
-			 "unsupported socketcall syscall %d\n", args.call);
+			 "unsupported socketcall syscall %d", args.call);
 		wasmjit_emscripten_internal_abort(buf);
 		ret = -EINVAL;
 		break;
