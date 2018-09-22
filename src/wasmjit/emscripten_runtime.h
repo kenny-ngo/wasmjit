@@ -26,7 +26,7 @@
 #define __WASMJIT__EMSCRIPTEN_RUNTIME_H__
 
 #include <wasmjit/runtime.h>
-
+#include <wasmjit/util.h>
 #include <wasmjit/sys.h>
 
 enum {
@@ -41,28 +41,69 @@ struct EmscriptenContext {
 	struct FuncInst *free_inst;
 };
 
-void wasmjit_emscripten_abortStackOverflow(uint32_t allocSize, struct FuncInst *funcinst);
-uint32_t wasmjit_emscripten_abortOnCannotGrowMemory(struct FuncInst *funcinst);
-uint32_t wasmjit_emscripten_enlargeMemory(struct FuncInst *funcinst);
-uint32_t wasmjit_emscripten_getTotalMemory(struct FuncInst *funcinst);
-void wasmjit_emscripten_nullFunc_ii(uint32_t x, struct FuncInst *funcinst);
-void wasmjit_emscripten_nullFunc_iiii(uint32_t x, struct FuncInst *funcinst);
-void wasmjit_emscripten____lock(uint32_t x, struct FuncInst *funcinst);
-void wasmjit_emscripten____setErrNo(uint32_t value, struct FuncInst *funcinst);
-uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs, struct FuncInst *funcinst);
-uint32_t wasmjit_emscripten____syscall146(uint32_t which, uint32_t varargs, struct FuncInst *funcinst);
-uint32_t wasmjit_emscripten____syscall4(uint32_t which, uint32_t varargs, struct FuncInst *funcinst);
-uint32_t wasmjit_emscripten____syscall54(uint32_t which, uint32_t varargs, struct FuncInst *funcinst);
-uint32_t wasmjit_emscripten____syscall6(uint32_t which, uint32_t varargs, struct FuncInst *funcinst);
-void wasmjit_emscripten____unlock(uint32_t x, struct FuncInst *funcinst);
-uint32_t wasmjit_emscripten__emscripten_memcpy_big(uint32_t dest, uint32_t src, uint32_t num, struct FuncInst *funcinst);
-void wasmjit_emscripten_abort(uint32_t, struct FuncInst *) __attribute__((noreturn));
-void wasmjit_emscripten____buildEnvironment(uint32_t, struct FuncInst *);
-uint32_t wasmjit_emscripten____syscall10(uint32_t which, uint32_t varargs, struct FuncInst *funcinst);
-uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs, struct FuncInst *funcinst);
-uint32_t wasmjit_emscripten____syscall221(uint32_t which, uint32_t varargs, struct FuncInst *funcinst);
-uint32_t wasmjit_emscripten____syscall12(uint32_t which, uint32_t varargs, struct FuncInst *funcinst);
-void wasmjit_emscripten_start_func(struct FuncInst *funcinst);
+#define CTYPE_VALTYPE_I32 uint32_t
+#define CTYPE_VALTYPE_NULL void
+#define CTYPE(val) CTYPE_ ## val
+
+#define __PARAM(to, n, t) CTYPE(t)
+
+#define COMMA_0
+#define COMMA_1 ,
+#define COMMA_2 ,
+#define COMMA_3 ,
+#define COMMA_IF_NOT_EMPTY(_n) CAT(COMMA_, _n)
+
+#define DEFINE_WASM_FUNCTION(_name, _fptr, _output, _n, ...)		\
+	CTYPE(_output)  wasmjit_emscripten_ ## _name(__KMAP(_n, __PARAM, ##__VA_ARGS__) COMMA_IF_NOT_EMPTY(_n) struct FuncInst *);
+
+#define DEFINE_WASM_START_FUNCTION(_name) \
+	void _name(struct FuncInst *);
+
+#define START_MODULE()
+#define END_MODULE()
+#define START_FUNCTION_DEFS()
+#define END_FUNCTION_DEFS()
+#define START_TABLE_DEFS()
+#define END_TABLE_DEFS()
+#define START_MEMORY_DEFS()
+#define END_MEMORY_DEFS()
+#define START_GLOBAL_DEFS()
+#define END_GLOBAL_DEFS()
+#define DEFINE_WASM_GLOBAL(...)
+#define DEFINE_WASM_TABLE(...)
+#define DEFINE_WASM_MEMORY(...)
+#define DEFINE_EXTERNAL_WASM_GLOBAL(...)
+#define DEFINE_EXTERNAL_WASM_TABLE(...)
+
+#include <wasmjit/emscripten_runtime_def.h>
+
+#undef COMMA_0
+#undef COMMA_1
+#undef COMMA_2
+#undef COMMA_3
+#undef COMMA_IF_NOT_EMPTY
+#undef START_MODULE
+#undef END_MODULE
+#undef DEFINE_WASM_GLOBAL
+#undef DEFINE_WASM_FUNCTION
+#undef DEFINE_WASM_TABLE
+#undef DEFINE_WASM_MEMORY
+#undef START_TABLE_DEFS
+#undef END_TABLE_DEFS
+#undef START_MEMORY_DEFS
+#undef END_MEMORY_DEFS
+#undef START_GLOBAL_DEFS
+#undef END_GLOBAL_DEFS
+#undef START_FUNCTION_DEFS
+#undef END_FUNCTION_DEFS
+#undef DEFINE_WASM_START_FUNCTION
+#undef DEFINE_EXTERNAL_WASM_TABLE
+#undef DEFINE_EXTERNAL_WASM_GLOBAL
+
+#undef __PARAM
+#undef CTYPE
+#undef CTYPE_VALTYPE_I32
+#undef CTYPE_VALTYPE_NULL
 
 struct EmscriptenContext *wasmjit_emscripten_get_context(struct ModuleInst *);
 void wasmjit_emscripten_cleanup(struct ModuleInst *);
