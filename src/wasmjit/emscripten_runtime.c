@@ -2662,6 +2662,31 @@ uint32_t wasmjit_emscripten____syscall12(uint32_t which, uint32_t varargs,
 	return check_ret(sys_chdir(base + args.pathname));
 }
 
+/* uname */
+uint32_t wasmjit_emscripten____syscall122(uint32_t which, uint32_t varargs,
+					  struct FuncInst *funcinst)
+{
+	char *base;
+
+	LOAD_ARGS(funcinst, varargs, 1,
+		  uint32_t, buf);
+
+	(void) which;
+
+	if (!_wasmjit_emscripten_check_range(funcinst, args.buf, 390))
+		return -SYS_EFAULT;
+
+	base = wasmjit_emscripten_get_base_address(funcinst);
+
+	strcpy(base + args.buf + 0, "Emscripten");
+	strcpy(base + args.buf + 65, "emscripten");
+	strcpy(base + args.buf + 130, "1.0");
+	strcpy(base + args.buf + 195, "#1");
+	strcpy(base + args.buf + 260, "x86-JS");
+
+	return 0;
+}
+
 void wasmjit_emscripten_cleanup(struct ModuleInst *moduleinst) {
 	(void)moduleinst;
 	/* TODO: implement */
