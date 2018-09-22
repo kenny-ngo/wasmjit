@@ -1170,6 +1170,7 @@ static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen
 #define SYS_MSG_OOB 1
 #define SYS_MSG_PEEK 2
 #define SYS_MSG_DONTROUTE 4
+#define SYS_MSG_CTRUNC 8
 #define SYS_MSG_TRUNC 32
 #define SYS_MSG_DONTWAIT 64
 #define SYS_MSG_EOR 128
@@ -1202,6 +1203,10 @@ static int has_bad_recvfrom_flag(int32_t flags)
 {
 	(void) flags;
 	return 0;
+}
+
+static int32_t convert_recvmsg_msg_flags(int flags) {
+	return flags;
 }
 
 #else
@@ -1320,6 +1325,20 @@ static int convert_recvfrom_flags(int32_t flags)
 static int has_bad_recvfrom_flag(int32_t flags)
 {
 	return flags & ~(int32_t) ALLOWED_RECVFROM_FLAGS;
+}
+
+static int32_t convert_recvmsg_msg_flags(int flags) {
+	int32_t oflags = 0;
+#define SETF(n)						\
+	if (flags & MSG_ ## n) {			\
+		oflags |= SYS_MSG_ ## n;		\
+	}
+	SETF(EOR);
+	SETF(TRUNC);
+	SETF(CTRUNC);
+	SETF(OOB);
+	SETF(ERRQUEUE);
+	return oflags;
 }
 
 #endif
@@ -1910,6 +1929,147 @@ static long copy_cmsg(struct FuncInst *funcinst,
 	return 0;
 }
 
+static long write_cmsg(char *base,
+		       struct em_msghdr *emmsg,
+		       struct msghdr *msg)
+{
+	/* copy data back to emmsg.control */
+	struct cmsghdr *cmsg;
+	uint32_t controlptr, controlmax;
+
+	/* the validity of the control range
+	   should have been checked before here */
+	controlmax = emmsg->msg_control + emmsg->msg_controllen;
+
+	controlptr = emmsg->msg_control;
+	for (cmsg = CMSG_FIRSTHDR(msg);
+	     cmsg;
+	     cmsg = CMSG_NXTHDR(msg, cmsg)) {
+		struct em_cmsghdr user_cmsghdr;
+		unsigned char *src_buf_base;
+		char *dest_buf_base;
+		cmsg_len_t buf_len, new_len;
+		uint32_t controlptrextent;
+
+		buf_len = cmsg->cmsg_len - CMSG_LEN(0);
+
+		/* compute required len */
+		switch (cmsg->cmsg_level) {
+		case SOL_SOCKET:
+			switch (cmsg->cmsg_type) {
+			case SCM_RIGHTS: {
+				if (buf_len % sizeof(int))
+					return -1;
+
+				new_len = (buf_len / sizeof(int)) * sizeof(int32_t);
+				break;
+			}
+#ifdef SCM_CREDENTIALS
+			case SCM_CREDENTIALS: {
+				new_len = buf_len;
+				break;
+			}
+#endif
+			default:
+				return -1;
+			}
+			break;
+		default:
+			return -1;
+		}
+
+		new_len += SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr));
+
+		user_cmsghdr.cmsg_len = new_len;
+
+		/* this is always true because SYS_CMSG_ALIGN aligns
+		   to int32_t, and new_len is always a multiple of int32_t,
+		   this assert allows us to avoid checking if aligning overflows
+		*/
+		assert(SYS_CMSG_ALIGN(new_len) == new_len);
+
+		/* we got more cmsgs than we can fit,
+		   flag SYS_MSG_CTRUNC and give up */
+		if (__builtin_add_overflow(controlptr,
+					   SYS_CMSG_ALIGN(new_len),
+					   &controlptrextent) ||
+		    controlptrextent > controlmax) {
+			emmsg->msg_flags |= SYS_MSG_CTRUNC;
+			break;
+		}
+
+		src_buf_base = CMSG_DATA(cmsg);
+		dest_buf_base = base + controlptr + SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr));
+
+		switch (cmsg->cmsg_level) {
+		case SOL_SOCKET:
+			switch (cmsg->cmsg_type) {
+			case SCM_RIGHTS: {
+				size_t i;
+
+				for (i = 0; i < buf_len / sizeof(int); ++i) {
+					int srcfd;
+					int32_t destfd;
+					memcpy(&srcfd,
+					       src_buf_base + i * sizeof(int),
+					       sizeof(int));
+
+#if __INT_WIDTH > 32
+					if (srcfd > INT32_MAX)
+						return -1;
+#endif
+
+					destfd = srcfd;
+					destfd = int32_t_swap_bytes(destfd);
+
+					memcpy(dest_buf_base + i * sizeof(int32_t),
+					       &destfd,
+					       sizeof(int32_t));
+				}
+
+				user_cmsghdr.cmsg_type = SYS_SCM_RIGHTS;
+				break;
+			}
+#ifdef SCM_CREDENTIALS
+			case SCM_CREDENTIALS: {
+				size_t i;
+
+				for (i = 0; i < 3; ++i) {
+					uint32_t tmp;
+					memcpy(&tmp, src_buf_base + i * 4,
+					       sizeof(tmp));
+					tmp = uint32_t_swap_bytes(tmp);
+					memcpy(dest_buf_base + i * 4,
+					       sizeof(tmp));
+				}
+
+				user_cmsghdr.cmsg_type = SYS_SCM_CREDENTIALS;
+				break;
+			}
+#endif
+			default:
+				assert(0);
+				__builtin_unreachable();
+			}
+			user_cmsghdr.cmsg_level = SYS_SOL_SOCKET;
+			break;
+		default:
+			assert(0);
+			__builtin_unreachable();
+		}
+
+		user_cmsghdr.cmsg_len = uint32_t_swap_bytes(user_cmsghdr.cmsg_len);
+		user_cmsghdr.cmsg_level = uint32_t_swap_bytes(user_cmsghdr.cmsg_level);
+		user_cmsghdr.cmsg_type = uint32_t_swap_bytes(user_cmsghdr.cmsg_type);
+		memcpy(base + controlptr, &user_cmsghdr,
+		       sizeof(user_cmsghdr));
+
+		controlptr = controlptrextent;
+	}
+	emmsg->msg_controllen = controlptr - emmsg->msg_control;
+	return 0;
+}
+
 #ifdef SAME_SOCKADDR
 
 static long finish_sendmsg(int fd, struct msghdr *msg, int flags)
@@ -1933,6 +2093,52 @@ static long finish_sendmsg(int fd, struct msghdr *msg, int flags)
 	}
 
 	return sys_sendmsg(fd, msg, flags);
+}
+
+#endif
+
+#ifdef SAME_SOCKADDR
+
+static long finish_recvmsg(int fd, struct msghdr *msg, int flags)
+{
+	return sys_recvmsg(fd, msg, flags);
+}
+
+#else
+
+static long finish_recvmsg(int fd, struct msghdr *msg, int flags)
+{
+
+	struct sockaddr_storage ss;
+	char *wasm_msg_name;
+	uint32_t wasm_msg_namelen;
+	long ret;
+
+	/* convert msg_name to form understood by sys_recvmsg */
+	if (msg->msg_name) {
+		wasm_msg_name = msg->msg_name;
+		wasm_msg_namelen = msg->msg_namelen;
+
+		msg->msg_name = &ss;
+		msg->msg_namelen = sizeof(ss);
+	} else {
+		wasm_msg_name = NULL;
+		wasm_msg_namelen = 0;
+	}
+
+	ret = sys_recvmsg(fd, msg, flags);
+
+	if (ret >= 0 && wasm_msg_name) {
+		if (write_sockaddr(msg->msg_name, msg->msg_namelen,
+				   wasm_msg_name, wasm_msg_namelen, &wasm_msg_namelen))
+			/* NB: we have to abort here because we can't undo the sys_recvmsg() */
+			wasmjit_emscripten_internal_abort("Failed to convert sockaddr");
+
+		msg->msg_name = wasm_msg_name;
+		msg->msg_namelen = wasm_msg_namelen;
+	}
+
+	return ret;
 }
 
 #endif
@@ -2278,9 +2484,131 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 		break;
 	}
 	case 17: { // recvmsg
-	}
-		ret = -EINVAL;
+		char *base;
+		struct msghdr msg;
+		struct em_msghdr emmsg;
+
+		LOAD_ARGS(funcinst, ivargs, 3,
+			  int32_t, fd,
+			  uint32_t, msg,
+			  int32_t, flags);
+
+		/* if there are flags we don't understand, then return invalid flag */
+		if (has_bad_recvfrom_flag(args.flags))
+			return -SYS_EINVAL;
+
+		if (_wasmjit_emscripten_copy_from_user(funcinst,
+						       &emmsg,
+						       args.msg,
+						       sizeof(emmsg)))
+			return -SYS_EINVAL;
+
+		emmsg.msg_name = uint32_t_swap_bytes(emmsg.msg_name);
+		emmsg.msg_namelen = uint32_t_swap_bytes(emmsg.msg_namelen);
+		emmsg.msg_iov = uint32_t_swap_bytes(emmsg.msg_iov);
+		emmsg.msg_iovlen = uint32_t_swap_bytes(emmsg.msg_iovlen);
+		emmsg.msg_control = uint32_t_swap_bytes(emmsg.msg_control);
+		emmsg.msg_controllen = uint32_t_swap_bytes(emmsg.msg_controllen);
+		emmsg.msg_flags = uint32_t_swap_bytes(emmsg.msg_flags);
+
+		memset(&msg, 0, sizeof(msg));
+
+		base = wasmjit_emscripten_get_base_address(funcinst);
+
+		if (emmsg.msg_name) {
+			if (!_wasmjit_emscripten_check_range(funcinst,
+							     emmsg.msg_name,
+							     emmsg.msg_namelen)) {
+				ret = -EFAULT;
+				goto error;
+			}
+
+			msg.msg_name = base + emmsg.msg_name;
+		} else {
+			msg.msg_name = NULL;
+		}
+
+		msg.msg_namelen = emmsg.msg_namelen;
+
+		ret = copy_iov(funcinst, emmsg.msg_iov, emmsg.msg_iovlen, &msg.msg_iov);
+		if (ret)
+			goto error2;
+
+		msg.msg_iovlen = emmsg.msg_iovlen;
+
+		if (emmsg.msg_control) {
+			size_t to_malloc;
+			if (!_wasmjit_emscripten_check_range(funcinst,
+							     emmsg.msg_control,
+							     emmsg.msg_controllen)) {
+				ret = -EFAULT;
+				goto error2;
+			}
+
+			/*
+			  allocating a right size buffer is difficult,
+			  for simplicity's sake we assume the control buffer
+			  was meant to be large enough for a single control
+			  message. for situations where this goes wrong,
+			  rely on MSG_CTRUNC.
+			*/
+			to_malloc = CMSG_SPACE(emmsg.msg_controllen -
+					       SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr)));
+
+			msg.msg_control = malloc(to_malloc);
+			if (!msg.msg_control) {
+				ret = -ENOMEM;
+				goto error2;
+			}
+			msg.msg_controllen = to_malloc;
+		} else {
+			msg.msg_control = NULL;
+			msg.msg_controllen = 0;
+		}
+
+		ret = finish_recvmsg(args.fd, &msg,
+				     convert_recvfrom_flags(args.flags));
+
+		/* write changed msg values back to wasm msg */
+		if (msg.msg_name) {
+			assert(emmsg.msg_name == (char *)msg.msg_name - base);
+			emmsg.msg_namelen = msg.msg_namelen;
+		} else {
+			assert(!msg.msg_namelen);
+		}
+
+		if (msg.msg_control) {
+			if (write_cmsg(base, &emmsg, &msg))
+				goto error_abort;
+		} else {
+			assert(!msg.msg_controllen);
+		}
+
+		emmsg.msg_flags = convert_recvmsg_msg_flags(msg.msg_flags);
+
+		// we actually only need to copy back msg_namelen and msg_controllen
+		// but for sake of clarity...
+		emmsg.msg_name = uint32_t_swap_bytes(emmsg.msg_name);
+		emmsg.msg_namelen = uint32_t_swap_bytes(emmsg.msg_namelen);
+		emmsg.msg_iov = uint32_t_swap_bytes(emmsg.msg_iov);
+		emmsg.msg_iovlen = uint32_t_swap_bytes(emmsg.msg_iovlen);
+		emmsg.msg_control = uint32_t_swap_bytes(emmsg.msg_control);
+		emmsg.msg_controllen = uint32_t_swap_bytes(emmsg.msg_controllen);
+		emmsg.msg_flags = uint32_t_swap_bytes(emmsg.msg_flags);
+		memcpy(base + args.msg, &emmsg, sizeof(emmsg));
+
+		if (0) {
+		error_abort:
+			free(msg.msg_control);
+			free(msg.msg_iov);
+			wasmjit_emscripten_internal_abort("Unknown cmsg type!");
+		}
+
+		error2:
+		free(msg.msg_control);
+		free(msg.msg_iov);
 		break;
+	}
 	default: {
 		char buf[64];
 		snprintf(buf, sizeof(buf),
