@@ -1019,6 +1019,11 @@ static long write_sockaddr(struct sockaddr_storage *ss, socklen_t ssize,
 {
 	uint32_t newlen;
 
+	if (!ssize) {
+		memset(len, 0, sizeof(newlen));
+		return 0;
+	}
+
 	switch (ss->ss_family) {
 	case AF_UNIX: {
 		struct sockaddr_un sun;
