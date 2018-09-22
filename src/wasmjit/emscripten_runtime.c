@@ -1176,6 +1176,17 @@ static int has_bad_sendto_flag(int32_t flags)
 	return 0;
 }
 
+static int convert_recvfrom_flags(int32_t flags)
+{
+	return flags;
+}
+
+static int has_bad_recvfrom_flag(int32_t flags)
+{
+	(void) flags;
+	return 0;
+}
+
 #else
 
 #define SYS_MSG_CONFIRM 2048
@@ -1245,54 +1256,6 @@ static int has_bad_sendto_flag(int32_t flags)
 	return flags & ~(int32_t) ALLOWED_SENDTO_FLAGS;
 }
 
-
-#endif
-
-#ifdef SAME_SOCKADDR
-
-static long finish_sendto(int32_t fd,
-			  const void *buf, uint32_t len,
-			  int flags,
-			  const void *dest_addr, uint32_t addrlen)
-{
-	return sys_sendto(fd, buf, len, flags, dest_addr, addrlen);
-}
-
-#else
-
-static long finish_sendto(int32_t fd,
-			  const void *buf, uint32_t len,
-			  int flags2,
-			  const void *dest_addr, uint32_t addrlen)
-{
-
-	struct sockaddr_storage ss;
-	size_t ptr_size;
-
-	/* convert dest_addr to form understood by sys_sendto */
-	if (read_sockaddr(&ss, &ptr_size, dest_addr, addrlen))
-		return -EINVAL;
-
-	return sys_sendto(fd, buf, len, flags2, (void *) &ss, ptr_size);
-}
-
-#endif
-
-#ifdef SAME_SOCKADDR
-
-static long finish_recvfrom(int32_t fd,
-			    void *buf, uint32_t len,
-			    int32_t flags,
-			    void *dest_addr,
-			    uint32_t addrlen,
-			    void *addrlenp)
-{
-	(void)addrlen;
-	return sys_recvfrom(fd, buf, len, flags, dest_addr, addrlenp);
-}
-
-#else
-
 #define SYS_MSG_CMSG_CLOEXEC 1073741824
 #define SYS_MSG_DONTWAIT 64
 #define SYS_MSG_ERRQUEUE 8192
@@ -1353,9 +1316,61 @@ static int convert_recvfrom_flags(int32_t flags)
 	return oflags;
 }
 
+static int has_bad_recvfrom_flag(int32_t flags)
+{
+	return flags & ~(int32_t) ALLOWED_RECVFROM_FLAGS;
+}
+
+#endif
+
+#ifdef SAME_SOCKADDR
+
+static long finish_sendto(int32_t fd,
+			  const void *buf, uint32_t len,
+			  int flags,
+			  const void *dest_addr, uint32_t addrlen)
+{
+	return sys_sendto(fd, buf, len, flags, dest_addr, addrlen);
+}
+
+#else
+
+static long finish_sendto(int32_t fd,
+			  const void *buf, uint32_t len,
+			  int flags2,
+			  const void *dest_addr, uint32_t addrlen)
+{
+
+	struct sockaddr_storage ss;
+	size_t ptr_size;
+
+	/* convert dest_addr to form understood by sys_sendto */
+	if (read_sockaddr(&ss, &ptr_size, dest_addr, addrlen))
+		return -EINVAL;
+
+	return sys_sendto(fd, buf, len, flags2, (void *) &ss, ptr_size);
+}
+
+#endif
+
+#ifdef SAME_SOCKADDR
+
 static long finish_recvfrom(int32_t fd,
 			    void *buf, uint32_t len,
-			    int32_t flags,
+			    int flags,
+			    void *dest_addr,
+			    uint32_t addrlen,
+			    void *addrlenp)
+{
+	(void)addrlen;
+	return sys_recvfrom(fd, buf, len, flags, dest_addr, addrlenp);
+}
+
+#else
+
+static long finish_recvfrom(int32_t fd,
+			    void *buf, uint32_t len,
+			    int flags2,
 			    void *dest_addr,
 			    uint32_t addrlen,
 			    void *addrlenp)
@@ -1363,13 +1378,6 @@ static long finish_recvfrom(int32_t fd,
 	struct sockaddr_storage ss;
 	socklen_t ssize = sizeof(ss);
 	long rret;
-	int flags2;
-
-	/* if there are flags we don't understand, then return invalid flag */
-	if (flags & ~(int32_t) ALLOWED_RECVFROM_FLAGS)
-		return -EINVAL;
-
-	flags2 = convert_recvfrom_flags(flags);
 
 	rret = sys_recvfrom(fd, buf, len, flags2, (void *) &ss, &ssize);
 	if (rret < 0)
@@ -2078,6 +2086,7 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 	case 12: { // recvfrom
 		char *base;
 		uint32_t addrlen;
+		int flags2;
 
 		LOAD_ARGS(funcinst, ivargs, 6,
 			  int32_t, fd,
@@ -2107,10 +2116,16 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 
 		base = wasmjit_emscripten_get_base_address(funcinst);
 
+		/* if there are flags we don't understand, then return invalid flag */
+		if (has_bad_recvfrom_flag(args.flags))
+			return -SYS_EINVAL;
+
+		flags2 = convert_recvfrom_flags(args.flags);
+
 		ret = finish_recvfrom(args.fd,
 				      base + args.buf,
 				      args.len,
-				      args.flags,
+				      flags2,
 				      base + args.addrp,
 				      addrlen,
 				      base + args.addrlenp);
