@@ -1348,12 +1348,18 @@ static long finish_sendto(int32_t fd,
 
 	struct sockaddr_storage ss;
 	size_t ptr_size;
+	void *saddr;
 
-	/* convert dest_addr to form understood by sys_sendto */
-	if (read_sockaddr(&ss, &ptr_size, dest_addr, addrlen))
-		return -EINVAL;
+	if (dest_addr) {
+		/* convert dest_addr to form understood by sys_sendto */
+		if (read_sockaddr(&ss, &ptr_size, dest_addr, addrlen))
+			return -EINVAL;
+		saddr = &ss;
+	} else {
+		saddr = NULL;
+	}
 
-	return sys_sendto(fd, buf, len, flags2, (void *) &ss, ptr_size);
+	return sys_sendto(fd, buf, len, flags2, saddr, ptr_size);
 }
 
 #endif
@@ -1388,9 +1394,11 @@ static long finish_recvfrom(int32_t fd,
 	if (rret < 0)
 		return rret;
 
-	if (write_sockaddr(&ss, ssize, dest_addr, addrlen, addrlenp)) {
-		/* NB: we have to abort here because we can't undo the sys_accept() */
-		wasmjit_emscripten_internal_abort("Failed to convert sockaddr");
+	if (dest_addr) {
+		if (write_sockaddr(&ss, ssize, dest_addr, addrlen, addrlenp)) {
+			/* NB: we have to abort here because we can't undo the sys_accept() */
+			wasmjit_emscripten_internal_abort("Failed to convert sockaddr");
+		}
 	}
 
 	return rret;
@@ -2067,10 +2075,12 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 						     args.length))
 			return -SYS_EFAULT;
 
-		if (!_wasmjit_emscripten_check_range(funcinst,
-						     args.addrp,
-						     args.addrlen))
-			return -SYS_EFAULT;
+		if (args.addrp) {
+			if (!_wasmjit_emscripten_check_range(funcinst,
+							     args.addrp,
+							     args.addrlen))
+				return -SYS_EFAULT;
+		}
 
 		base = wasmjit_emscripten_get_base_address(funcinst);
 
@@ -2084,7 +2094,7 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 				    base + args.message,
 				    args.length,
 				    flags2,
-				    base + args.addrp,
+				    args.addrp ? base + args.addrp : NULL,
 				    args.addrlen);
 		break;
 	}
@@ -2109,10 +2119,12 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 
 		addrlen = uint32_t_swap_bytes(addrlen);
 
-		if (!_wasmjit_emscripten_check_range(funcinst,
-						     args.addrp,
-						     addrlen))
-			return -SYS_EFAULT;
+		if (args.addrp) {
+			if (!_wasmjit_emscripten_check_range(funcinst,
+							     args.addrp,
+							     addrlen))
+				return -SYS_EFAULT;
+		}
 
 		if (!_wasmjit_emscripten_check_range(funcinst,
 						     args.buf,
@@ -2131,7 +2143,7 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 				      base + args.buf,
 				      args.len,
 				      flags2,
-				      base + args.addrp,
+				      args.addrp ? base + args.addrp : NULL,
 				      addrlen,
 				      base + args.addrlenp);
 		break;
