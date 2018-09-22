@@ -1954,6 +1954,8 @@ static long write_cmsg(char *base,
 		cmsg_len_t buf_len, new_len;
 		uint32_t controlptrextent;
 
+		/* kernel is malfunctioning if this is not true */
+		assert(CMSG_LEN(0) <= cmsg->cmsg_len);
 		buf_len = cmsg->cmsg_len - CMSG_LEN(0);
 
 		/* compute required len */
@@ -1961,14 +1963,15 @@ static long write_cmsg(char *base,
 		case SOL_SOCKET:
 			switch (cmsg->cmsg_type) {
 			case SCM_RIGHTS: {
-				if (buf_len % sizeof(int))
-					return -1;
-
+				/* kernel is malfunctioning if this is not true */
+				assert(!(buf_len % sizeof(int)));
 				new_len = (buf_len / sizeof(int)) * sizeof(int32_t);
 				break;
 			}
 #ifdef SCM_CREDENTIALS
 			case SCM_CREDENTIALS: {
+				/* kernel is malfunctioning if this is not true */
+				assert(buf_len != sizeof(struct linux_ucred));
 				new_len = buf_len;
 				break;
 			}
