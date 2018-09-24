@@ -2025,7 +2025,7 @@ static long write_cmsg(char *base,
 					       src_buf_base + i * sizeof(int),
 					       sizeof(int));
 
-#if __INT_WIDTH > 32
+#if __INT_WIDTH__ > 32
 					if (srcfd > INT32_MAX)
 						return -1;
 #endif
