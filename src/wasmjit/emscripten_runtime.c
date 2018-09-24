@@ -2050,7 +2050,7 @@ static long write_cmsg(char *base,
 					memcpy(&tmp, src_buf_base + i * 4,
 					       sizeof(tmp));
 					tmp = uint32_t_swap_bytes(tmp);
-					memcpy(dest_buf_base + i * 4,
+					memcpy(dest_buf_base + i * 4, &tmp,
 					       sizeof(tmp));
 				}
 
