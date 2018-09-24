@@ -22,6 +22,11 @@
   SOFTWARE.
  */
 
+/* For SCM_CREDENTIALS */
+#ifdef __linux__
+#define _GNU_SOURCE
+#endif
+
 #include <wasmjit/emscripten_runtime.h>
 
 #include <wasmjit/emscripten_runtime_sys.h>
