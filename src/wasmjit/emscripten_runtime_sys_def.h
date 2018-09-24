@@ -36,6 +36,6 @@ KWSC6(sendto, int, const void *, size_t, int, const struct sockaddr *, socklen_t
 KWSC6(recvfrom, int, void *, size_t, int, struct sockaddr *, socklen_t *)
 KWSC5(setsockopt, int, int, int, const void *, socklen_t)
 KWSC5(getsockopt, int, int, int, void *, socklen_t *)
-KWSC3(sendmsg, int, const struct msghdr *, int)
-KWSC3(recvmsg, int, struct msghdr *, int)
+KWSC3(sendmsg, int, const user_msghdr_t *, int)
+KWSC3(recvmsg, int, user_msghdr_t *, int)
 KWSC1(chdir, const char *)

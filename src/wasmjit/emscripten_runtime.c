@@ -1734,7 +1734,7 @@ typedef typeof(((struct cmsghdr *)0)->cmsg_len) cmsg_len_t;
 static long copy_cmsg(struct FuncInst *funcinst,
 		      uint32_t control,
 		      uint32_t controllen,
-		      struct msghdr *msg)
+		      user_msghdr_t *msg)
 {
 	char *base;
 	uint32_t controlptr;
@@ -1930,7 +1930,7 @@ static long copy_cmsg(struct FuncInst *funcinst,
 
 		cmsg->cmsg_len = CMSG_LEN(new_len);
 
-		cmsg = CMSG_NXTHDR(msg, cmsg);
+		cmsg = SYS_CMSG_NXTHDR(msg, cmsg);
 		controlptr += SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len);
 	}
 
@@ -1939,7 +1939,7 @@ static long copy_cmsg(struct FuncInst *funcinst,
 
 static long write_cmsg(char *base,
 		       struct em_msghdr *emmsg,
-		       struct msghdr *msg)
+		       user_msghdr_t *msg)
 {
 	/* copy data back to emmsg.control */
 	struct cmsghdr *cmsg;
@@ -1952,7 +1952,7 @@ static long write_cmsg(char *base,
 	controlptr = emmsg->msg_control;
 	for (cmsg = CMSG_FIRSTHDR(msg);
 	     cmsg;
-	     cmsg = CMSG_NXTHDR(msg, cmsg)) {
+	     cmsg = SYS_CMSG_NXTHDR(msg, cmsg)) {
 		struct em_cmsghdr user_cmsghdr;
 		unsigned char *src_buf_base;
 		char *dest_buf_base;
@@ -2083,14 +2083,14 @@ static long write_cmsg(char *base,
 
 #ifdef SAME_SOCKADDR
 
-static long finish_sendmsg(int fd, struct msghdr *msg, int flags)
+static long finish_sendmsg(int fd, user_msghdr_t *msg, int flags)
 {
 	return sys_sendmsg(fd, msg, flags);
 }
 
 #else
 
-static long finish_sendmsg(int fd, struct msghdr *msg, int flags)
+static long finish_sendmsg(int fd, user_msghdr_t *msg, int flags)
 {
 	struct sockaddr_storage ss;
 	size_t ptr_size;
@@ -2110,14 +2110,14 @@ static long finish_sendmsg(int fd, struct msghdr *msg, int flags)
 
 #ifdef SAME_SOCKADDR
 
-static long finish_recvmsg(int fd, struct msghdr *msg, int flags)
+static long finish_recvmsg(int fd, user_msghdr_t *msg, int flags)
 {
 	return sys_recvmsg(fd, msg, flags);
 }
 
 #else
 
-static long finish_recvmsg(int fd, struct msghdr *msg, int flags)
+static long finish_recvmsg(int fd, user_msghdr_T *msg, int flags)
 {
 
 	struct sockaddr_storage ss;
@@ -2430,7 +2430,7 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 
 		{
 			char *base;
-			struct msghdr msg;
+			user_msghdr_t msg;
 			msg.msg_iov = NULL;
 			msg.msg_control = NULL;
 
@@ -2496,7 +2496,7 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 	}
 	case 17: { // recvmsg
 		char *base;
-		struct msghdr msg;
+		user_msghdr_t msg;
 		struct em_msghdr emmsg;
 
 		LOAD_ARGS(funcinst, ivargs, 3,

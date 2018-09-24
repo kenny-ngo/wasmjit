@@ -34,6 +34,9 @@
 #include <linux/socket.h>
 
 typedef int socklen_t;
+typedef struct user_msghdr user_msghdr_t;
+
+#define SYS_CMSG_NXTHDR(msg, cmsg) __CMSG_NXTHDR((msg)->msg_control, (msg)->msg_controllen, (cmsg))
 
 #else
 
@@ -49,6 +52,10 @@ typedef int socklen_t;
 #ifndef PATH_MAX
 #define PATH_MAX 4096
 #endif
+
+typedef struct msghdr user_msghdr_t;
+
+#define SYS_CMSG_NXTHDR(msg, cmsg) CMSG_NXTHDR((msg), (cmsg))
 
 #endif
 
