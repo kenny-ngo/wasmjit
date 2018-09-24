@@ -75,14 +75,14 @@ static int32_t int32_t_swap_bytes(int32_t a)
 	if (_wasmjit_emscripten_copy_from_user(funcinst,		\
 					       &args, varargs,		\
 					       sizeof(args)))		\
-		return -SYS_EFAULT;					\
+		return -EM_EFAULT;					\
 	__MMAP(args, n, __SWAP, __VA_ARGS__)
 
 #define LOAD_ARGS(...)				\
 	LOAD_ARGS_CUSTOM(args, __VA_ARGS__)
 
 enum {
-#define ERRNO(name, value) SYS_ ## name = value,
+#define ERRNO(name, value) EM_ ## name = value,
 #include <wasmjit/emscripten_runtime_sys_errno_def.h>
 #undef ERRNO
 };
@@ -137,11 +137,11 @@ static int32_t check_ret(long errno_)
 	errno_ = -errno_;
 
 	if ((size_t) errno_ >= sizeof(to_sys_errno) / sizeof(to_sys_errno[0])) {
-		toret = -SYS_EINVAL;
+		toret = -EM_EINVAL;
 	} else {
 		toret = to_sys_errno[errno_];
 		if (!toret)
-			toret = -SYS_EINVAL;
+			toret = -EM_EINVAL;
 	}
 
 	return toret;
@@ -470,11 +470,11 @@ uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs, stru
 	base = wasmjit_emscripten_get_base_address(funcinst);
 
 	if (!_wasmjit_emscripten_check_range(funcinst, args.result, 4))
-		return -SYS_EFAULT;
+		return -EM_EFAULT;
 
 	// emscripten off_t is 32-bits, offset_high is useless
 	if (args.offset_high)
-		return -SYS_EINVAL;
+		return -EM_EINVAL;
 
 	ret = check_ret(sys_lseek(args.fd, args.offset_low, args.whence));
 
@@ -585,7 +585,7 @@ uint32_t wasmjit_emscripten____syscall4(uint32_t which, uint32_t varargs, struct
 	(void)which;
 
 	if (!_wasmjit_emscripten_check_range(funcinst, args.buf, args.count))
-		return -SYS_EFAULT;
+		return -EM_EFAULT;
 
 	base = wasmjit_emscripten_get_base_address(funcinst);
 
@@ -761,7 +761,7 @@ uint32_t wasmjit_emscripten____syscall10(uint32_t which, uint32_t varargs,
 	base = wasmjit_emscripten_get_base_address(funcinst);
 
 	if (!_wasmjit_emscripten_check_string(funcinst, args.pathname, PATH_MAX))
-		return -SYS_EFAULT;
+		return -EM_EFAULT;
 
 	return check_ret(sys_unlink(base + args.pathname));
 }
@@ -787,12 +787,12 @@ static int convert_socket_type_to_local(int32_t type)
 {
 	int ltype, nonblock_type, cloexec_type;
 
-#define SYS_SOCK_NONBLOCK 2048
-	nonblock_type = !!(type & SYS_SOCK_NONBLOCK);
-	type &= ~(int) SYS_SOCK_NONBLOCK;
-#define SYS_SOCK_CLOEXEC 524288
-	cloexec_type = !!(type & SYS_SOCK_CLOEXEC);
-	type &= ~(int) SYS_SOCK_CLOEXEC;
+#define EM_SOCK_NONBLOCK 2048
+	nonblock_type = !!(type & EM_SOCK_NONBLOCK);
+	type &= ~(int) EM_SOCK_NONBLOCK;
+#define EM_SOCK_CLOEXEC 524288
+	cloexec_type = !!(type & EM_SOCK_CLOEXEC);
+	type &= ~(int) EM_SOCK_CLOEXEC;
 
 	switch (type) {
 	case 1: ltype = SOCK_STREAM; break;
@@ -835,9 +835,9 @@ static int convert_socket_type_to_local(int32_t type)
 
 #endif
 
-#define SYS_AF_UNIX 1
-#define SYS_AF_INET 2
-#define SYS_AF_INET6 10
+#define EM_AF_UNIX 1
+#define EM_AF_INET 2
+#define EM_AF_INET6 10
 
 #if defined(__linux__) || defined(__KERNEL__)
 
@@ -857,9 +857,9 @@ static int convert_proto_to_local(int domain, int32_t proto)
 static int convert_socket_domain_to_local(int32_t domain)
 {
 	switch (domain) {
-	case SYS_AF_UNIX: return AF_UNIX;
-	case SYS_AF_INET: return AF_INET;
-	case SYS_AF_INET6: return AF_INET6;
+	case EM_AF_UNIX: return AF_UNIX;
+	case EM_AF_INET: return AF_INET;
+	case EM_AF_INET6: return AF_INET6;
 	case 4: return AF_IPX;
 #ifdef AF_NETLINK
 	case 16: return AF_NETLINK;
@@ -953,7 +953,7 @@ static long read_sockaddr(struct sockaddr_storage *ss, size_t *size,
 	family = uint16_t_swap_bytes(family);
 
 	switch (family) {
-	case SYS_AF_UNIX: {
+	case EM_AF_UNIX: {
 		struct sockaddr_un sun;
 		if (len - FAS > sizeof(sun.sun_path))
 			return -1;
@@ -964,7 +964,7 @@ static long read_sockaddr(struct sockaddr_storage *ss, size_t *size,
 		memcpy(ss, &sun, *size);
 		break;
 	}
-	case SYS_AF_INET: {
+	case EM_AF_INET: {
 		struct sockaddr_in sin;
 		if (len < 8)
 			return -1;
@@ -979,7 +979,7 @@ static long read_sockaddr(struct sockaddr_storage *ss, size_t *size,
 		memcpy(ss, &sin, *size);
 		break;
 	}
-	case SYS_AF_INET6: {
+	case EM_AF_INET6: {
 		struct sockaddr_in6 sin6;
 
 		if (len < 28)
@@ -1032,7 +1032,7 @@ static long write_sockaddr(struct sockaddr_storage *ss, socklen_t ssize,
 	switch (ss->ss_family) {
 	case AF_UNIX: {
 		struct sockaddr_un sun;
-		uint16_t f = uint16_t_swap_bytes(SYS_AF_UNIX);
+		uint16_t f = uint16_t_swap_bytes(EM_AF_UNIX);
 
 		newlen = FAS + (ssize - offsetof(struct sockaddr_un, sun_path));
 
@@ -1050,7 +1050,7 @@ static long write_sockaddr(struct sockaddr_storage *ss, socklen_t ssize,
 	}
 	case AF_INET: {
 		struct sockaddr_in sin;
-		uint16_t f = uint16_t_swap_bytes(SYS_AF_INET);
+		uint16_t f = uint16_t_swap_bytes(EM_AF_INET);
 
 		newlen = FAS + 2 + 4;
 
@@ -1070,7 +1070,7 @@ static long write_sockaddr(struct sockaddr_storage *ss, socklen_t ssize,
 	}
 	case AF_INET6: {
 		struct sockaddr_in6 sin6;
-		uint16_t f = uint16_t_swap_bytes(SYS_AF_INET6);
+		uint16_t f = uint16_t_swap_bytes(EM_AF_INET6);
 
 		newlen = FAS + 2 + 4 + 16 + 4;
 
@@ -1172,19 +1172,19 @@ static long finish_acceptlike(long (*acceptlike)(int, struct sockaddr *, socklen
 
 #endif
 
-#define SYS_MSG_OOB 1
-#define SYS_MSG_PEEK 2
-#define SYS_MSG_DONTROUTE 4
-#define SYS_MSG_CTRUNC 8
-#define SYS_MSG_TRUNC 32
-#define SYS_MSG_DONTWAIT 64
-#define SYS_MSG_EOR 128
-#define SYS_MSG_WAITALL 256
-#define SYS_MSG_CONFIRM 2048
-#define SYS_MSG_ERRQUEUE 8192
-#define SYS_MSG_NOSIGNAL 16384
-#define SYS_MSG_MORE 32768
-#define SYS_MSG_CMSG_CLOEXEC 1073741824
+#define EM_MSG_OOB 1
+#define EM_MSG_PEEK 2
+#define EM_MSG_DONTROUTE 4
+#define EM_MSG_CTRUNC 8
+#define EM_MSG_TRUNC 32
+#define EM_MSG_DONTWAIT 64
+#define EM_MSG_EOR 128
+#define EM_MSG_WAITALL 256
+#define EM_MSG_CONFIRM 2048
+#define EM_MSG_ERRQUEUE 8192
+#define EM_MSG_NOSIGNAL 16384
+#define EM_MSG_MORE 32768
+#define EM_MSG_CMSG_CLOEXEC 1073741824
 
 #if defined(__linux__) || defined(__KERNEL__)
 
@@ -1219,25 +1219,25 @@ static int32_t convert_recvmsg_msg_flags(int flags) {
 enum {
 	ALLOWED_SENDTO_FLAGS =
 #ifdef MSG_CONFIM
-	SYS_MSG_CONFIRM |
+	EM_MSG_CONFIRM |
 #endif
 #ifdef MSG_DONTROUTE
-	SYS_MSG_DONTROUTE |
+	EM_MSG_DONTROUTE |
 #endif
 #ifdef MSG_DONTWAIT
-	SYS_MSG_DONTWAIT |
+	EM_MSG_DONTWAIT |
 #endif
 #ifdef MSG_EOR
-	SYS_MSG_EOR |
+	EM_MSG_EOR |
 #endif
 #ifdef MSG_MORE
-	SYS_MSG_MORE |
+	EM_MSG_MORE |
 #endif
 #ifdef MSG_NOSIGNAL
-	SYS_MSG_NOSIGNAL |
+	EM_MSG_NOSIGNAL |
 #endif
 #ifdef MSG_OOB
-	SYS_MSG_OOB |
+	EM_MSG_OOB |
 #endif
 	0,
 };
@@ -1247,7 +1247,7 @@ static int convert_sendto_flags(int32_t flags)
 	int oflags = 0;
 
 #define SETF(n)					\
-	if (flags & SYS_MSG_ ## n) {		\
+	if (flags & EM_MSG_ ## n) {		\
 		oflags |= MSG_ ## n;		\
 	}
 
@@ -1278,25 +1278,25 @@ static int has_bad_sendto_flag(int32_t flags)
 enum {
 	ALLOWED_RECVFROM_FLAGS =
 #ifdef MSG_CMSG_CLOEXEC
-	SYS_MSG_CMSG_CLOEXEC |
+	EM_MSG_CMSG_CLOEXEC |
 #endif
 #ifdef MSG_DONTWAIT
-	SYS_MSG_DONTWAIT |
+	EM_MSG_DONTWAIT |
 #endif
 #ifdef MSG_ERRQUEUE
-	SYS_MSG_ERRQUEUE |
+	EM_MSG_ERRQUEUE |
 #endif
 #ifdef MSG_OOB
-	SYS_MSG_OOB |
+	EM_MSG_OOB |
 #endif
 #ifdef MSG_PEEK
-	SYS_MSG_PEEK |
+	EM_MSG_PEEK |
 #endif
 #ifdef MSG_TRUNC
-	SYS_MSG_TRUNC |
+	EM_MSG_TRUNC |
 #endif
 #ifdef MSG_WAITALL
-	SYS_MSG_WAITALL |
+	EM_MSG_WAITALL |
 #endif
 	0,
 };
@@ -1306,7 +1306,7 @@ static int convert_recvfrom_flags(int32_t flags)
 	int oflags = 0;
 
 #define SETF(n)					\
-	if (flags & SYS_MSG_ ## n) {		\
+	if (flags & EM_MSG_ ## n) {		\
 		oflags |= MSG_ ## n;		\
 	}
 
@@ -1336,7 +1336,7 @@ static int32_t convert_recvmsg_msg_flags(int flags) {
 	int32_t oflags = 0;
 #define SETF(n)						\
 	if (flags & MSG_ ## n) {			\
-		oflags |= SYS_MSG_ ## n;		\
+		oflags |= EM_MSG_ ## n;		\
 	}
 	SETF(EOR);
 	SETF(TRUNC);
@@ -1447,9 +1447,9 @@ struct linux_ucred {
 COMPILE_TIME_ASSERT(sizeof(struct timeval) == sizeof(long) * 2);
 COMPILE_TIME_ASSERT(sizeof(socklen_t) == sizeof(unsigned));
 
-#define SYS_SOL_SOCKET 1
-#define SYS_SCM_RIGHTS 1
-#define SYS_SCM_CREDENTIALS 2
+#define EM_SOL_SOCKET 1
+#define EM_SCM_RIGHTS 1
+#define EM_SCM_CREDENTIALS 2
 
 enum {
 	OPT_TYPE_INT,
@@ -1466,7 +1466,7 @@ static int convert_sockopt(int32_t level,
 			   int *opttype)
 {
 	switch (level) {
-	case SYS_SOL_SOCKET: {
+	case EM_SOL_SOCKET: {
 		switch (optname) {
 #define SO(name, value, opt_type) case value: *optname2 = SO_ ## name; *opttype = OPT_TYPE_ ## opt_type; break;
 #include <wasmjit/emscripten_runtime_sys_so_def.h>
@@ -1725,7 +1725,7 @@ struct em_msghdr {
 	uint32_t msg_flags;
 };
 
-#define SYS_CMSG_ALIGN(len) (((len) + sizeof (uint32_t) - 1)		\
+#define EM_CMSG_ALIGN(len) (((len) + sizeof (uint32_t) - 1)		\
 			     & (uint32_t) ~(sizeof (uint32_t) - 1))
 
 /* NB: cmsg_len can be size_t or socklen_t depending on host kernel */
@@ -1749,13 +1749,13 @@ static long copy_cmsg(struct FuncInst *funcinst,
 	if (__builtin_add_overflow(control, controllen, &controlmax))
 		return -EFAULT;
 
-	if (controlmax < SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr)))
+	if (controlmax < EM_CMSG_ALIGN(sizeof(struct em_cmsghdr)))
 		return -EINVAL;
 
 	/* count up required space */
 	buf_offset = 0;
 	controlptr = control;
-	while (!(controlptr > controlmax - SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr)))) {
+	while (!(controlptr > controlmax - EM_CMSG_ALIGN(sizeof(struct em_cmsghdr)))) {
 		struct em_cmsghdr user_cmsghdr;
 		size_t cur_len, buf_len;
 
@@ -1774,10 +1774,10 @@ static long copy_cmsg(struct FuncInst *funcinst,
 			uint32_t sum;
 			/* controlptr and cmsg_len are user-controlled,
 			   check for overflow */
-			if (SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len) < user_cmsghdr.cmsg_len)
+			if (EM_CMSG_ALIGN(user_cmsghdr.cmsg_len) < user_cmsghdr.cmsg_len)
 				return -EFAULT;
 
-			if (__builtin_add_overflow(SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len),
+			if (__builtin_add_overflow(EM_CMSG_ALIGN(user_cmsghdr.cmsg_len),
 						   controlptr,
 						   &sum))
 				return -EFAULT;
@@ -1789,23 +1789,23 @@ static long copy_cmsg(struct FuncInst *funcinst,
 		/* check if control data is in range */
 		if (!_wasmjit_emscripten_check_range(funcinst,
 						     controlptr,
-						     SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len)))
+						     EM_CMSG_ALIGN(user_cmsghdr.cmsg_len)))
 			return -EFAULT;
 
-		if (user_cmsghdr.cmsg_len < SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr)))
+		if (user_cmsghdr.cmsg_len < EM_CMSG_ALIGN(sizeof(struct em_cmsghdr)))
 			return -EFAULT;
-		buf_len = user_cmsghdr.cmsg_len - SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr));
+		buf_len = user_cmsghdr.cmsg_len - EM_CMSG_ALIGN(sizeof(struct em_cmsghdr));
 
 		switch (user_cmsghdr.cmsg_level) {
-		case SYS_SOL_SOCKET: {
+		case EM_SOL_SOCKET: {
 			switch (user_cmsghdr.cmsg_type) {
-			case SYS_SCM_RIGHTS:
+			case EM_SCM_RIGHTS:
 				/* convert int size from wasm to host */
 				if (buf_len % sizeof(int32_t))
 					return -EINVAL;
 				cur_len = (buf_len / sizeof(int32_t)) * sizeof(int);
 				break;
-			case SYS_SCM_CREDENTIALS:
+			case EM_SCM_CREDENTIALS:
 #ifdef SCM_CREDENTIALS
 				/* passes a struct ucred which is the same across
 				   all archs */
@@ -1835,7 +1835,7 @@ static long copy_cmsg(struct FuncInst *funcinst,
 					   &buf_offset))
 			return -EFAULT;
 		/* the safety of this was checked above */
-		controlptr += SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len);
+		controlptr += EM_CMSG_ALIGN(user_cmsghdr.cmsg_len);
 	}
 
 	msg->msg_control = calloc(buf_offset, 1);
@@ -1848,7 +1848,7 @@ static long copy_cmsg(struct FuncInst *funcinst,
 
 	/* now convert each control message */
 	controlptr = control;
-	while (!(controlptr > controlmax - SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr)))) {
+	while (!(controlptr > controlmax - EM_CMSG_ALIGN(sizeof(struct em_cmsghdr)))) {
 		struct em_cmsghdr user_cmsghdr;
 		size_t cur_len, buf_len, new_len;
 		char *src_buf_base;
@@ -1862,10 +1862,10 @@ static long copy_cmsg(struct FuncInst *funcinst,
 		user_cmsghdr.cmsg_type = uint32_t_swap_bytes(user_cmsghdr.cmsg_type);
 
 		/* kernel says must check this */
-		if (SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len) + controlptr > controlmax)
+		if (EM_CMSG_ALIGN(user_cmsghdr.cmsg_len) + controlptr > controlmax)
 			break;
 
-		cur_len = SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr));
+		cur_len = EM_CMSG_ALIGN(sizeof(struct em_cmsghdr));
 		buf_len = user_cmsghdr.cmsg_len - cur_len;
 
 		/* kernel sources differ from libc sources on where
@@ -1876,9 +1876,9 @@ static long copy_cmsg(struct FuncInst *funcinst,
 		dest_buf_base = CMSG_DATA(cmsg);
 
 		switch (user_cmsghdr.cmsg_level) {
-		case SYS_SOL_SOCKET: {
+		case EM_SOL_SOCKET: {
 			switch (user_cmsghdr.cmsg_type) {
-			case SYS_SCM_RIGHTS: {
+			case EM_SCM_RIGHTS: {
 				size_t i;
 				for (i = 0; i < buf_len / sizeof(int32_t); ++i) {
 					int32_t fd;
@@ -1896,7 +1896,7 @@ static long copy_cmsg(struct FuncInst *funcinst,
 				break;
 				}
 #ifdef SCM_CREDENTIALS
-			case SYS_SCM_CREDENTIALS: {
+			case EM_SCM_CREDENTIALS: {
 				/* struct ucred is same across all archs,
 				   just flip bytes if necessary
 				 */
@@ -1931,7 +1931,7 @@ static long copy_cmsg(struct FuncInst *funcinst,
 		cmsg->cmsg_len = CMSG_LEN(new_len);
 
 		cmsg = SYS_CMSG_NXTHDR(msg, cmsg);
-		controlptr += SYS_CMSG_ALIGN(user_cmsghdr.cmsg_len);
+		controlptr += EM_CMSG_ALIGN(user_cmsghdr.cmsg_len);
 	}
 
 	return 0;
@@ -1989,28 +1989,28 @@ static long write_cmsg(char *base,
 			return -1;
 		}
 
-		new_len += SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr));
+		new_len += EM_CMSG_ALIGN(sizeof(struct em_cmsghdr));
 
 		user_cmsghdr.cmsg_len = new_len;
 
-		/* this is always true because SYS_CMSG_ALIGN aligns
+		/* this is always true because EM_CMSG_ALIGN aligns
 		   to int32_t, and new_len is always a multiple of int32_t,
 		   this assert allows us to avoid checking if aligning overflows
 		*/
-		assert(SYS_CMSG_ALIGN(new_len) == new_len);
+		assert(EM_CMSG_ALIGN(new_len) == new_len);
 
 		/* we got more cmsgs than we can fit,
-		   flag SYS_MSG_CTRUNC and give up */
+		   flag EM_MSG_CTRUNC and give up */
 		if (__builtin_add_overflow(controlptr,
-					   SYS_CMSG_ALIGN(new_len),
+					   EM_CMSG_ALIGN(new_len),
 					   &controlptrextent) ||
 		    controlptrextent > controlmax) {
-			emmsg->msg_flags |= SYS_MSG_CTRUNC;
+			emmsg->msg_flags |= EM_MSG_CTRUNC;
 			break;
 		}
 
 		src_buf_base = CMSG_DATA(cmsg);
-		dest_buf_base = base + controlptr + SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr));
+		dest_buf_base = base + controlptr + EM_CMSG_ALIGN(sizeof(struct em_cmsghdr));
 
 		switch (cmsg->cmsg_level) {
 		case SOL_SOCKET:
@@ -2038,7 +2038,7 @@ static long write_cmsg(char *base,
 					       sizeof(int32_t));
 				}
 
-				user_cmsghdr.cmsg_type = SYS_SCM_RIGHTS;
+				user_cmsghdr.cmsg_type = EM_SCM_RIGHTS;
 				break;
 			}
 #ifdef SCM_CREDENTIALS
@@ -2054,7 +2054,7 @@ static long write_cmsg(char *base,
 					       sizeof(tmp));
 				}
 
-				user_cmsghdr.cmsg_type = SYS_SCM_CREDENTIALS;
+				user_cmsghdr.cmsg_type = EM_SCM_CREDENTIALS;
 				break;
 			}
 #endif
@@ -2062,7 +2062,7 @@ static long write_cmsg(char *base,
 				assert(0);
 				__builtin_unreachable();
 			}
-			user_cmsghdr.cmsg_level = SYS_SOL_SOCKET;
+			user_cmsghdr.cmsg_level = EM_SOL_SOCKET;
 			break;
 		default:
 			assert(0);
@@ -2195,7 +2195,7 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 		if (!_wasmjit_emscripten_check_range(funcinst,
 						     args.addrp,
 						     args.addrlen))
-			return -SYS_EFAULT;
+			return -EM_EFAULT;
 
 		base = wasmjit_emscripten_get_base_address(funcinst);
 
@@ -2234,14 +2234,14 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 						       &addrlen,
 						       args.addrlenp,
 						       sizeof(addrlen)))
-			return -SYS_EFAULT;
+			return -EM_EFAULT;
 
 		addrlen = uint32_t_swap_bytes(addrlen);
 
 		if (!_wasmjit_emscripten_check_range(funcinst,
 						     args.addrp,
 						     addrlen))
-			return -SYS_EFAULT;
+			return -EM_EFAULT;
 
 		base = wasmjit_emscripten_get_base_address(funcinst);
 
@@ -2286,20 +2286,20 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 		if (!_wasmjit_emscripten_check_range(funcinst,
 						     args.message,
 						     args.length))
-			return -SYS_EFAULT;
+			return -EM_EFAULT;
 
 		if (args.addrp) {
 			if (!_wasmjit_emscripten_check_range(funcinst,
 							     args.addrp,
 							     args.addrlen))
-				return -SYS_EFAULT;
+				return -EM_EFAULT;
 		}
 
 		base = wasmjit_emscripten_get_base_address(funcinst);
 
 		/* if there are flags we don't understand, then return invalid flag */
 		if (has_bad_sendto_flag(args.flags))
-			return -SYS_EINVAL;
+			return -EM_EINVAL;
 
 		flags2 = convert_sendto_flags(args.flags);
 
@@ -2328,7 +2328,7 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 						       &addrlen,
 						       args.addrlenp,
 						       sizeof(uint32_t)))
-			return -SYS_EFAULT;
+			return -EM_EFAULT;
 
 		addrlen = uint32_t_swap_bytes(addrlen);
 
@@ -2336,19 +2336,19 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 			if (!_wasmjit_emscripten_check_range(funcinst,
 							     args.addrp,
 							     addrlen))
-				return -SYS_EFAULT;
+				return -EM_EFAULT;
 		}
 
 		if (!_wasmjit_emscripten_check_range(funcinst,
 						     args.buf,
 						     args.len))
-			return -SYS_EFAULT;
+			return -EM_EFAULT;
 
 		base = wasmjit_emscripten_get_base_address(funcinst);
 
 		/* if there are flags we don't understand, then return invalid flag */
 		if (has_bad_recvfrom_flag(args.flags))
-			return -SYS_EINVAL;
+			return -EM_EINVAL;
 
 		flags2 = convert_recvfrom_flags(args.flags);
 
@@ -2374,7 +2374,7 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 		if (!_wasmjit_emscripten_check_range(funcinst,
 						     args.optval,
 						     args.optlen))
-			return -SYS_EFAULT;
+			return -EM_EFAULT;
 
 		base = wasmjit_emscripten_get_base_address(funcinst);
 
@@ -2400,14 +2400,14 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 						       &optlen,
 						       args.optlenp,
 						       sizeof(optlen)))
-			return -SYS_EFAULT;
+			return -EM_EFAULT;
 
 		optlen = uint32_t_swap_bytes(optlen);
 
 		if (!_wasmjit_emscripten_check_range(funcinst,
 						     args.optval,
 						     optlen))
-			return -SYS_EFAULT;
+			return -EM_EFAULT;
 
 		base = wasmjit_emscripten_get_base_address(funcinst);
 
@@ -2426,7 +2426,7 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 			  int32_t, flags);
 
 		if (has_bad_sendto_flag(args.flags))
-			return -SYS_EINVAL;
+			return -EM_EINVAL;
 
 		{
 			char *base;
@@ -2507,13 +2507,13 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 
 		/* if there are flags we don't understand, then return invalid flag */
 		if (has_bad_recvfrom_flag(args.flags))
-			return -SYS_EINVAL;
+			return -EM_EINVAL;
 
 		if (_wasmjit_emscripten_copy_from_user(funcinst,
 						       &emmsg,
 						       args.msg,
 						       sizeof(emmsg)))
-			return -SYS_EINVAL;
+			return -EM_EINVAL;
 
 		emmsg.msg_name = uint32_t_swap_bytes(emmsg.msg_name);
 		emmsg.msg_namelen = uint32_t_swap_bytes(emmsg.msg_namelen);
@@ -2565,7 +2565,7 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 			  rely on MSG_CTRUNC.
 			*/
 			to_malloc = CMSG_SPACE(emmsg.msg_controllen -
-					       SYS_CMSG_ALIGN(sizeof(struct em_cmsghdr)));
+					       EM_CMSG_ALIGN(sizeof(struct em_cmsghdr)));
 
 			msg.msg_control = malloc(to_malloc);
 			if (!msg.msg_control) {
@@ -2646,7 +2646,7 @@ uint32_t wasmjit_emscripten____syscall221(uint32_t which, uint32_t varargs,
 	/* TODO: implement */
 	(void) args;
 
-	return -SYS_EINVAL;
+	return -EM_EINVAL;
 }
 
 /* chdir */
@@ -2663,7 +2663,7 @@ uint32_t wasmjit_emscripten____syscall12(uint32_t which, uint32_t varargs,
 	base = wasmjit_emscripten_get_base_address(funcinst);
 
 	if (!_wasmjit_emscripten_check_string(funcinst, args.pathname, PATH_MAX))
-		return -SYS_EFAULT;
+		return -EM_EFAULT;
 
 	return check_ret(sys_chdir(base + args.pathname));
 }
@@ -2680,7 +2680,7 @@ uint32_t wasmjit_emscripten____syscall122(uint32_t which, uint32_t varargs,
 	(void) which;
 
 	if (!_wasmjit_emscripten_check_range(funcinst, args.buf, 390))
-		return -SYS_EFAULT;
+		return -EM_EFAULT;
 
 	base = wasmjit_emscripten_get_base_address(funcinst);
 
