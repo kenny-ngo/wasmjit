@@ -487,9 +487,9 @@ static long kwasmjit_unlocked_ioctl(struct file *filp,
 	switch (cmd) {
 	case KWASMJIT_INSTANTIATE: {
 		struct kwasmjit_instantiate_args arg;
-		unsigned version;
+		uint32_t version;
 
-		get_user(version, (unsigned *) parg);
+		get_user(version, (uint32_t *) parg);
 		if (version > 0) {
 			retval = -EINVAL;
 			goto error;
@@ -505,9 +505,9 @@ static long kwasmjit_unlocked_ioctl(struct file *filp,
 	}
 	case KWASMJIT_INSTANTIATE_EMSCRIPTEN_RUNTIME: {
 		struct kwasmjit_instantiate_emscripten_runtime_args arg;
-		unsigned version;
+		uint32_t version;
 
-		get_user(version, (unsigned *) parg);
+		get_user(version, (uint32_t *) parg);
 		if (version > 0) {
 			retval = -EINVAL;
 			goto error;
@@ -523,9 +523,9 @@ static long kwasmjit_unlocked_ioctl(struct file *filp,
 	}
 	case KWASMJIT_EMSCRIPTEN_INVOKE_MAIN: {
 		struct kwasmjit_emscripten_invoke_main_args arg;
-		unsigned version;
+		uint32_t version;
 
-		get_user(version, (unsigned *) parg);
+		get_user(version, (uint32_t *) parg);
 		if (version > 0) {
 			retval = -EINVAL;
 			goto error;
@@ -541,9 +541,9 @@ static long kwasmjit_unlocked_ioctl(struct file *filp,
 	}
 	case KWASMJIT_ERROR_MESSAGE: {
 		struct kwasmjit_error_message_args arg;
-		unsigned version;
+		uint32_t version;
 
-		get_user(version, (unsigned *) parg);
+		get_user(version, (uint32_t *) parg);
 		if (version > 0) {
 			retval = -EINVAL;
 			goto error;
