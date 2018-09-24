@@ -45,14 +45,16 @@ struct kwasmjit_instantiate_args {
 	unsigned version;
 	const char *file_name;
 	const char *module_name;
-	int flags;
+	uint32_t flags;
 };
+
+#define KWASMJIT_INSTANTIATE_EMSCRIPTEN_RUNTIME_FLAGS_NO_TABLE 1
 
 struct kwasmjit_instantiate_emscripten_runtime_args {
 	unsigned version;
 	uint32_t static_bump;
 	size_t tablemin, tablemax;
-	int flags;
+	uint32_t flags;
 };
 
 struct kwasmjit_emscripten_invoke_main_args {
@@ -61,7 +63,7 @@ struct kwasmjit_emscripten_invoke_main_args {
 	int argc;
 	char **argv;
 	char **envp;
-	int flags;
+	uint32_t flags;
 };
 
 struct kwasmjit_error_message_args {

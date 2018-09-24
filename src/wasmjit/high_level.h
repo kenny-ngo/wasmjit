@@ -49,16 +49,16 @@ int wasmjit_high_init(struct WasmJITHigh *self);
 int wasmjit_high_instantiate(struct WasmJITHigh *self,
 			     const char *filename,
 			     const char *module_name,
-			     int flags);
+			     uint32_t flags);
 int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
 						uint32_t static_bump,
 						size_t tablemin,
 						size_t tablemax,
-						int flags);
+						uint32_t flags);
 int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 					const char *module_name,
 					int argc, char **argv, char **envp,
-					int flags);
+					uint32_t flags);
 void wasmjit_high_close(struct WasmJITHigh *self);
 int wasmjit_high_error_message(struct WasmJITHigh *self, char *buf, size_t buf_size);
 

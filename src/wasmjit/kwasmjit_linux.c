@@ -217,7 +217,7 @@ struct InvokeMainArgs {
 	int argc;
 	char **argv;
 	char **envp;
-	int flags;
+	uint32_t flags;
 };
 
 static int handler(void *ctx)
