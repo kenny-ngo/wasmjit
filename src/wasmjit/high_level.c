@@ -174,7 +174,7 @@ int wasmjit_high_instantiate(struct WasmJITHigh *self, const char *filename, con
 		arg.module_name = module_name;
 		arg.flags = flags;
 
-		return !ioctl(self->fd, KWASMJIT_INSTANTIATE, &arg);
+		return ioctl(self->fd, KWASMJIT_INSTANTIATE, &arg);
 	}
 #endif
 
