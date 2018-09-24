@@ -298,6 +298,7 @@ static int get_static_bump(const char *filename, uint32_t *static_bump)
 
 static int get_emscripten_runtime_parameters(const char *filename,
 					     uint32_t *static_bump,
+					     int *has_table,
 					     size_t *tablemin, size_t *tablemax)
 {
 	size_t i;
@@ -323,8 +324,7 @@ static int get_emscripten_runtime_parameters(const char *filename,
 		break;
 	}
 
-	if (i == module.import_section.n_imports)
-		goto error;
+	*has_table = i != module.import_section.n_imports;
 
 	ret = get_static_bump(filename, static_bump);
 	if (ret) {
@@ -344,6 +344,7 @@ static int get_emscripten_runtime_parameters(const char *filename,
 
 static int run_emscripten_file(const char *filename,
 			       uint32_t static_bump,
+			       int has_table,
 			       size_t tablemin, size_t tablemax,
 			       int argc, char **argv, char **envp)
 {
@@ -352,6 +353,7 @@ static int run_emscripten_file(const char *filename,
 	void *stack_top;
 	int high_init = 0;
 	const char *msg;
+	uint32_t flags = 0;
 
 	stack_top = get_stack_top();
 	if (!stack_top) {
@@ -366,9 +368,12 @@ static int run_emscripten_file(const char *filename,
 	}
 	high_init = 1;
 
+	if (!has_table)
+		flags |= WASMJIT_HIGH_INSTANTIATE_EMSCRIPTEN_RUNTIME_FLAGS_NO_TABLE;
+
 	if (wasmjit_high_instantiate_emscripten_runtime(&high,
 							static_bump,
-							tablemin, tablemax, 0)) {
+							tablemin, tablemax, flags)) {
 		msg = "failed to instantiate emscripten runtime";
 		goto error;
 	}
@@ -415,6 +420,7 @@ int main(int argc, char *argv[])
 	int ret;
 	char *filename;
 	int dump_module, create_relocatable, create_relocatable_helper, opt;
+	int has_table;
 	size_t tablemin = 0, tablemax = 0;
 	uint32_t static_bump = 0;
 
@@ -468,7 +474,7 @@ int main(int argc, char *argv[])
 		return ret;
 	}
 
-	ret = get_emscripten_runtime_parameters(filename, &static_bump, &tablemin, &tablemax);
+	ret = get_emscripten_runtime_parameters(filename, &static_bump, &has_table, &tablemin, &tablemax);
 	if (ret)
 		return -1;
 
@@ -479,8 +485,12 @@ int main(int argc, char *argv[])
 
 		printf("#include <wasmjit/static_runtime.h>\n");
 		printf("#define CURRENT_MODULE env\n");
-		printf("DEFINE_WASM_TABLE(table, ELEMTYPE_ANYFUNC, %zu, %zu)\n",
-		       tablemin, tablemax);
+
+		if (has_table) {
+			printf("DEFINE_WASM_TABLE(table, ELEMTYPE_ANYFUNC, %zu, %zu)\n",
+			       tablemin, tablemax);
+		}
+
 		printf("DEFINE_WASM_GLOBAL(memoryBase, %" PRIu32 ", VALTYPE_I32, i32, 0)\n",
 		       globals.memoryBase);
 		printf("DEFINE_WASM_GLOBAL(tempDoublePtr, %" PRIu32 ", VALTYPE_I32, i32, 0)\n",
@@ -496,6 +506,6 @@ int main(int argc, char *argv[])
 	}
 
 	return run_emscripten_file(filename,
-				   static_bump, tablemin, tablemax,
+				   static_bump, has_table, tablemin, tablemax,
 				   argc - optind, &argv[optind], environ);
 }

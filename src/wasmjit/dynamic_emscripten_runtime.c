@@ -86,6 +86,7 @@ static struct FuncInst *alloc_func(struct ModuleInst *module, void *_fptr,
 }
 
 struct NamedModule *wasmjit_instantiate_emscripten_runtime(uint32_t static_bump,
+							   int has_table,
 							   size_t tablemin,
 							   size_t tablemax,
 							   size_t *amt)
@@ -180,7 +181,10 @@ struct NamedModule *wasmjit_instantiate_emscripten_runtime(uint32_t static_bump,
 	} while (0);
 
 #define DEFINE_EXTERNAL_WASM_TABLE(name)				\
-	DEFINE_WASM_TABLE(name, ELEMTYPE_ANYFUNC, name ## min, name ## max)
+	if (has_ ## name) {						\
+		DEFINE_WASM_TABLE(name, ELEMTYPE_ANYFUNC,		\
+				  name ## min, name ## max)		\
+			}
 
 #define DEFINE_WASM_TABLE(_name, _elemtype, _min, _max)		\
 	{								\

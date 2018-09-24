@@ -205,7 +205,7 @@ int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
 						size_t tablemax,
 						uint32_t flags)
 {
-	int ret;
+	int ret, has_table;
 	size_t n_modules, i;
 	struct NamedModule *modules = NULL;
 
@@ -228,7 +228,10 @@ int wasmjit_high_instantiate_emscripten_runtime(struct WasmJITHigh *self,
 
 	self->error_buffer[0] = '\0';
 
+	has_table = !(flags & WASMJIT_HIGH_INSTANTIATE_EMSCRIPTEN_RUNTIME_FLAGS_NO_TABLE);
+
 	modules = wasmjit_instantiate_emscripten_runtime(static_bump,
+							 has_table,
 							 tablemin,
 							 tablemax,
 							 &n_modules);

@@ -45,6 +45,8 @@ struct WasmJITHigh {
 	struct ModuleInst *emscripten_env_module;
 };
 
+#define WASMJIT_HIGH_INSTANTIATE_EMSCRIPTEN_RUNTIME_FLAGS_NO_TABLE 1
+
 int wasmjit_high_init(struct WasmJITHigh *self);
 int wasmjit_high_instantiate(struct WasmJITHigh *self,
 			     const char *filename,
