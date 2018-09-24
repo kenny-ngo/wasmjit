@@ -363,8 +363,6 @@ int wasmjit_high_emscripten_invoke_main(struct WasmJITHigh *self,
 			free_inst = wasmjit_get_export(module_inst,
 						       "_free",
 						       IMPORT_DESC_TYPE_FUNC).func;
-			if (!free_inst)
-				return -1;
 
 			if (wasmjit_emscripten_init(wasmjit_emscripten_get_context(env_module_inst),
 						    errno_location_inst,

@@ -244,8 +244,7 @@ int wasmjit_emscripten_init(struct EmscriptenContext *ctx,
 			return -1;
 	}
 
-	assert(free_inst);
-	{
+	if (free_inst) {
 		struct FuncType free_type;
 		wasmjit_valtype_t free_input_type = VALTYPE_I32;
 
@@ -658,6 +657,8 @@ static void freeMemory(struct EmscriptenContext *ctx,
 {
 	union ValueUnion input;
 	input.i32 = ptr;
+	if (!ctx->free_inst)
+		wasmjit_emscripten_internal_abort("Failed to invoke deallocator");
 	if (wasmjit_invoke_function(ctx->free_inst, &input, NULL))
 		wasmjit_emscripten_internal_abort("Failed to invoke deallocator");
 }
