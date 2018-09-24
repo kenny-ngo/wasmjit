@@ -2431,8 +2431,6 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 		{
 			char *base;
 			user_msghdr_t msg;
-			msg.msg_iov = NULL;
-			msg.msg_control = NULL;
 
 			LOAD_ARGS_CUSTOM(emmsg, funcinst, args.msg, 7,
 					 uint32_t, name,
@@ -2442,6 +2440,9 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 					 uint32_t, control,
 					 uint32_t, controllen,
 					 uint32_t, flags);
+
+			msg.msg_iov = NULL;
+			msg.msg_control = NULL;
 
 			base = wasmjit_emscripten_get_base_address(funcinst);
 
