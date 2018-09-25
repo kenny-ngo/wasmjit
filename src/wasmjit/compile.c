@@ -507,7 +507,7 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		/* shift $arity values from top of stock to below */
 
 		if (FUNC_TYPE_N_OUTPUTS(type)) {
-			int32_t out;
+			int32_t out, extra = 0;
 
 			/* lea (arity - 1)*8(%rsp), %rsi */
 			OUTS("\x48\x8d\x74\x24");
@@ -515,9 +515,17 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 
 			/* lea (-8 * (n_frame_locals + 1))(%rbp), %rdi */
 			OUTS("\x48\x8d\xbd");
-			if (n_frame_locals == SIZE_MAX)
-				goto error;
-			if (__builtin_mul_overflow(n_frame_locals + 1, -8, &out))
+
+			if (WASMJIT_DEBUG_STACK) {
+				if (n_frame_locals >= SIZE_MAX - 1)
+					goto error;
+				extra = 1;
+			} else {
+				if (n_frame_locals == SIZE_MAX)
+					goto error;
+			}
+
+			if (__builtin_mul_overflow(n_frame_locals + 1 + extra, -8, &out))
 				goto error;
 			encode_le_uint32_t(out, buf);
 			if (!output_buf(output, buf, sizeof(uint32_t)))
@@ -545,8 +553,11 @@ static int wasmjit_compile_instruction(const struct FuncType *func_types,
 		if (n_frame_locals > SIZE_MAX - FUNC_TYPE_N_OUTPUTS(type))
 			goto error;
 		{
-			int32_t out;
-			if (__builtin_mul_overflow(n_frame_locals + FUNC_TYPE_N_OUTPUTS(type), -8, &out))
+			int32_t out, extra = 0;
+			if (WASMJIT_DEBUG_STACK) {
+				extra = 1;
+			}
+			if (__builtin_mul_overflow(n_frame_locals + FUNC_TYPE_N_OUTPUTS(type) + extra, -8, &out))
 				goto error;
 			encode_le_uint32_t(out, buf);
 			if (!output_buf(output, buf, sizeof(uint32_t)))
