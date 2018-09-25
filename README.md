@@ -71,6 +71,8 @@ in order of priority:
 * Implement enough Emscripten host-bindings to run
   [`nginx.wasm`](https://www.dropbox.com/sh/lmz3nnz92jx9szh/AAA-YOEHxwM_nki8jX0uFRuqa?dl=0)
 * Implement an interpreter
+* Implement Rust-runtime for Rust-generated wasm files
+* Implement Go-runtime for Go-generated wasm files
 * Optimize x86_64 JIT
 * Implement arm64 JIT
 * Implement macOS kernel module
