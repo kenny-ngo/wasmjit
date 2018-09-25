@@ -2175,7 +2175,7 @@ static long finish_recvmsg(int fd, user_msghdr_t *msg, int flags)
 
 #else
 
-static long finish_recvmsg(int fd, user_msghdr_T *msg, int flags)
+static long finish_recvmsg(int fd, user_msghdr_t *msg, int flags)
 {
 
 	struct sockaddr_storage ss;
