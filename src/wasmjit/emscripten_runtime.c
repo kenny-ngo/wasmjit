@@ -1434,6 +1434,7 @@ static long finish_sendto(int32_t fd,
 		saddr = &ss;
 	} else {
 		saddr = NULL;
+		ptr_size = 0;
 	}
 
 	return sys_sendto(fd, buf, len, flags2, saddr, ptr_size);
