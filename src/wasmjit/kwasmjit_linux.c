@@ -40,6 +40,7 @@
 #include <linux/mmu_context.h>
 #include <asm/fpu/api.h>
 #include <asm/fpu/internal.h>
+#include <uapi/linux/binfmts.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Rian Hunter");
@@ -270,7 +271,7 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 	for (i = 0; i < arg->argc; ++i) {
 		char __user *argp;
 		get_user(argp, arg->argv + i);
-		argv[i] = kvstrndup_user(argp, 1024, GFP_KERNEL);
+		argv[i] = kvstrndup_user(argp, MAX_ARG_STRLEN, GFP_KERNEL);
 		if (IS_ERR(argv[i])) {
 			retval = PTR_ERR(argv[i]);
 			argv[i] = NULL;
@@ -295,7 +296,7 @@ static int kwasmjit_emscripten_invoke_main(struct kwasmjit_private *self,
 		char __user *env;
 		get_user(env, arg->envp + i);
 		if (!env) break;
-		envp[i] = kvstrndup_user(env, 1024, GFP_KERNEL);
+		envp[i] = kvstrndup_user(env, MAX_ARG_STRLEN, GFP_KERNEL);
 		if (IS_ERR(envp[i])) {
 			retval = PTR_ERR(envp[i]);
 			envp[i] = NULL;
