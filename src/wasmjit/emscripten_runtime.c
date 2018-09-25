@@ -451,6 +451,25 @@ void wasmjit_emscripten____setErrNo(uint32_t value, struct FuncInst *funcinst)
 	wasmjit_emscripten_internal_abort("failed to set errno from JS");
 }
 
+uint32_t wasmjit_emscripten____syscall3(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
+{
+	char *base;
+
+	LOAD_ARGS(funcinst, varargs, 3,
+		  int32_t, fd,
+		  uint32_t, buf,
+		  uint32_t, count);
+
+	(void)which;
+
+	if (!_wasmjit_emscripten_check_range(funcinst, args.buf, args.count))
+		return -EM_EFAULT;
+
+	base = wasmjit_emscripten_get_base_address(funcinst);
+
+	return check_ret(sys_read(args.fd, base + args.buf, args.count));
+}
+
 /*  _llseek */
 uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
 {
