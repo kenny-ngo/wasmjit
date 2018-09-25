@@ -42,17 +42,7 @@
 #define KWSC5(name, ...) KWSCx(5, name, __VA_ARGS__)
 #define KWSC6(name, ...) KWSCx(6, name, __VA_ARGS__)
 
-#define KWSCx(x, name, ...) long (*name)(__KMAP(x, __KT, __VA_ARGS__));
-
-static struct {
-#include <wasmjit/emscripten_runtime_sys_def.h>
-} sctable;
-
-#undef KWSCx
-#define KWSCx(x, name, ...)						\
-	long sys_ ## name(__KMAP(x, __KDECL, __VA_ARGS__)) {		\
-		return sctable. name (__KMAP(x, __KA, __VA_ARGS__));	\
-	}
+#define KWSCx(x, name, ...) long (*sys_ ## name)(__KMAP(x, __KT, __VA_ARGS__));
 
 #include <wasmjit/emscripten_runtime_sys_def.h>
 
@@ -100,12 +90,12 @@ int wasmjit_emscripten_linux_kernel_init(void) {
 
 #define KWSCx(x, n, ...)						\
 	do {								\
-		sctable. n = (void *)kallsyms_lookup_name("sys_" #n);	\
-		if (!sctable. n) {					\
+		sys_ ## n = (void *)kallsyms_lookup_name("sys_" #n);	\
+		if (!sys_ ## n) {					\
 			sctable_regs. n = (void *)kallsyms_lookup_name(SCPREFIX #n); \
 			if (!sctable_regs. n)				\
 				return 0;				\
-			sctable. n = &sys_ ## n ## _regs;		\
+			sys_ ## n = &sys_ ## n ## _regs;		\
 		}							\
 	}								\
 	while (0);

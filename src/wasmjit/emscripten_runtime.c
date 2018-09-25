@@ -2201,12 +2201,12 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 		base = wasmjit_emscripten_get_base_address(funcinst);
 
 		if (icall == 2) {
-			ret = finish_bindlike(&sys_bind,
+			ret = finish_bindlike(sys_bind,
 					      args.fd,
 					      base + args.addrp, args.addrlen);
 		} else {
 			assert(icall == 3);
-			ret = finish_bindlike(&sys_connect,
+			ret = finish_bindlike(sys_connect,
 					      args.fd,
 					      base + args.addrp, args.addrlen);
 		}
@@ -2248,19 +2248,19 @@ uint32_t wasmjit_emscripten____syscall102(uint32_t which, uint32_t varargs,
 
 		switch (icall) {
 		case 5:
-			ret = finish_acceptlike(&sys_accept,
+			ret = finish_acceptlike(sys_accept,
 						args.fd, base + args.addrp,
 						addrlen,
 						base + args.addrlenp);
 			break;
 		case 6:
-			ret = finish_acceptlike(&sys_getsockname,
+			ret = finish_acceptlike(sys_getsockname,
 						args.fd, base + args.addrp,
 						addrlen,
 						base + args.addrlenp);
 			break;
 		case 7:
-			ret = finish_acceptlike(&sys_getpeername,
+			ret = finish_acceptlike(sys_getpeername,
 						args.fd, base + args.addrp,
 						addrlen,
 						base + args.addrlenp);

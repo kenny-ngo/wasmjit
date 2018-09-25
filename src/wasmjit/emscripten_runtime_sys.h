@@ -65,7 +65,15 @@ typedef struct msghdr user_msghdr_t;
 
 #define __KDECL(to,n,t) t _##n
 
+#ifdef __KERNEL__
+
+#define KWSCx(_n, _name, ...) extern long (*sys_ ## _name)(__KMAP(_n, __KDECL, __VA_ARGS__));
+
+#else
+
 #define KWSCx(_n, _name, ...) long sys_ ## _name(__KMAP(_n, __KDECL, __VA_ARGS__));
+
+#endif
 
 #define KWSC1(name, ...) KWSCx(1, name, __VA_ARGS__)
 #define KWSC2(name, ...) KWSCx(2, name, __VA_ARGS__)
