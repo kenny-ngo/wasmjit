@@ -470,6 +470,41 @@ uint32_t wasmjit_emscripten____syscall3(uint32_t which, uint32_t varargs, struct
 	return check_ret(sys_read(args.fd, base + args.buf, args.count));
 }
 
+uint32_t wasmjit_emscripten____syscall42(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
+{
+	int32_t pipes[2];
+	int32_t ret;
+	int sys_pipes[2];
+
+	LOAD_ARGS(funcinst, varargs, 1,
+		  uint32_t, pipefd);
+
+	(void)which;
+
+	ret = check_ret(sys_pipe(sys_pipes));
+	if (ret < 0)
+		return ret;
+
+#if __INT_WIDTH__ > 32
+	if (sys_pipes[0] > INT32_MAX ||
+	    sys_pipes[0] < INT32_MIN ||
+	    sys_pipes[1] > INT32_MAX ||
+	    sys_pipes[1] < INT32_MIN) {
+		/* Have to abort here because we've already allocated the pipes */
+		wasmjit_emscripten_internal_abort("Pipe fds too large");
+	}
+#endif
+
+	pipes[0] = uint32_t_swap_bytes((uint32_t) sys_pipes[0]);
+	pipes[1] = uint32_t_swap_bytes((uint32_t) sys_pipes[1]);
+
+	if (_wasmjit_emscripten_copy_to_user(funcinst, args.pipefd, pipes, sizeof(pipes)))
+		return -EM_EFAULT;
+
+	return 0;
+}
+
+
 /*  _llseek */
 uint32_t wasmjit_emscripten____syscall140(uint32_t which, uint32_t varargs, struct FuncInst *funcinst)
 {
