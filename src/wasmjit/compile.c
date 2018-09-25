@@ -35,8 +35,8 @@
 
 #include <wasmjit/sys.h>
 
-#ifndef DEBUG_STACK
-#define DEBUG_STACK 0
+#ifndef WASMJIT_DEBUG_STACK
+#define WASMJIT_DEBUG_STACK 0
 #endif
 
 #define FUNC_EXIT_CONT SIZE_MAX
@@ -2071,7 +2071,7 @@ static int wasmjit_compile_instructions(const struct FuncType *func_types,
 			struct InstructionMD imd2;
 			const struct Instr *instruction = &imd.instructions[i];
 
-			if (DEBUG_STACK) {
+			if (WASMJIT_DEBUG_STACK) {
 				/* mov %rsp, %rax */
 				OUTS("\x48\x89\xe0");
 				/* add $const, %rax */
@@ -2549,7 +2549,7 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 		}
 	}
 
-	if (DEBUG_STACK) {
+	if (WASMJIT_DEBUG_STACK) {
 		/* push %rbx */
 		OUTS("\x53");
 		/* mov %rsp, %rbx */
@@ -2620,7 +2620,7 @@ char *wasmjit_compile_function(const struct FuncType *func_types,
 	}
 
 
-	if (DEBUG_STACK) {
+	if (WASMJIT_DEBUG_STACK) {
 		/* pop %rbx */
 		OUTS("\x5b");
 	}
