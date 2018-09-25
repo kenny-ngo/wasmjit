@@ -1397,7 +1397,9 @@ static int32_t convert_recvmsg_msg_flags(int flags) {
 	SETF(TRUNC);
 	SETF(CTRUNC);
 	SETF(OOB);
+#ifdef MSG_ERRQUEUE
 	SETF(ERRQUEUE);
+#endif
 	return oflags;
 }
 
